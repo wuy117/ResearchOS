@@ -8,6 +8,7 @@ import { StatCard } from './components/StatCard';
 import { mapEdges, mapNodes } from './data/mockData';
 import { useResearchState } from './hooks/useResearchState';
 import type { ChatMessage, PageId, ResearchDocument } from './types/research';
+import { askResearchChat } from './utils/api';
 
 function App() {
   const { state, setState } = useResearchState();
@@ -17,12 +18,13 @@ function App() {
     () => state.documents.filter((document) => document.workspaceId === state.activeWorkspaceId),
     [state.activeWorkspaceId, state.documents],
   );
+  const activeWorkspaceName = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId)?.name ?? 'Research workspace';
 
   const page = {
     dashboard: <Dashboard state={state} documents={workspaceDocuments} setActivePage={setActivePage} />,
     library: <Library documents={workspaceDocuments} />,
     upload: <Upload stateDocuments={state.documents} activeWorkspaceId={state.activeWorkspaceId} setState={setState} />,
-    chat: <ResearchChat chat={state.chat} setState={setState} />,
+    chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} documents={workspaceDocuments} setState={setState} />,
     study: <StudyTools documents={workspaceDocuments} />,
     map: <KnowledgeMap />,
   }[activePage];
@@ -245,31 +247,67 @@ function Upload({
   );
 }
 
-function ResearchChat({ chat, setState }: { chat: ChatMessage[]; setState: ReturnType<typeof useResearchState>['setState'] }) {
+function ResearchChat({
+  chat,
+  workspaceName,
+  documents,
+  setState,
+}: {
+  chat: ChatMessage[];
+  workspaceName: string;
+  documents: ResearchDocument[];
+  setState: ReturnType<typeof useResearchState>['setState'];
+}) {
   const [prompt, setPrompt] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  function sendMessage() {
-    if (!prompt.trim()) return;
+  async function sendMessage() {
+    const question = prompt.trim();
+
+    if (!question || isLoading) return;
+
     const userMessage: ChatMessage = {
       id: `chat-${Date.now()}-user`,
       role: 'user',
-      content: prompt.trim(),
+      content: question,
     };
-    const assistantMessage: ChatMessage = {
-      id: `chat-${Date.now()}-assistant`,
-      role: 'assistant',
-      content:
-        'Based on the current local library, the strongest answer would compare recurring claims, then separate source-backed evidence from open questions. Real retrieval can replace this mocked response when the backend arrives.',
-      citations: [
-        {
-          documentTitle: 'Working Memory Limits in Applied Learning Environments',
-          location: 'Synthesis note',
-          excerpt: 'Progressive disclosure appears repeatedly as a way to protect attention while preserving useful challenge.',
-        },
-      ],
-    };
-    setState((current) => ({ ...current, chat: [...current.chat, userMessage, assistantMessage] }));
+
+    setErrorMessage('');
+    setIsLoading(true);
+    setState((current) => ({ ...current, chat: [...current.chat, userMessage] }));
     setPrompt('');
+
+    try {
+      const response = await askResearchChat({
+        question,
+        workspaceName,
+        documents: documents.map((document) => ({
+          title: document.title,
+          summary: document.summary,
+          topics: document.tags,
+          extractedText: document.summary,
+        })),
+      });
+
+      const assistantMessage: ChatMessage = {
+        id: `chat-${Date.now()}-assistant`,
+        role: 'assistant',
+        content: response.answer,
+        citations: response.sources.map((source) => ({
+          documentTitle: source.documentTitle,
+          location: source.location,
+          excerpt: source.excerpt,
+        })),
+      };
+
+      setState((current) => ({ ...current, chat: [...current.chat, assistantMessage] }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Research chat failed. Please try again.';
+      setErrorMessage(message);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -293,8 +331,25 @@ function ResearchChat({ chat, setState }: { chat: ChatMessage[]; setState: Retur
               ) : null}
             </div>
           ))}
+          {isLoading ? (
+            <div className="mr-auto max-w-[820px]">
+              <div className="rounded-3xl bg-paper/85 p-5 text-ink">
+                <div className="flex items-center gap-3 text-sm font-semibold text-graphite/72">
+                  <span className="size-2 animate-pulse rounded-full bg-brass" />
+                  <span className="size-2 animate-pulse rounded-full bg-brass [animation-delay:120ms]" />
+                  <span className="size-2 animate-pulse rounded-full bg-brass [animation-delay:240ms]" />
+                  <span className="ml-1">Reading workspace sources...</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="border-t border-ink/10 p-4">
+          {errorMessage ? (
+            <div className="mb-3 rounded-2xl border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
+              Research chat could not answer right now. {errorMessage}
+            </div>
+          ) : null}
           <div className="flex gap-3">
             <input
               value={prompt}
@@ -302,15 +357,17 @@ function ResearchChat({ chat, setState }: { chat: ChatMessage[]; setState: Retur
               onKeyDown={(event) => {
                 if (event.key === 'Enter') sendMessage();
               }}
+              disabled={isLoading}
               placeholder="Ask about claims, contradictions, methods, or gaps..."
-              className="min-w-0 flex-1 rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-brass/30 transition focus:ring-4"
+              className="min-w-0 flex-1 rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-brass/30 transition focus:ring-4 disabled:cursor-not-allowed disabled:bg-paper"
             />
             <button
               type="button"
               aria-label="Send research question"
               title="Send research question"
               onClick={sendMessage}
-              className="grid size-12 place-items-center rounded-2xl bg-ink text-white shadow-lg shadow-ink/15"
+              disabled={isLoading}
+              className="grid size-12 place-items-center rounded-2xl bg-ink text-white shadow-lg shadow-ink/15 transition disabled:cursor-not-allowed disabled:bg-graphite/55"
             >
               <Send size={18} />
             </button>
