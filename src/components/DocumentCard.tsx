@@ -1,9 +1,10 @@
 import { FileText } from 'lucide-react';
 import type { ResearchDocument } from '../types/research';
 
-export function DocumentCard({ document }: { document: ResearchDocument }) {
+export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchDocument; chunkCount?: number }) {
   const statusClasses = {
     Indexed: 'bg-moss/10 text-moss',
+    Ready: 'bg-moss/10 text-moss',
     Extracting: 'bg-brass/12 text-brass',
     'Needs review': 'bg-ink/8 text-graphite',
   };
@@ -31,8 +32,8 @@ export function DocumentCard({ document }: { document: ResearchDocument }) {
         ))}
       </div>
       <div className="mt-5 flex items-center justify-between border-t border-ink/8 pt-4 text-xs font-bold uppercase tracking-[0.12em] text-graphite/55">
-        <span>{document.type}</span>
-        <span>{document.insightCount} insights</span>
+        <span>{document.wordCount ? `${document.type} / ${document.wordCount.toLocaleString()} words` : document.type}</span>
+        {document.type === 'TXT' ? <span>{chunkCount} chunks</span> : <span>{document.insightCount} insights</span>}
       </div>
     </article>
   );

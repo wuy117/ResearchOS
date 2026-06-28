@@ -167,6 +167,7 @@ export const initialState: ResearchState = {
   workspaces,
   activeWorkspaceId: workspaces[0].id,
   documents,
+  chunks: [],
   insights,
   actions,
   chat: chatMessages,

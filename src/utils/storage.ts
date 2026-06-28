@@ -10,9 +10,13 @@ export function loadResearchState(): ResearchState {
       return initialState;
     }
 
+    const parsed = JSON.parse(saved) as Partial<ResearchState>;
+
     return {
       ...initialState,
-      ...JSON.parse(saved),
+      ...parsed,
+      chunks: parsed.chunks ?? [],
+      documents: parsed.documents ?? initialState.documents,
     };
   } catch {
     return initialState;

@@ -1,5 +1,5 @@
 import { ArrowRight, BrainCircuit, CalendarDays, CheckCircle2, Clock3, FilePlus2, Files, LibraryBig, Network, Send, Sparkles, Tags, UploadCloud } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AppShell } from './components/AppShell';
 import { CitationCard } from './components/CitationCard';
 import { DocumentCard } from './components/DocumentCard';
@@ -7,8 +7,9 @@ import { SectionHeader } from './components/SectionHeader';
 import { StatCard } from './components/StatCard';
 import { mapEdges, mapNodes } from './data/mockData';
 import { useResearchState } from './hooks/useResearchState';
-import type { ChatMessage, PageId, ResearchDocument } from './types/research';
+import type { ChatMessage, DocumentChunk, PageId, ResearchDocument } from './types/research';
 import { askResearchChat } from './utils/api';
+import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 
 function App() {
   const { state, setState } = useResearchState();
@@ -22,9 +23,9 @@ function App() {
 
   const page = {
     dashboard: <Dashboard state={state} documents={workspaceDocuments} setActivePage={setActivePage} />,
-    library: <Library documents={workspaceDocuments} />,
+    library: <Library documents={workspaceDocuments} chunks={state.chunks} />,
     upload: <Upload stateDocuments={state.documents} activeWorkspaceId={state.activeWorkspaceId} setState={setState} />,
-    chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} documents={workspaceDocuments} setState={setState} />,
+    chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} documents={workspaceDocuments} chunks={state.chunks} setState={setState} />,
     study: <StudyTools documents={workspaceDocuments} />,
     map: <KnowledgeMap />,
   }[activePage];
@@ -130,7 +131,7 @@ function Dashboard({
   );
 }
 
-function Library({ documents }: { documents: ResearchDocument[] }) {
+function Library({ documents, chunks }: { documents: ResearchDocument[]; chunks: DocumentChunk[] }) {
   return (
     <div>
       <SectionHeader
@@ -140,7 +141,7 @@ function Library({ documents }: { documents: ResearchDocument[] }) {
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {documents.map((document) => (
-          <DocumentCard key={document.id} document={document} />
+          <DocumentCard key={document.id} document={document} chunkCount={chunks.filter((chunk) => chunk.documentId === document.id).length} />
         ))}
       </div>
     </div>
@@ -157,17 +158,71 @@ function Upload({
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
   const [fileName, setFileName] = useState('');
-  const [note, setNote] = useState('Mock extraction will create a source record with title, type, tags, and a short summary.');
-  const recentUploads = stateDocuments.filter((document) => document.status !== 'Indexed').slice(0, 3);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isReading, setIsReading] = useState(false);
+  const [note, setNote] = useState('TXT files are read locally and chunked into searchable research context. PDF and DOCX stay mocked for now.');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const recentUploads = stateDocuments.filter((document) => document.status !== 'Indexed' || document.type === 'TXT').slice(0, 3);
 
-  function handleMockUpload() {
-    const cleanName = fileName.trim() || 'Untitled Research Source.pdf';
+  function resetUploadFields() {
+    setSelectedFile(null);
+    setFileName('');
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }
+
+  async function handleUpload() {
+    const cleanName = selectedFile?.name || fileName.trim() || 'Untitled Research Source.pdf';
     const extension = cleanName.split('.').pop()?.toUpperCase();
     const type = extension === 'TXT' || extension === 'DOCX' ? extension : 'PDF';
     const title = cleanName.replace(/\.(pdf|txt|docx)$/i, '').replace(/[-_]/g, ' ');
+    const documentId = `doc-${Date.now()}`;
+
+    if (type === 'TXT' && selectedFile) {
+      setIsReading(true);
+
+      try {
+        const extractedText = await selectedFile.text();
+        const wordCount = getWordCount(extractedText);
+        const chunks = chunkText({ text: extractedText, documentId });
+        const tags = extractTopics(extractedText);
+
+        const newDocument: ResearchDocument = {
+          id: documentId,
+          title,
+          type,
+          workspaceId: activeWorkspaceId,
+          authors: 'Local TXT upload',
+          addedAt: new Date().toISOString().slice(0, 10),
+          status: 'Ready',
+          tags: tags.length ? tags : ['txt upload'],
+          insightCount: 0,
+          summary: summarizeText(extractedText),
+          extractedText,
+          wordCount,
+          chunkIds: chunks.map((chunk) => chunk.id),
+        };
+
+        setState((current) => ({
+          ...current,
+          documents: [newDocument, ...current.documents],
+          chunks: [...chunks, ...current.chunks],
+        }));
+        setNote(`${cleanName} was read locally, saved with ${wordCount.toLocaleString()} words, and split into ${chunks.length} chunks.`);
+      } catch {
+        setNote(`Research OS could not read ${cleanName}. Please try a plain UTF-8 text file.`);
+      } finally {
+        setIsReading(false);
+        resetUploadFields();
+      }
+
+      return;
+    }
 
     const newDocument: ResearchDocument = {
-      id: `doc-${Date.now()}`,
+      id: documentId,
       title,
       type,
       workspaceId: activeWorkspaceId,
@@ -183,8 +238,8 @@ function Upload({
       ...current,
       documents: [newDocument, ...current.documents],
     }));
-    setNote(`${cleanName} was added to the library and queued for mock extraction.`);
-    setFileName('');
+    setNote(`${cleanName} was added to the library and queued for mock extraction. Real extraction is currently enabled for TXT files only.`);
+    resetUploadFields();
   }
 
   return (
@@ -203,24 +258,40 @@ function Upload({
               </div>
               <h3 className="mt-5 font-serif text-3xl font-bold text-ink">Upload source files</h3>
               <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-graphite/72">
-                Supported in the MVP interface: PDF, TXT, and DOCX. The file is represented locally as mock metadata.
+                TXT files are extracted and chunked in your browser. PDF and DOCX uploads keep the existing mock extraction path.
               </p>
               <div className="mx-auto mt-6 flex max-w-xl flex-col gap-3 sm:flex-row">
                 <input
                   value={fileName}
                   onChange={(event) => setFileName(event.target.value)}
-                  placeholder="example-paper.pdf"
+                  placeholder="optional-fallback-name.pdf"
                   className="min-w-0 flex-1 rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-brass/30 transition focus:ring-4"
                 />
+                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm font-bold text-graphite shadow-sm transition hover:text-ink">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      setSelectedFile(file);
+                      setFileName(file?.name ?? fileName);
+                    }}
+                  />
+                  Choose File
+                </label>
                 <button
                   type="button"
-                  onClick={handleMockUpload}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ink px-5 py-3 text-sm font-bold text-white shadow-lg shadow-ink/15"
+                  onClick={handleUpload}
+                  disabled={isReading}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ink px-5 py-3 text-sm font-bold text-white shadow-lg shadow-ink/15 transition disabled:cursor-not-allowed disabled:bg-graphite/55"
                 >
                   <FilePlus2 size={18} />
-                  Mock Extract
+                  {isReading ? 'Reading...' : selectedFile?.name.toLowerCase().endsWith('.txt') ? 'Ingest TXT' : 'Mock Extract'}
                 </button>
               </div>
+              {selectedFile ? <p className="mt-3 text-xs font-bold uppercase tracking-[0.14em] text-graphite/55">{selectedFile.name}</p> : null}
               <p className="mt-4 text-sm font-medium text-moss">{note}</p>
             </div>
           </div>
@@ -247,15 +318,68 @@ function Upload({
   );
 }
 
+function getQuestionTerms(question: string) {
+  return new Set(
+    question
+      .toLowerCase()
+      .match(/[a-z0-9]+/g)
+      ?.filter((term) => term.length > 3) ?? [],
+  );
+}
+
+function scoreChunk(chunk: DocumentChunk, terms: Set<string>) {
+  const text = chunk.text.toLowerCase();
+
+  return [...terms].reduce((score, term) => {
+    return text.includes(term) ? score + 1 : score;
+  }, 0);
+}
+
+function buildResearchChatContext(question: string, documents: ResearchDocument[], chunks: DocumentChunk[]) {
+  const documentById = new Map(documents.map((document) => [document.id, document]));
+  const terms = getQuestionTerms(question);
+  const matchingChunks = chunks
+    .filter((chunk) => documentById.has(chunk.documentId))
+    .map((chunk) => ({
+      chunk,
+      score: scoreChunk(chunk, terms),
+    }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.chunk.chunkIndex - b.chunk.chunkIndex)
+    .slice(0, 6);
+
+  if (matchingChunks.length > 0) {
+    return matchingChunks.map(({ chunk }) => {
+      const document = documentById.get(chunk.documentId)!;
+
+      return {
+        title: `${document.title} / chunk ${chunk.chunkIndex + 1}`,
+        summary: document.summary,
+        topics: document.tags,
+        extractedText: chunk.text,
+      };
+    });
+  }
+
+  return documents.map((document) => ({
+    title: document.title,
+    summary: document.summary,
+    topics: document.tags,
+    extractedText: document.extractedText ? document.extractedText.slice(0, 2400) : document.summary,
+  }));
+}
+
 function ResearchChat({
   chat,
   workspaceName,
   documents,
+  chunks,
   setState,
 }: {
   chat: ChatMessage[];
   workspaceName: string;
   documents: ResearchDocument[];
+  chunks: DocumentChunk[];
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
   const [prompt, setPrompt] = useState('');
@@ -282,12 +406,7 @@ function ResearchChat({
       const response = await askResearchChat({
         question,
         workspaceName,
-        documents: documents.map((document) => ({
-          title: document.title,
-          summary: document.summary,
-          topics: document.tags,
-          extractedText: document.summary,
-        })),
+        documents: buildResearchChatContext(question, documents, chunks),
       });
 
       const assistantMessage: ChatMessage = {

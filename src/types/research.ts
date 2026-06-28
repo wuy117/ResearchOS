@@ -15,10 +15,22 @@ export type ResearchDocument = {
   workspaceId: string;
   authors: string;
   addedAt: string;
-  status: 'Indexed' | 'Extracting' | 'Needs review';
+  status: 'Indexed' | 'Ready' | 'Extracting' | 'Needs review';
   tags: string[];
   insightCount: number;
   summary: string;
+  extractedText?: string;
+  wordCount?: number;
+  chunkIds?: string[];
+};
+
+export type DocumentChunk = {
+  id: string;
+  documentId: string;
+  chunkIndex: number;
+  text: string;
+  wordCount: number;
+  createdAt: string;
 };
 
 export type Insight = {
@@ -67,6 +79,7 @@ export type ResearchState = {
   workspaces: Workspace[];
   activeWorkspaceId: string;
   documents: ResearchDocument[];
+  chunks: DocumentChunk[];
   insights: Insight[];
   actions: SuggestedAction[];
   chat: ChatMessage[];
