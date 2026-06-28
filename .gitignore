@@ -1,6 +1,11 @@
 node_modules/
 dist/
+.env
+.env.local
+.env.production
+.env.development
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
 .DS_Store
+npm-debug.log*
