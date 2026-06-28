@@ -1,4 +1,4 @@
-import { callOpenRouterChat, OpenRouterError } from './_openrouter';
+import { callOpenRouterChat, OpenRouterError } from "./_openrouter.js";
 
 type ApiRequest = {
   method?: string;
@@ -151,10 +151,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       answer,
       sources: extractSources(answer, documents),
     });
-  } catch (error) {
-    const statusCode = error instanceof OpenRouterError ? error.statusCode : 500;
-    const message = error instanceof Error ? error.message : 'Research chat failed.';
-
-    return res.status(statusCode).json({ error: message });
+} catch (error: unknown) {
+    console.error("Research chat error:", error);
+    const statusCode =
+      error instanceof OpenRouterError ? error.statusCode : 500;
+    const message =
+      error instanceof Error ? error.message : "Unknown server error";
+    return res.status(statusCode).json({
+     error: message,
+    });
   }
 }
