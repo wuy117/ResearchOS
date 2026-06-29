@@ -7,6 +7,9 @@ export type ResearchChatRequestDocument = {
   pageStart?: number;
   pageEnd?: number;
   matchedTerms?: string[];
+  metadata?: Record<string, string[]>;
+  performanceContext?: string[];
+  tutorContext?: string[];
 };
 
 export type ResearchChatSource = {

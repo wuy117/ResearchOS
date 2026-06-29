@@ -6,10 +6,23 @@ const DEMO_DOCUMENT_IDS = new Set(['doc-1', 'doc-2', 'doc-3', 'doc-4']);
 const DEMO_INSIGHT_IDS = new Set(['insight-1', 'insight-2', 'insight-3']);
 const DEMO_ACTION_IDS = new Set(['action-1', 'action-2', 'action-3']);
 const DEMO_CHAT_IDS = new Set(['chat-1', 'chat-2']);
+const DEMO_WORKSPACE_IDS = new Set([
+  'workspace-climate',
+  'workspace-attention',
+  'workspace-thesis',
+  'workspace-biology',
+  'workspace-history',
+  'workspace-ai-medicine',
+  'workspace-music-analysis',
+  'workspace-classical-civilisation',
+]);
 
 function removeKnownDemoData(state: ResearchState): ResearchState {
+  const workspaceIdsWithDocuments = new Set(state.documents.map((document) => document.workspaceId));
+
   return {
     ...state,
+    workspaces: state.workspaces.filter((workspace) => !DEMO_WORKSPACE_IDS.has(workspace.id) || workspaceIdsWithDocuments.has(workspace.id)),
     documents: state.documents.filter((document) => !DEMO_DOCUMENT_IDS.has(document.id)),
     chunks: state.chunks.filter((chunk) => !DEMO_DOCUMENT_IDS.has(chunk.documentId)),
     insights: state.insights.filter((insight) => !DEMO_INSIGHT_IDS.has(insight.id) && !DEMO_DOCUMENT_IDS.has(insight.sourceId)),
@@ -31,6 +44,7 @@ export function loadResearchState(): ResearchState {
       ...initialState,
       ...parsed,
       chunks: parsed.chunks ?? [],
+      collections: parsed.collections ?? [],
       documents: parsed.documents ?? initialState.documents,
       insights: parsed.insights ?? [],
       actions: parsed.actions ?? [],
@@ -44,7 +58,15 @@ export function loadResearchState(): ResearchState {
       tutorMemory: parsed.tutorMemory ?? initialState.tutorMemory,
     };
 
-    return removeKnownDemoData(state);
+    const cleaned = removeKnownDemoData(state);
+
+    return {
+      ...cleaned,
+      workspaces: cleaned.workspaces.length ? cleaned.workspaces : initialState.workspaces,
+      activeWorkspaceId: cleaned.workspaces.some((workspace) => workspace.id === cleaned.activeWorkspaceId)
+        ? cleaned.activeWorkspaceId
+        : cleaned.workspaces[0]?.id ?? initialState.activeWorkspaceId,
+    };
   } catch {
     return initialState;
   }

@@ -1,4 +1,4 @@
-export type PageId = 'dashboard' | 'library' | 'performance' | 'tutor' | 'upload' | 'chat' | 'study' | 'map';
+export type PageId = 'dashboard' | 'library' | 'performance' | 'timeline' | 'tutor' | 'upload' | 'chat' | 'study' | 'map';
 
 export type Workspace = {
   id: string;
@@ -26,6 +26,30 @@ export type ResearchDocument = {
   extractionError?: string;
   embeddingStatus?: 'not_embedded' | 'embedding' | 'embedded' | 'failed' | 'keyword_only';
   embeddingError?: string;
+  metadata?: DocumentMetadata;
+  collectionIds?: string[];
+};
+
+export type DocumentMetadata = {
+  subjects: string[];
+  topics: string[];
+  academicYears: string[];
+  terms: string[];
+  assessments: string[];
+  documentTypes: string[];
+  teacherNames: string[];
+  skills: string[];
+  performanceRecords: string[];
+  collections: string[];
+  tags: string[];
+};
+
+export type Collection = {
+  id: string;
+  name: string;
+  description?: string;
+  source: 'system' | 'user' | 'metadata';
+  createdAt: string;
 };
 
 export type DocumentChunk = {
@@ -215,6 +239,7 @@ export type TutorMemory = {
 export type ResearchState = {
   workspaces: Workspace[];
   activeWorkspaceId: string;
+  collections: Collection[];
   documents: ResearchDocument[];
   chunks: DocumentChunk[];
   insights: Insight[];

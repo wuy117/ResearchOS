@@ -2,6 +2,7 @@ import { initialState } from '../data/initialState';
 import { isSupabaseEnabled, supabase } from '../lib/supabase';
 import type {
   ChatMessage,
+  Collection,
   DocumentChunk,
   Insight,
   PerformanceRecord,
@@ -57,6 +58,7 @@ function getSupabaseClient() {
 
 function mergeStateFromSupabase(localState: ResearchState, rows: {
   workspaces: Workspace[];
+  collections: Collection[];
   documents: ResearchDocument[];
   chunks: DocumentChunk[];
   insights: Insight[];
@@ -74,6 +76,7 @@ function mergeStateFromSupabase(localState: ResearchState, rows: {
     ...localState,
     workspaces: rows.workspaces.length ? rows.workspaces : localState.workspaces,
     activeWorkspaceId: localState.activeWorkspaceId || initialState.activeWorkspaceId,
+    collections: rows.collections.length ? rows.collections : localState.collections ?? [],
     documents: rows.documents,
     chunks: rows.chunks,
     insights: rows.insights,
@@ -90,6 +93,7 @@ function mergeStateFromSupabase(localState: ResearchState, rows: {
 
 function hasRemoteResearchData(rows: {
   documents: ResearchDocument[];
+  collections: Collection[];
   chunks: DocumentChunk[];
   insights: Insight[];
   chat: ChatMessage[];
@@ -103,6 +107,7 @@ function hasRemoteResearchData(rows: {
 }) {
   return (
     rows.documents.length > 0 ||
+    rows.collections.length > 0 ||
     rows.chunks.length > 0 ||
     rows.insights.length > 0 ||
     rows.chat.length > 0 ||
@@ -223,8 +228,9 @@ export async function loadState(): Promise<LoadStateResult> {
   }
 
   try {
-    const [workspaces, documents, chunks, insights, chat, performanceRecords, performanceSummaries, tutorLessons, tutorAttempts, tutorSocraticTurns, tutorExamSessions, tutorMemory] = await Promise.all([
+    const [workspaces, collections, documents, chunks, insights, chat, performanceRecords, performanceSummaries, tutorLessons, tutorAttempts, tutorSocraticTurns, tutorExamSessions, tutorMemory] = await Promise.all([
       selectData<Workspace>('workspaces'),
+      selectOptionalData<Collection>('collections'),
       selectData<ResearchDocument>('documents'),
       selectData<DocumentChunk>('document_chunks'),
       selectData<Insight>('insights'),
@@ -240,6 +246,7 @@ export async function loadState(): Promise<LoadStateResult> {
 
     const rows = {
       workspaces,
+      collections,
       documents,
       chunks,
       insights,
@@ -272,6 +279,7 @@ export async function saveState(state: ResearchState): Promise<StorageStatus> {
   try {
     await Promise.all([
       upsertMany('workspaces', state.workspaces),
+      upsertOptionalMany('collections', state.collections),
       upsertMany('documents', state.documents),
       upsertMany('document_chunks', state.chunks),
       upsertMany('insights', state.insights),

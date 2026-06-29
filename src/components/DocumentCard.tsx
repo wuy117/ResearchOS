@@ -11,6 +11,7 @@ function getEmbeddingLabel(document: ResearchDocument) {
 }
 
 export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchDocument; chunkCount?: number }) {
+  const metadata = document.metadata;
   const statusClasses = {
     Indexed: 'bg-moss/10 text-moss',
     Ready: 'bg-moss/10 text-moss',
@@ -21,10 +22,10 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
   };
 
   return (
-    <article className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm transition hover:border-ink/14 hover:shadow-md">
+    <article className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm transition hover:border-ink/14 hover:shadow-md">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 gap-3">
-          <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-ink/8 bg-paper text-graphite">
+          <div className="grid size-10 shrink-0 place-items-center rounded-lg border border-ink/8 bg-paper text-graphite">
             <FileText size={20} />
           </div>
           <div className="min-w-0">
@@ -37,11 +38,19 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[document.status]}`}>{document.status}</span>
       </div>
       <p className="mt-4 line-clamp-3 text-sm leading-7 text-graphite/75">{document.summary}</p>
+      {metadata ? (
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <MetadataBlock label="Subjects" items={metadata.subjects} />
+          <MetadataBlock label="Collections" items={metadata.collections} />
+          <MetadataBlock label="Document type" items={metadata.documentTypes} />
+          <MetadataBlock label="Teachers" items={metadata.teacherNames} />
+        </div>
+      ) : null}
       {document.status === 'Failed' && document.extractionError && document.extractionError !== document.summary ? <p className="mt-3 text-sm font-semibold text-red-700">{document.extractionError}</p> : null}
       {document.status !== 'Failed' ? (
         <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{getEmbeddingLabel(document)}</p>
       ) : null}
-      <div className="mt-5 grid grid-cols-3 gap-3 rounded-xl bg-paper/70 p-3 text-center text-xs text-graphite/70">
+      <div className="mt-5 grid grid-cols-3 gap-3 rounded-lg bg-paper/70 p-3 text-center text-xs text-graphite/70">
         <div>
           <p className="font-semibold text-ink">{document.pageCount ? document.pageCount.toLocaleString() : '-'}</p>
           <p className="mt-1">pages</p>
@@ -67,5 +76,24 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
         </div>
       </details>
     </article>
+  );
+}
+
+function MetadataBlock({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</p>
+      {items.length ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {items.slice(0, 5).map((item) => (
+            <span key={item} className="rounded-full bg-paper px-2.5 py-1 text-xs font-medium text-graphite/72">
+              {item}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-graphite/60">Not extracted yet</p>
+      )}
+    </div>
   );
 }

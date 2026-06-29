@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Clock3,
   FilePlus2,
+  FolderKanban,
   LibraryBig,
   Network,
   Send,
@@ -29,6 +30,7 @@ import { analysePerformanceDocument, askResearchChat, embedChunks, generatePerfo
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
 import { extractPdfText } from './utils/extractPdfText';
+import { buildDocumentMetadata, buildTimelineEvents, deriveCollections, getCollectionDocumentCount, getDocumentMetadata, type TimelineEvent } from './utils/learningModel';
 import { retrieveChunks, type RetrievedChunk } from './utils/retrieveChunks';
 
 function App() {
@@ -43,8 +45,9 @@ function App() {
 
   const page = {
     dashboard: <Dashboard state={state} documents={workspaceDocuments} setActivePage={setActivePage} />,
-    library: <Library documents={workspaceDocuments} chunks={state.chunks} />,
+    library: <Library state={state} documents={workspaceDocuments} chunks={state.chunks} />,
     performance: <PerformancePage records={state.performanceRecords} summaries={state.performanceSummaries} documents={state.documents} setState={setState} />,
+    timeline: <TimelinePage events={buildTimelineEvents(state)} />,
     tutor: (
       <TutorPage
         workspaceId={state.activeWorkspaceId}
@@ -60,8 +63,8 @@ function App() {
         setState={setState}
       />
     ),
-    upload: <Upload stateDocuments={workspaceDocuments} activeWorkspaceId={state.activeWorkspaceId} storageStatus={storageStatus} setState={setState} />,
-    chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} workspaceId={state.activeWorkspaceId} documents={workspaceDocuments} chunks={state.chunks} setState={setState} />,
+    upload: <Upload stateDocuments={workspaceDocuments} activeWorkspaceId={state.activeWorkspaceId} storageStatus={storageStatus} performanceRecords={state.performanceRecords} setState={setState} />,
+    chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} workspaceId={state.activeWorkspaceId} documents={workspaceDocuments} chunks={state.chunks} performanceRecords={state.performanceRecords} performanceSummaries={state.performanceSummaries} tutorLessons={state.tutorLessons} tutorAttempts={state.tutorAttempts} setState={setState} />,
     study: <StudyTools documents={workspaceDocuments} />,
     map: <KnowledgeMap documents={workspaceDocuments} />,
   }[activePage];
@@ -83,62 +86,109 @@ function Dashboard({
   setActivePage: (page: PageId) => void;
 }) {
   const readyCount = documents.filter((document) => document.status === 'Indexed' || document.status === 'Ready').length;
-  const newestDocuments = [...documents].slice(0, 2);
-  const primaryAction = state.actions[0];
+  const newestDocuments = [...documents].slice(0, 3);
+  const collections = deriveCollections(state);
+  const timeline = buildTimelineEvents(state).slice(0, 5);
+  const subjects = [
+    ...new Set([
+      ...documents.flatMap((document) => getDocumentMetadata(document, state.performanceRecords).subjects),
+      ...state.performanceRecords.map((record) => record.subject),
+    ]),
+  ].slice(0, 8);
+  const percentages = state.performanceRecords
+    .map((record) => getRecordPercentage(record))
+    .filter((percentage): percentage is number => typeof percentage === 'number');
+  const latestAverage = percentages.length ? Math.round(percentages.reduce((total, value) => total + value, 0) / percentages.length) : undefined;
+  const activeLesson = state.tutorLessons.find((lesson) => lesson.status === 'in_progress') ?? state.tutorLessons[0];
+  const weakTopics = [
+    ...new Set(
+      state.performanceRecords
+        .flatMap((record) => [...record.weaknesses, ...record.actionPoints])
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, 4);
   const hasDocuments = documents.length > 0;
   const hasReadySources = readyCount > 0;
+  const nextAction = !hasDocuments
+    ? { label: 'Upload first source', page: 'upload' as PageId, detail: 'Add a report, notes file, exam paper, or source document to start the system.' }
+    : weakTopics.length
+      ? { label: 'Practise weak topic', page: 'tutor' as PageId, detail: `Tutor can start with ${weakTopics[0]} using performance and source context.` }
+      : activeLesson
+        ? { label: 'Continue Tutor', page: 'tutor' as PageId, detail: activeLesson.objective }
+        : { label: 'Ask across metadata', page: 'chat' as PageId, detail: 'Chat can combine source chunks with subjects, collections, performance, and Tutor history.' };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-9">
-      <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-        <div className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{hasReadySources ? 'Continue' : 'Start'}</p>
-          <h2 className="mt-4 max-w-2xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-5xl">
-            {hasReadySources ? 'Return to your active reading desk.' : 'Build your research desk from real sources.'}
+    <div className="space-y-7">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_420px]">
+        <div className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Academic profile</p>
+          <h2 className="mt-4 max-w-3xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-5xl">
+            {hasReadySources ? 'Your learning system is connected.' : 'Create your own learning operating system.'}
           </h2>
-          <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/72">
             {hasReadySources
-              ? `${readyCount} sources are ready in this workspace. Use chat for synthesis or open the library to keep reviewing source material.`
+              ? `${readyCount} ready source${readyCount === 1 ? '' : 's'} now feed Library, Chat, Tutor, Performance, Collections, Timeline, and the Knowledge Map.`
               : hasDocuments
-                ? 'The current workspace has uploads that still need recovery or readable text. Upload a TXT, PDF, or DOCX file to create searchable source material.'
-                : 'Upload a TXT, PDF, or DOCX file to create searchable source material. Research chat and study tools will use those documents once they are ready.'}
+                ? 'Some uploads still need readable text or recovery before the rest of Research OS can react.'
+                : 'Start with a workspace that matches your real life: Biology, History, French, Music, Programming, personal research, or anything else you are studying.'}
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => setActivePage(hasReadySources ? 'chat' : 'upload')}
-              className="inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm"
-            >
-              {hasReadySources ? 'Ask research chat' : 'Upload first source'}
+            <button type="button" onClick={() => setActivePage(nextAction.page)} className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+              {nextAction.label}
               <ArrowRight size={17} />
             </button>
-            <button
-              type="button"
-              onClick={() => setActivePage(hasReadySources ? 'library' : 'upload')}
-              className="inline-flex items-center gap-2 rounded-xl border border-ink/10 bg-paper px-4 py-3 text-sm font-semibold text-ink"
-            >
-              {hasReadySources ? 'Open library' : 'Add document'}
+            <button type="button" onClick={() => setActivePage('timeline')} className="inline-flex items-center gap-2 rounded-lg border border-ink/10 bg-paper px-4 py-3 text-sm font-semibold text-ink">
+              View timeline
             </button>
           </div>
         </div>
-        <div className="rounded-2xl border border-ink/8 bg-paper/75 p-6 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workspace at a glance</p>
-          <div className="mt-6 space-y-5">
-            <div>
-              <p className="text-4xl font-semibold text-ink">{documents.length}</p>
-              <p className="mt-1 text-sm text-graphite/70">documents in scope</p>
-            </div>
-            <div className="border-t border-ink/8 pt-5">
-              <p className="text-4xl font-semibold text-ink">{state.insights.length}</p>
-              <p className="mt-1 text-sm text-graphite/70">saved insights</p>
-            </div>
+        <div className="rounded-lg border border-ink/8 bg-paper/80 p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">What should I do next?</p>
+          <h3 className="mt-3 text-xl font-semibold text-ink">{nextAction.label}</h3>
+          <p className="mt-3 text-sm leading-7 text-graphite/72">{nextAction.detail}</p>
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <MetricCard label="Subjects" value={subjects.length.toLocaleString()} />
+            <MetricCard label="Collections" value={collections.length.toLocaleString()} />
+            <MetricCard label="Sources" value={documents.length.toLocaleString()} />
+            <MetricCard label="Average" value={latestAverage !== undefined ? `${latestAverage}%` : '-'} />
           </div>
         </div>
       </section>
 
-      <section className="grid gap-7 xl:grid-cols-[1.2fr_0.8fr]">
+      <section className="grid gap-5 xl:grid-cols-[1fr_1fr_1fr]">
         <div>
-          <SectionHeader eyebrow="Recent documents" title="Recently added" />
+          <SectionHeader eyebrow="Subjects" title="What am I studying?" />
+          <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
+            {subjects.length ? <ChipCloud items={subjects} /> : <p className="text-sm leading-7 text-graphite/70">Create a workspace or upload a source; subjects will be inferred gradually from metadata and performance records.</p>}
+          </div>
+        </div>
+        <div>
+          <SectionHeader eyebrow="Collections" title="Virtual source sets" />
+          <div className="space-y-3">
+            {collections.slice(0, 4).map((collection) => (
+              <button key={collection.id} type="button" onClick={() => setActivePage('library')} className="flex w-full items-center justify-between gap-3 rounded-lg border border-ink/8 bg-white p-4 text-left shadow-sm transition hover:border-ink/14">
+                <span>
+                  <span className="block font-semibold text-ink">{collection.name}</span>
+                  <span className="mt-1 block text-sm text-graphite/68">{getCollectionDocumentCount(collection, documents, state.performanceRecords)} source links</span>
+                </span>
+                <FolderKanban size={18} className="text-graphite/55" />
+              </button>
+            ))}
+            {!collections.length ? <EmptyState title="No collections yet" copy="Uploads will automatically appear in virtual collections such as reports, terms, subjects, assessments, and years." /> : null}
+          </div>
+        </div>
+        <div>
+          <SectionHeader eyebrow="Continue" title="Recent activity" />
+          <div className="space-y-3">
+            {timeline.length ? timeline.map((event) => <TimelineRow key={event.id} event={event} compact />) : <EmptyState title="No activity yet" copy="Uploads, performance records, Tutor sessions, and study events will appear here." />}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-7 xl:grid-cols-[1.1fr_0.9fr]">
+        <div>
+          <SectionHeader eyebrow="Recent uploads" title="Source intake" />
           <div className="space-y-4">
             {newestDocuments.length ? (
               newestDocuments.map((document) => <DocumentCard key={document.id} document={document} />)
@@ -149,48 +199,46 @@ function Dashboard({
         </div>
 
         <div>
-          <SectionHeader eyebrow="Suggested next action" title="One useful move" />
-          {primaryAction ? (
-            <button
-              type="button"
-              onClick={() => setActivePage(primaryAction.page)}
-              className="w-full rounded-2xl border border-ink/8 bg-white p-5 text-left shadow-sm transition hover:border-ink/14 hover:shadow-md"
-            >
-              <div className="flex items-start justify-between gap-5">
-                <div>
-                  <p className="text-lg font-semibold text-ink">{primaryAction.title}</p>
-                  <p className="mt-3 text-sm leading-7 text-graphite/72">{primaryAction.detail}</p>
-                </div>
-                <ArrowRight className="mt-1 shrink-0 text-graphite/55" size={18} />
+          <SectionHeader eyebrow="Performance" title="Progress overview" />
+          <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
+            {state.performanceRecords.length ? (
+              <div className="space-y-4">
+                <TrendChart records={state.performanceRecords} />
+                {weakTopics.length ? <TagList label="Priority themes" items={weakTopics} /> : null}
               </div>
-            </button>
-          ) : (
-            <EmptyState title="No suggested actions yet" copy="Upload a source and Research OS will have real material to work with." action="Upload a source" onClick={() => setActivePage('upload')} />
-          )}
+            ) : (
+              <EmptyState title="No performance picture yet" copy="Analyse an uploaded report or add an assessment record to start long-term progress tracking." action="Open Performance" onClick={() => setActivePage('performance')} />
+            )}
+          </div>
         </div>
       </section>
-
-      {state.insights[0] ? (
-        <section className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Saved insight</p>
-          <h3 className="mt-3 text-lg font-semibold text-ink">{state.insights[0].title}</h3>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-graphite/72">{state.insights[0].body}</p>
-        </section>
-      ) : null}
     </div>
   );
 }
 
-function Library({ documents, chunks }: { documents: ResearchDocument[]; chunks: DocumentChunk[] }) {
+function Library({ state, documents, chunks }: { state: ReturnType<typeof useResearchState>['state']; documents: ResearchDocument[]; chunks: DocumentChunk[] }) {
+  const collections = deriveCollections(state);
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="space-y-7">
       <SectionHeader
         eyebrow="Document library"
-        title="Sources by workspace"
-        copy="A catalogue of uploaded sources, extraction state, chunk count, and search readiness for the active workspace."
+        title="Sources, metadata, and collections"
+        copy="Documents are sources. Metadata and virtual collections let the same upload enrich Chat, Tutor, Performance, Timeline, and the Knowledge Map without duplication."
       />
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {collections.slice(0, 8).map((collection) => (
+          <div key={collection.id} className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
+              <FolderKanban size={14} />
+              Collection
+            </div>
+            <p className="mt-3 truncate text-lg font-semibold text-ink">{collection.name}</p>
+            <p className="mt-1 text-sm text-graphite/68">{getCollectionDocumentCount(collection, documents, state.performanceRecords)} source links</p>
+          </div>
+        ))}
+      </section>
       {documents.length ? (
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid gap-5 xl:grid-cols-2">
           {documents.map((document) => (
             <DocumentCard key={document.id} document={document} chunkCount={chunks.filter((chunk) => chunk.documentId === document.id).length} />
           ))}
@@ -239,6 +287,13 @@ function formatResult(record: PerformanceRecord) {
   const percentage = getRecordPercentage(record);
   const score = typeof record.score === 'number' && typeof record.maxScore === 'number' ? `${record.score}/${record.maxScore}` : undefined;
   return [score, percentage !== undefined ? `${percentage}%` : undefined, record.grade].filter(Boolean).join(' / ') || 'No mark recorded';
+}
+
+function withDerivedCollections(state: ReturnType<typeof useResearchState>['state']) {
+  return {
+    ...state,
+    collections: deriveCollections(state),
+  };
 }
 
 function buildPerformanceSummary(records: PerformanceRecord[], advice: Omit<PerformanceSummary, 'id' | 'generatedAt'>): PerformanceSummary {
@@ -313,6 +368,8 @@ function PerformancePage({
     title: '',
     subject: '',
     date: new Date().toISOString().slice(0, 10),
+    academicYear: '',
+    term: '',
     assessmentType: 'exam' as AssessmentType,
     score: '',
     maxScore: '',
@@ -372,6 +429,8 @@ function PerformancePage({
       id: `performance-${Date.now()}`,
       title: form.title.trim() || `${subject} ${form.assessmentType}`,
       date: form.date || new Date().toISOString().slice(0, 10),
+      academicYear: form.academicYear.trim() || undefined,
+      term: form.term.trim() || undefined,
       subject,
       assessmentType: form.assessmentType,
       score: parseOptionalNumber(form.score),
@@ -386,14 +445,18 @@ function PerformancePage({
       createdAt: new Date().toISOString(),
     };
 
-    setState((current) => ({
-      ...current,
-      performanceRecords: [record, ...current.performanceRecords],
-    }));
+    setState((current) =>
+      withDerivedCollections({
+        ...current,
+        performanceRecords: [record, ...current.performanceRecords],
+      }),
+    );
     setForm((current) => ({
       ...current,
       title: '',
       subject: '',
+      academicYear: '',
+      term: '',
       score: '',
       maxScore: '',
       percentage: '',
@@ -428,10 +491,22 @@ function PerformancePage({
         return;
       }
 
-      setState((current) => ({
-        ...current,
-        performanceRecords: [...newRecords, ...current.performanceRecords],
-      }));
+      setState((current) => {
+        const performanceRecords = [...newRecords, ...current.performanceRecords];
+        const documents = current.documents.map((item) =>
+          item.id === document.id
+            ? {
+                ...item,
+                metadata: buildDocumentMetadata(item, performanceRecords),
+              }
+            : item,
+        );
+        return withDerivedCollections({
+          ...current,
+          documents,
+          performanceRecords,
+        });
+      });
       setStatusMessage(`Added ${newRecords.length} performance record${newRecords.length === 1 ? '' : 's'} from ${document.title}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Performance analysis failed. Please try again.';
@@ -536,6 +611,8 @@ function PerformancePage({
                 </option>
               ))}
             </select>
+            <input value={form.academicYear} onChange={(event) => updateForm('academicYear', event.target.value)} placeholder="Academic year, e.g. 2025-2026" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.term} onChange={(event) => updateForm('term', event.target.value)} placeholder="Term, e.g. Summer" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
             <input value={form.score} onChange={(event) => updateForm('score', event.target.value)} placeholder="Score" inputMode="decimal" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
             <input value={form.maxScore} onChange={(event) => updateForm('maxScore', event.target.value)} placeholder="Max score" inputMode="decimal" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
             <input value={form.percentage} onChange={(event) => updateForm('percentage', event.target.value)} placeholder={computedPercentage !== undefined ? `${computedPercentage}% calculated` : 'Percentage'} inputMode="decimal" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
@@ -731,6 +808,84 @@ function TagList({ label, items }: { label: string; items: string[] }) {
   );
 }
 
+function ChipCloud({ items }: { items: string[] }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => (
+        <span key={item} className="rounded-full bg-paper px-3 py-1.5 text-xs font-semibold text-graphite/75">
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function TimelineRow({ event, compact = false }: { event: TimelineEvent; compact?: boolean }) {
+  return (
+    <article className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
+            {event.academicYear} / {event.term} / {event.type}
+          </p>
+          <h3 className={`${compact ? 'mt-2 text-sm' : 'mt-3 text-lg'} font-semibold text-ink`}>{event.title}</h3>
+          <p className={`${compact ? 'line-clamp-2' : ''} mt-2 text-sm leading-6 text-graphite/72`}>{event.detail}</p>
+          {!compact && event.subjects.length ? <div className="mt-3"><ChipCloud items={event.subjects.slice(0, 6)} /></div> : null}
+        </div>
+        <time className="shrink-0 rounded-full bg-paper px-3 py-1 text-xs font-semibold text-graphite/70">{event.date || 'Undated'}</time>
+      </div>
+    </article>
+  );
+}
+
+function TimelinePage({ events }: { events: TimelineEvent[] }) {
+  const groups = events.reduce<Record<string, Record<string, Record<string, TimelineEvent[]>>>>((accumulator, event) => {
+    accumulator[event.academicYear] ??= {};
+    accumulator[event.academicYear][event.term] ??= {};
+    accumulator[event.academicYear][event.term][event.date] ??= [];
+    accumulator[event.academicYear][event.term][event.date].push(event);
+    return accumulator;
+  }, {});
+
+  return (
+    <div className="space-y-7">
+      <SectionHeader
+        eyebrow="Timeline"
+        title="Everything in one learning history"
+        copy="Uploads, reports, exam results, Tutor work, study sessions, and knowledge milestones are grouped by academic year, term, and date."
+      />
+      {events.length ? (
+        <div className="space-y-8">
+          {Object.entries(groups).map(([academicYear, termGroups]) => (
+            <section key={academicYear} className="space-y-4">
+              <h2 className="font-serif text-3xl font-semibold text-ink">{academicYear}</h2>
+              {Object.entries(termGroups).map(([term, dateGroups]) => (
+                <div key={`${academicYear}-${term}`} className="border-l border-ink/10 pl-4">
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-graphite/55">{term}</h3>
+                  <div className="space-y-3">
+                    {Object.entries(dateGroups).map(([date, dateEvents]) => (
+                      <div key={`${term}-${date}`} className="grid gap-3 xl:grid-cols-[140px_1fr]">
+                        <time className="pt-4 text-sm font-semibold text-graphite/70">{date}</time>
+                        <div className="space-y-3">
+                          {dateEvents.map((event) => (
+                            <TimelineRow key={event.id} event={event} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No timeline yet" copy="Upload a source, analyse a report, or complete a Tutor activity to start the unified learning timeline." />
+      )}
+    </div>
+  );
+}
+
 function EmptyState({ title, copy, action, onClick }: { title: string; copy: string; action?: string; onClick?: () => void }) {
   return (
     <div className="rounded-2xl border border-dashed border-ink/14 bg-white/70 p-8 text-center">
@@ -758,11 +913,13 @@ function Upload({
   stateDocuments,
   activeWorkspaceId,
   storageStatus,
+  performanceRecords,
   setState,
 }: {
   stateDocuments: ResearchDocument[];
   activeWorkspaceId: string;
   storageStatus: ReturnType<typeof useResearchState>['storageStatus'];
+  performanceRecords: PerformanceRecord[];
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
   const [fileName, setFileName] = useState('');
@@ -786,6 +943,15 @@ function Upload({
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  }
+
+  function enrichDocument(document: ResearchDocument) {
+    const metadata = buildDocumentMetadata(document, performanceRecords);
+    return {
+      ...document,
+      metadata,
+      collectionIds: metadata.collections.map((collection) => `collection-${collection.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`),
+    };
   }
 
   async function queueEmbeddings(document: ResearchDocument, chunks: DocumentChunk[], readyMessage: string) {
@@ -942,7 +1108,7 @@ function Upload({
       }
 
       const tags = extractTopics(extracted.text);
-      const readyDocument: ResearchDocument = {
+      const readyDocument: ResearchDocument = enrichDocument({
         ...processingDocument,
         status: 'Ready',
         tags: tags.length ? tags : ['pdf upload'],
@@ -951,9 +1117,9 @@ function Upload({
         pageCount: extracted.pages.length,
         wordCount: extracted.wordCount,
         chunkIds: chunks.map((chunk) => chunk.id),
-      };
+      });
 
-      setState((current) => ({
+      setState((current) => withDerivedCollections({
         ...current,
         documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
@@ -1048,7 +1214,7 @@ function Upload({
       }
 
       const tags = extractTopics(extracted.text);
-      const readyDocument: ResearchDocument = {
+      const readyDocument: ResearchDocument = enrichDocument({
         ...processingDocument,
         status: 'Ready',
         tags: tags.length ? tags : ['docx upload'],
@@ -1056,9 +1222,9 @@ function Upload({
         extractedText: extracted.text,
         wordCount: extracted.wordCount,
         chunkIds: chunks.map((chunk) => chunk.id),
-      };
+      });
 
-      setState((current) => ({
+      setState((current) => withDerivedCollections({
         ...current,
         documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
@@ -1121,7 +1287,7 @@ function Upload({
 
         const tags = extractTopics(extractedText);
 
-        const newDocument: ResearchDocument = {
+        const newDocument: ResearchDocument = enrichDocument({
           id: documentId,
           title,
           type,
@@ -1135,9 +1301,9 @@ function Upload({
           extractedText,
           wordCount,
           chunkIds: chunks.map((chunk) => chunk.id),
-        };
+        });
 
-        setState((current) => ({
+        setState((current) => withDerivedCollections({
           ...current,
           documents: [newDocument, ...current.documents],
           chunks: [...chunks, ...current.chunks],
@@ -1317,7 +1483,13 @@ function formatChunkLocation(result: RetrievedChunk) {
   return `chunk ${result.chunk.chunkIndex + 1}`;
 }
 
-function buildResearchChatContext(results: RetrievedChunk[]) {
+function buildResearchChatContext(
+  results: RetrievedChunk[],
+  performanceRecords: PerformanceRecord[],
+  performanceSummaries: PerformanceSummary[],
+  tutorLessons: ReturnType<typeof useResearchState>['state']['tutorLessons'],
+  tutorAttempts: ReturnType<typeof useResearchState>['state']['tutorAttempts'],
+) {
   return results.map((result) => ({
     title: result.document.title,
     location: formatChunkLocation(result),
@@ -1327,6 +1499,24 @@ function buildResearchChatContext(results: RetrievedChunk[]) {
     topics: result.document.tags,
     extractedText: result.chunk.text,
     matchedTerms: result.matchedTerms,
+    metadata: getDocumentMetadata(result.document, performanceRecords),
+    performanceContext: performanceRecords
+      .filter((record) => record.sourceDocumentId === result.document.id || result.document.tags.some((tag) => tag.toLowerCase() === record.subject.toLowerCase()))
+      .slice(0, 8)
+      .map((record) => `${record.date}: ${record.subject} ${formatResult(record)}${record.teacherComment ? `; comment: ${record.teacherComment}` : ''}`)
+      .concat(
+        performanceSummaries.slice(0, 2).map((summary) => `Summary: ${summary.overallCommentary}`),
+      ),
+    tutorContext: [
+      ...tutorLessons
+        .filter((lesson) => lesson.citations.some((citation) => citation.documentTitle === result.document.title) || result.document.tags.some((tag) => tag.toLowerCase() === lesson.topic.toLowerCase()))
+        .slice(0, 4)
+        .map((lesson) => `${lesson.status}: ${lesson.topic} - ${lesson.objective}`),
+      ...tutorAttempts
+        .filter((attempt) => result.document.tags.some((tag) => tag.toLowerCase() === attempt.topic.toLowerCase()))
+        .slice(0, 4)
+        .map((attempt) => `${attempt.mode}: ${attempt.topic} - ${attempt.feedback}`),
+    ],
   }));
 }
 
@@ -1378,6 +1568,10 @@ function ResearchChat({
   workspaceId,
   documents,
   chunks,
+  performanceRecords,
+  performanceSummaries,
+  tutorLessons,
+  tutorAttempts,
   setState,
 }: {
   chat: ChatMessage[];
@@ -1385,6 +1579,10 @@ function ResearchChat({
   workspaceId: string;
   documents: ResearchDocument[];
   chunks: DocumentChunk[];
+  performanceRecords: PerformanceRecord[];
+  performanceSummaries: PerformanceSummary[];
+  tutorLessons: ReturnType<typeof useResearchState>['state']['tutorLessons'];
+  tutorAttempts: ReturnType<typeof useResearchState>['state']['tutorAttempts'];
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
   const [prompt, setPrompt] = useState('');
@@ -1463,7 +1661,7 @@ function ResearchChat({
       const response = await askResearchChat({
         question,
         workspaceName,
-        documents: buildResearchChatContext(retrievedChunks),
+        documents: buildResearchChatContext(retrievedChunks, performanceRecords, performanceSummaries, tutorLessons, tutorAttempts),
       });
 
       const assistantMessage: ChatMessage = {

@@ -21,6 +21,9 @@ type ResearchChatDocument = {
   pageStart?: number;
   pageEnd?: number;
   matchedTerms?: string[];
+  metadata?: Record<string, string[]>;
+  performanceContext?: string[];
+  tutorContext?: string[];
 };
 
 type ResearchChatBody = {
@@ -73,6 +76,9 @@ function normalizeDocuments(documents: unknown): ResearchChatDocument[] {
       pageStart: typeof document.pageStart === 'number' ? document.pageStart : undefined,
       pageEnd: typeof document.pageEnd === 'number' ? document.pageEnd : undefined,
       matchedTerms: Array.isArray(document.matchedTerms) ? document.matchedTerms.filter((term): term is string => typeof term === 'string') : [],
+      metadata: document.metadata && typeof document.metadata === 'object' ? document.metadata : {},
+      performanceContext: Array.isArray(document.performanceContext) ? document.performanceContext.filter((item): item is string => typeof item === 'string') : [],
+      tutorContext: Array.isArray(document.tutorContext) ? document.tutorContext.filter((item): item is string => typeof item === 'string') : [],
     }));
 }
 
@@ -87,12 +93,23 @@ function buildDocumentContext(documents: ResearchChatDocument[]) {
       const summary = document.summary || 'No summary supplied';
       const extractedText = document.extractedText || 'No extracted text supplied';
       const matchedTerms = document.matchedTerms?.length ? document.matchedTerms.join(', ') : 'No matched terms supplied';
+      const metadata = document.metadata
+        ? Object.entries(document.metadata)
+            .filter(([, values]) => Array.isArray(values) && values.length > 0)
+            .map(([key, values]) => `${key}: ${values.join(', ')}`)
+            .join('; ')
+        : '';
+      const performanceContext = document.performanceContext?.length ? document.performanceContext.join(' | ') : 'No performance context supplied';
+      const tutorContext = document.tutorContext?.length ? document.tutorContext.join(' | ') : 'No Tutor context supplied';
 
       return [
         `Document ${index + 1}: ${document.title}`,
         `Location: ${document.location || 'Supplied document context'}`,
         document.pageStart && document.pageEnd ? `Page range: ${document.pageStart}-${document.pageEnd}` : null,
         `Matched terms: ${matchedTerms}`,
+        `Metadata: ${metadata || 'No metadata supplied'}`,
+        `Performance context: ${performanceContext}`,
+        `Tutor context: ${tutorContext}`,
         `Topics: ${topics}`,
         `Summary: ${summary}`,
         `Retrieved chunk text: ${extractedText}`,

@@ -44,6 +44,7 @@ import {
 import { retrieveChunks, type RetrievedChunk } from '../utils/retrieveChunks';
 import { CitationCard } from './CitationCard';
 import { SectionHeader } from './SectionHeader';
+import { getDocumentMetadata } from '../utils/learningModel';
 
 type TutorView = 'home' | 'lesson' | 'socratic' | 'exam';
 
@@ -116,9 +117,21 @@ function getWeakTopics(records: PerformanceRecord[], summaries: PerformanceSumma
   return [...new Set([...memoryWeaknesses, ...summaryWeaknesses, ...recordWeaknesses].map((topic) => topic.trim()).filter(Boolean))].slice(0, 6);
 }
 
-function getRecommendedTopics(documents: ResearchDocument[], weakTopics: string[]) {
-  const documentTopics = documents.flatMap((document) => document.tags).filter((tag) => !tag.includes('upload') && tag !== 'failed');
-  return [...new Set([...weakTopics, ...documentTopics])].slice(0, 8);
+function getRecommendedTopics(documents: ResearchDocument[], weakTopics: string[], records: PerformanceRecord[], memory: TutorMemory) {
+  const metadataTopics = documents
+    .flatMap((document) => {
+      const metadata = getDocumentMetadata(document, records);
+      return [...metadata.topics, ...metadata.skills, ...metadata.subjects];
+    })
+    .filter((topic) => !/upload|failed/i.test(topic));
+  const staleTopics = memory.topicsStudied
+    .filter((topic) => {
+      const daysSinceReview = Math.floor((Date.now() - new Date(topic.lastReviewed).getTime()) / 86_400_000);
+      return topic.confidence < 70 || daysSinceReview >= 14;
+    })
+    .map((topic) => topic.topic);
+
+  return [...new Set([...weakTopics, ...staleTopics, ...metadataTopics].map((topic) => topic.trim()).filter(Boolean))].slice(0, 8);
 }
 
 function formatChunkLocation(result: RetrievedChunk) {
@@ -238,7 +251,7 @@ export function TutorPage({
   setState,
 }: TutorPageProps) {
   const weakTopics = useMemo(() => getWeakTopics(performanceRecords, performanceSummaries, tutorMemory), [performanceRecords, performanceSummaries, tutorMemory]);
-  const recommendedTopics = useMemo(() => getRecommendedTopics(documents, weakTopics), [documents, weakTopics]);
+  const recommendedTopics = useMemo(() => getRecommendedTopics(documents, weakTopics, performanceRecords, tutorMemory), [documents, weakTopics, performanceRecords, tutorMemory]);
   const hasReadableSources = documents.some((document) => document.extractedText?.trim() && document.status !== 'Failed');
   const recentTopics = tutorMemory.topicsStudied.slice(0, 5);
   const activeLesson = tutorLessons.find((lesson) => lesson.workspaceId === workspaceId && lesson.status === 'in_progress') ?? tutorLessons.find((lesson) => lesson.workspaceId === workspaceId);
