@@ -1,12 +1,28 @@
-import { ArrowRight, BrainCircuit, CalendarDays, CheckCircle2, Clock3, FilePlus2, LibraryBig, Network, Send, Sparkles, Tags, UploadCloud } from 'lucide-react';
+import {
+  ArrowRight,
+  BarChart3,
+  BrainCircuit,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  FilePlus2,
+  LibraryBig,
+  Network,
+  Send,
+  Sparkles,
+  Tags,
+  TrendingUp,
+  UploadCloud,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from './components/AppShell';
 import { CitationCard } from './components/CitationCard';
 import { DocumentCard } from './components/DocumentCard';
 import { SectionHeader } from './components/SectionHeader';
 import { useResearchState } from './hooks/useResearchState';
-import type { ChatMessage, DocumentChunk, MapEdge, MapNode, PageId, ResearchDocument } from './types/research';
-import { askResearchChat } from './utils/api';
+import type { AssessmentType, ChatMessage, DocumentChunk, MapEdge, MapNode, PageId, PerformanceRecord, PerformanceSummary, ResearchDocument } from './types/research';
+import { analysePerformanceDocument, askResearchChat, generatePerformanceAdvice, type PerformanceAnalysisRecord } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
 import { extractPdfText } from './utils/extractPdfText';
@@ -24,6 +40,7 @@ function App() {
   const page = {
     dashboard: <Dashboard state={state} documents={workspaceDocuments} setActivePage={setActivePage} />,
     library: <Library documents={workspaceDocuments} chunks={state.chunks} />,
+    performance: <PerformancePage records={state.performanceRecords} summaries={state.performanceSummaries} documents={state.documents} setState={setState} />,
     upload: <Upload stateDocuments={state.documents} activeWorkspaceId={state.activeWorkspaceId} setState={setState} />,
     chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} documents={workspaceDocuments} chunks={state.chunks} setState={setState} />,
     study: <StudyTools documents={workspaceDocuments} />,
@@ -158,6 +175,532 @@ function Library({ documents, chunks }: { documents: ResearchDocument[]; chunks:
         </div>
       ) : (
         <EmptyState title="Your library is empty" copy="Upload a TXT, PDF, or DOCX file to create searchable source material for this workspace." />
+      )}
+    </div>
+  );
+}
+
+const assessmentTypes: AssessmentType[] = ['exam', 'report', 'coursework', 'music', 'mock', 'other'];
+
+function splitList(value: string) {
+  return value
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseOptionalNumber(value: string) {
+  if (!value.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getRecordPercentage(record: PerformanceRecord) {
+  if (typeof record.percentage === 'number') return record.percentage;
+  if (typeof record.score === 'number' && typeof record.maxScore === 'number' && record.maxScore > 0) {
+    return Math.round((record.score / record.maxScore) * 100);
+  }
+  return undefined;
+}
+
+function getSubjectGroups(records: PerformanceRecord[]) {
+  return [...records]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .reduce<Record<string, PerformanceRecord[]>>((groups, record) => {
+      const subject = record.subject.trim() || 'Unspecified subject';
+      groups[subject] = [...(groups[subject] ?? []), record];
+      return groups;
+    }, {});
+}
+
+function formatResult(record: PerformanceRecord) {
+  const percentage = getRecordPercentage(record);
+  const score = typeof record.score === 'number' && typeof record.maxScore === 'number' ? `${record.score}/${record.maxScore}` : undefined;
+  return [score, percentage !== undefined ? `${percentage}%` : undefined, record.grade].filter(Boolean).join(' / ') || 'No mark recorded';
+}
+
+function buildPerformanceSummary(records: PerformanceRecord[], advice: Omit<PerformanceSummary, 'id' | 'generatedAt'>): PerformanceSummary {
+  return {
+    id: `performance-summary-${Date.now()}`,
+    generatedAt: new Date().toISOString(),
+    subjects: advice.subjects,
+    strongestSubjects: advice.strongestSubjects,
+    weakestSubjects: advice.weakestSubjects,
+    improvingSubjects: advice.improvingSubjects,
+    decliningSubjects: advice.decliningSubjects,
+    recurringStrengths: advice.recurringStrengths,
+    recurringWeaknesses: advice.recurringWeaknesses,
+    recommendedActions: advice.recommendedActions,
+    overallCommentary:
+      advice.overallCommentary ||
+      `Based on the available ${records.length} performance record${records.length === 1 ? '' : 's'}, more data may be needed before drawing firm conclusions.`,
+  };
+}
+
+function normalizeAssessmentType(value: unknown): AssessmentType {
+  return typeof value === 'string' && assessmentTypes.includes(value as AssessmentType) ? (value as AssessmentType) : 'other';
+}
+
+function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocumentId: string, fallbackTitle: string): PerformanceRecord | null {
+  const subject = typeof record.subject === 'string' ? record.subject.trim() : '';
+  if (!subject) return null;
+
+  const score = typeof record.score === 'number' ? record.score : undefined;
+  const maxScore = typeof record.maxScore === 'number' ? record.maxScore : undefined;
+  const percentage =
+    typeof record.percentage === 'number'
+      ? record.percentage
+      : typeof score === 'number' && typeof maxScore === 'number' && maxScore > 0
+        ? Math.round((score / maxScore) * 100)
+        : undefined;
+
+  return {
+    id: `performance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: typeof record.title === 'string' && record.title.trim() ? record.title.trim() : fallbackTitle,
+    sourceDocumentId,
+    date: typeof record.date === 'string' && record.date.trim() ? record.date.trim() : new Date().toISOString().slice(0, 10),
+    term: typeof record.term === 'string' && record.term.trim() ? record.term.trim() : undefined,
+    academicYear: typeof record.academicYear === 'string' && record.academicYear.trim() ? record.academicYear.trim() : undefined,
+    subject,
+    assessmentType: normalizeAssessmentType(record.assessmentType),
+    score,
+    maxScore,
+    percentage,
+    grade: typeof record.grade === 'string' && record.grade.trim() ? record.grade.trim() : undefined,
+    rank: typeof record.rank === 'string' && record.rank.trim() ? record.rank.trim() : undefined,
+    teacherComment: typeof record.teacherComment === 'string' && record.teacherComment.trim() ? record.teacherComment.trim() : undefined,
+    strengths: Array.isArray(record.strengths) ? record.strengths.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
+    weaknesses: Array.isArray(record.weaknesses) ? record.weaknesses.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
+    actionPoints: Array.isArray(record.actionPoints) ? record.actionPoints.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function PerformancePage({
+  records,
+  summaries,
+  documents,
+  setState,
+}: {
+  records: PerformanceRecord[];
+  summaries: PerformanceSummary[];
+  documents: ResearchDocument[];
+  setState: ReturnType<typeof useResearchState>['setState'];
+}) {
+  const [form, setForm] = useState({
+    title: '',
+    subject: '',
+    date: new Date().toISOString().slice(0, 10),
+    assessmentType: 'exam' as AssessmentType,
+    score: '',
+    maxScore: '',
+    percentage: '',
+    grade: '',
+    rank: '',
+    teacherComment: '',
+    strengths: '',
+    weaknesses: '',
+    actionPoints: '',
+  });
+  const [selectedDocumentId, setSelectedDocumentId] = useState('');
+  const [statusMessage, setStatusMessage] = useState('Performance data is stored locally in this version.');
+  const [isAnalysing, setIsAnalysing] = useState(false);
+  const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
+
+  const subjectGroups = useMemo(() => getSubjectGroups(records), [records]);
+  const subjectEntries = Object.entries(subjectGroups);
+  const latestBySubject = subjectEntries.map(([subject, subjectRecords]) => ({
+    subject,
+    record: subjectRecords[subjectRecords.length - 1],
+    previous: subjectRecords[subjectRecords.length - 2],
+  }));
+  const latestPercentages = latestBySubject
+    .map((item) => ({ subject: item.subject, percentage: getRecordPercentage(item.record) }))
+    .filter((item): item is { subject: string; percentage: number } => typeof item.percentage === 'number');
+  const latestAverage = latestPercentages.length
+    ? Math.round(latestPercentages.reduce((total, item) => total + item.percentage, 0) / latestPercentages.length)
+    : undefined;
+  const strongestSubject = [...latestPercentages].sort((a, b) => b.percentage - a.percentage)[0]?.subject;
+  const weakestSubject = [...latestPercentages].sort((a, b) => a.percentage - b.percentage)[0]?.subject;
+  const latestSummary = summaries[0];
+  const analysableDocuments = documents.filter((document) => document.extractedText?.trim() && document.status === 'Ready');
+  const computedPercentage = (() => {
+    const score = parseOptionalNumber(form.score);
+    const maxScore = parseOptionalNumber(form.maxScore);
+    const manualPercentage = parseOptionalNumber(form.percentage);
+    if (manualPercentage !== undefined) return manualPercentage;
+    if (score !== undefined && maxScore !== undefined && maxScore > 0) return Math.round((score / maxScore) * 100);
+    return undefined;
+  })();
+
+  function updateForm(field: keyof typeof form, value: string) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleManualSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const subject = form.subject.trim();
+
+    if (!subject) {
+      setStatusMessage('Add a subject before saving a performance record.');
+      return;
+    }
+
+    const record: PerformanceRecord = {
+      id: `performance-${Date.now()}`,
+      title: form.title.trim() || `${subject} ${form.assessmentType}`,
+      date: form.date || new Date().toISOString().slice(0, 10),
+      subject,
+      assessmentType: form.assessmentType,
+      score: parseOptionalNumber(form.score),
+      maxScore: parseOptionalNumber(form.maxScore),
+      percentage: computedPercentage,
+      grade: form.grade.trim() || undefined,
+      rank: form.rank.trim() || undefined,
+      teacherComment: form.teacherComment.trim() || undefined,
+      strengths: splitList(form.strengths),
+      weaknesses: splitList(form.weaknesses),
+      actionPoints: splitList(form.actionPoints),
+      createdAt: new Date().toISOString(),
+    };
+
+    setState((current) => ({
+      ...current,
+      performanceRecords: [record, ...current.performanceRecords],
+    }));
+    setForm((current) => ({
+      ...current,
+      title: '',
+      subject: '',
+      score: '',
+      maxScore: '',
+      percentage: '',
+      grade: '',
+      rank: '',
+      teacherComment: '',
+      strengths: '',
+      weaknesses: '',
+      actionPoints: '',
+    }));
+    setStatusMessage(`${record.title} was saved locally.`);
+  }
+
+  async function handleAnalyseDocument() {
+    const document = documents.find((item) => item.id === selectedDocumentId);
+    if (!document?.extractedText) {
+      setStatusMessage('Choose an uploaded document with extracted text first.');
+      return;
+    }
+
+    setIsAnalysing(true);
+    setStatusMessage(`Analysing ${document.title} for academic performance records...`);
+
+    try {
+      const response = await analysePerformanceDocument({ title: document.title, text: document.extractedText });
+      const newRecords = response.records
+        .map((record) => createRecordFromAnalysis(record, document.id, document.title))
+        .filter((record): record is PerformanceRecord => Boolean(record));
+
+      if (newRecords.length === 0) {
+        setStatusMessage(response.message || 'No reliable performance records were found in that document.');
+        return;
+      }
+
+      setState((current) => ({
+        ...current,
+        performanceRecords: [...newRecords, ...current.performanceRecords],
+      }));
+      setStatusMessage(`Added ${newRecords.length} performance record${newRecords.length === 1 ? '' : 's'} from ${document.title}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Performance analysis failed. Please try again.';
+      setStatusMessage(message);
+    } finally {
+      setIsAnalysing(false);
+    }
+  }
+
+  async function handleGenerateAdvice() {
+    if (records.length === 0) {
+      setStatusMessage('Add at least one performance record before generating advice.');
+      return;
+    }
+
+    setIsGeneratingAdvice(true);
+    setStatusMessage('Generating academic coaching advice from saved records...');
+
+    try {
+      const advice = await generatePerformanceAdvice(records);
+      const summary = buildPerformanceSummary(records, advice);
+      setState((current) => ({
+        ...current,
+        performanceSummaries: [summary, ...current.performanceSummaries],
+      }));
+      setStatusMessage('AI performance advice was saved locally.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Performance advice failed. Please try again.';
+      setStatusMessage(message);
+    } finally {
+      setIsGeneratingAdvice(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-8">
+      <SectionHeader eyebrow="Performance" title="Performance" copy="Understand reports, exam results, and academic patterns." />
+
+      <div className="rounded-2xl border border-ink/8 bg-white p-4 shadow-sm">
+        <p className="text-sm leading-7 text-graphite/74">{statusMessage}</p>
+      </div>
+
+      {records.length === 0 ? (
+        <EmptyState
+          title="No performance records yet"
+          copy="Add exam results manually or analyse an uploaded report to begin building a private academic performance picture."
+        />
+      ) : null}
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Subjects tracked" value={subjectEntries.length.toLocaleString()} />
+        <MetricCard label="Latest average" value={latestAverage !== undefined ? `${latestAverage}%` : '-'} />
+        <MetricCard label="Strongest subject" value={strongestSubject ?? '-'} />
+        <MetricCard label="Priority area" value={weakestSubject ?? '-'} />
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+            <BarChart3 size={15} />
+            Latest performance by subject
+          </div>
+          <div className="mt-5 space-y-4">
+            {latestPercentages.length ? (
+              latestPercentages.map((item) => (
+                <div key={item.subject}>
+                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                    <span className="font-semibold text-ink">{item.subject}</span>
+                    <span className="text-graphite/70">{item.percentage}%</span>
+                  </div>
+                  <div className="h-3 overflow-hidden rounded-full bg-paper">
+                    <div className="h-full rounded-full bg-moss" style={{ width: `${Math.min(100, Math.max(0, item.percentage))}%` }} />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="rounded-xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Scores or percentages will appear here after they are added.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-6">
+          <TrendChart records={records} />
+          <AssessmentBreakdown records={records} />
+        </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <form onSubmit={handleManualSubmit} className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+            <ClipboardList size={15} />
+            Manual entry
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <input value={form.title} onChange={(event) => updateForm('title', event.target.value)} placeholder="Assessment title" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.subject} onChange={(event) => updateForm('subject', event.target.value)} placeholder="Subject" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input type="date" value={form.date} onChange={(event) => updateForm('date', event.target.value)} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <select value={form.assessmentType} onChange={(event) => updateForm('assessmentType', event.target.value)} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
+              {assessmentTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+            <input value={form.score} onChange={(event) => updateForm('score', event.target.value)} placeholder="Score" inputMode="decimal" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.maxScore} onChange={(event) => updateForm('maxScore', event.target.value)} placeholder="Max score" inputMode="decimal" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.percentage} onChange={(event) => updateForm('percentage', event.target.value)} placeholder={computedPercentage !== undefined ? `${computedPercentage}% calculated` : 'Percentage'} inputMode="decimal" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.grade} onChange={(event) => updateForm('grade', event.target.value)} placeholder="Grade" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.rank} onChange={(event) => updateForm('rank', event.target.value)} placeholder="Rank or set" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
+            <textarea value={form.teacherComment} onChange={(event) => updateForm('teacherComment', event.target.value)} placeholder="Teacher comment" rows={3} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
+            <textarea value={form.strengths} onChange={(event) => updateForm('strengths', event.target.value)} placeholder="Strengths, separated by commas or new lines" rows={2} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <textarea value={form.weaknesses} onChange={(event) => updateForm('weaknesses', event.target.value)} placeholder="Weaknesses, separated by commas or new lines" rows={2} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <textarea value={form.actionPoints} onChange={(event) => updateForm('actionPoints', event.target.value)} placeholder="Action points" rows={2} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
+          </div>
+          <button type="submit" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+            <FilePlus2 size={17} />
+            Save record
+          </button>
+        </form>
+
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+              <Sparkles size={15} />
+              Analyse uploaded report
+            </div>
+            <p className="mt-3 text-sm leading-7 text-graphite/72">Select a document that has already been extracted. Research OS will ask the model for structured academic records and will not invent missing marks.</p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
+                <option value="">Choose uploaded document</option>
+                {analysableDocuments.map((document) => (
+                  <option key={document.id} value={document.id}>
+                    {document.title}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={handleAnalyseDocument} disabled={isAnalysing} className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+                {isAnalysing ? 'Analysing...' : 'Analyse'}
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">AI advice</p>
+                <h3 className="mt-2 font-serif text-3xl font-semibold text-ink">Academic coaching summary</h3>
+              </div>
+              <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || records.length === 0} className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+                {isGeneratingAdvice ? 'Generating...' : 'Generate'}
+              </button>
+            </div>
+            {latestSummary ? (
+              <div className="mt-5 space-y-4">
+                <p className="text-sm leading-7 text-graphite/74">{latestSummary.overallCommentary}</p>
+                <TagList label="Strongest" items={latestSummary.strongestSubjects} />
+                <TagList label="Priority themes" items={latestSummary.recurringWeaknesses} />
+                <TagList label="Recommended actions" items={latestSummary.recommendedActions} />
+              </div>
+            ) : (
+              <p className="mt-5 rounded-xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
+                Generate advice after adding records. With limited data, the summary will include a confidence caveat.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <SectionHeader eyebrow="Subject breakdown" title="Patterns by subject" />
+        <div className="grid gap-5 md:grid-cols-2">
+          {latestBySubject.length ? (
+            latestBySubject.map(({ subject, record, previous }) => {
+              const currentPercentage = getRecordPercentage(record);
+              const previousPercentage = previous ? getRecordPercentage(previous) : undefined;
+              const trend =
+                currentPercentage !== undefined && previousPercentage !== undefined
+                  ? currentPercentage > previousPercentage
+                    ? 'Improving'
+                    : currentPercentage < previousPercentage
+                      ? 'Needs attention'
+                      : 'Stable'
+                  : 'More data needed';
+
+              return (
+                <article key={subject} className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{trend}</p>
+                      <h3 className="mt-2 font-serif text-3xl font-semibold text-ink">{subject}</h3>
+                    </div>
+                    <span className="rounded-full bg-paper px-3 py-1 text-sm font-semibold text-graphite">{formatResult(record)}</span>
+                  </div>
+                  {record.teacherComment ? <p className="mt-4 line-clamp-3 text-sm leading-7 text-graphite/74">{record.teacherComment}</p> : null}
+                  <div className="mt-5 grid gap-3">
+                    <TagList label="Strengths" items={record.strengths} />
+                    <TagList label="Weaknesses" items={record.weaknesses} />
+                    <TagList label="Action points" items={record.actionPoints} />
+                  </div>
+                </article>
+              );
+            })
+          ) : (
+            <EmptyState title="No subject patterns yet" copy="Performance records will appear here grouped by subject." />
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{label}</p>
+      <p className="mt-3 truncate text-3xl font-semibold text-ink">{value}</p>
+    </div>
+  );
+}
+
+function TrendChart({ records }: { records: PerformanceRecord[] }) {
+  const points = [...records]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((record) => ({ date: record.date, percentage: getRecordPercentage(record) }))
+    .filter((point): point is { date: string; percentage: number } => typeof point.percentage === 'number');
+  const width = 320;
+  const height = 130;
+  const polyline = points
+    .map((point, index) => {
+      const x = points.length === 1 ? width / 2 : (index / (points.length - 1)) * width;
+      const y = height - (Math.min(100, Math.max(0, point.percentage)) / 100) * height;
+      return `${x},${y}`;
+    })
+    .join(' ');
+
+  return (
+    <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+        <TrendingUp size={15} />
+        Trend over time
+      </div>
+      {points.length > 1 ? (
+        <svg className="mt-5 h-36 w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
+          <polyline points={polyline} fill="none" stroke="rgb(111 123 92)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        <p className="mt-5 rounded-xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Add at least two marked records to see a trend.</p>
+      )}
+    </div>
+  );
+}
+
+function AssessmentBreakdown({ records }: { records: PerformanceRecord[] }) {
+  const counts = assessmentTypes.map((type) => ({
+    type,
+    count: records.filter((record) => record.assessmentType === type).length,
+  }));
+  const maxCount = Math.max(1, ...counts.map((item) => item.count));
+
+  return (
+    <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Assessment type breakdown</p>
+      <div className="mt-5 space-y-3">
+        {counts.map((item) => (
+          <div key={item.type} className="flex items-center gap-3 text-sm">
+            <span className="w-24 font-semibold capitalize text-ink">{item.type}</span>
+            <div className="h-3 min-w-0 flex-1 overflow-hidden rounded-full bg-paper">
+              <div className="h-full rounded-full bg-brass" style={{ width: `${(item.count / maxCount) * 100}%` }} />
+            </div>
+            <span className="w-8 text-right text-graphite/70">{item.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TagList({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</p>
+      {items.length ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {items.map((item) => (
+            <span key={item} className="rounded-full bg-paper px-2.5 py-1 text-xs font-medium text-graphite/75">
+              {item}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-graphite/60">No clear pattern yet.</p>
       )}
     </div>
   );

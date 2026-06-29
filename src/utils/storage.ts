@@ -35,6 +35,8 @@ export function loadResearchState(): ResearchState {
       insights: parsed.insights ?? [],
       actions: parsed.actions ?? [],
       chat: parsed.chat ?? [],
+      performanceRecords: parsed.performanceRecords ?? [],
+      performanceSummaries: parsed.performanceSummaries ?? [],
     };
 
     return removeKnownDemoData(state);

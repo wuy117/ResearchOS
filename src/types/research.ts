@@ -1,4 +1,4 @@
-export type PageId = 'dashboard' | 'library' | 'upload' | 'chat' | 'study' | 'map';
+export type PageId = 'dashboard' | 'library' | 'performance' | 'upload' | 'chat' | 'study' | 'map';
 
 export type Workspace = {
   id: string;
@@ -79,6 +79,43 @@ export type MapEdge = {
   to: string;
 };
 
+export type AssessmentType = 'exam' | 'report' | 'coursework' | 'music' | 'mock' | 'other';
+
+export type PerformanceRecord = {
+  id: string;
+  title: string;
+  sourceDocumentId?: string;
+  date: string;
+  term?: string;
+  academicYear?: string;
+  subject: string;
+  assessmentType: AssessmentType;
+  score?: number;
+  maxScore?: number;
+  percentage?: number;
+  grade?: string;
+  rank?: string;
+  teacherComment?: string;
+  strengths: string[];
+  weaknesses: string[];
+  actionPoints: string[];
+  createdAt: string;
+};
+
+export type PerformanceSummary = {
+  id: string;
+  generatedAt: string;
+  subjects: string[];
+  strongestSubjects: string[];
+  weakestSubjects: string[];
+  improvingSubjects: string[];
+  decliningSubjects: string[];
+  recurringStrengths: string[];
+  recurringWeaknesses: string[];
+  recommendedActions: string[];
+  overallCommentary: string;
+};
+
 export type ResearchState = {
   workspaces: Workspace[];
   activeWorkspaceId: string;
@@ -87,4 +124,6 @@ export type ResearchState = {
   insights: Insight[];
   actions: SuggestedAction[];
   chat: ChatMessage[];
+  performanceRecords: PerformanceRecord[];
+  performanceSummaries: PerformanceSummary[];
 };

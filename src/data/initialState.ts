@@ -46,4 +46,6 @@ export const initialState: ResearchState = {
   insights: [],
   actions: [],
   chat: [],
+  performanceRecords: [],
+  performanceSummaries: [],
 };
