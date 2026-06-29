@@ -1,10 +1,9 @@
-import { ArrowRight, BrainCircuit, CalendarDays, CheckCircle2, Clock3, FilePlus2, Files, LibraryBig, Network, Send, Sparkles, Tags, UploadCloud } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { ArrowRight, BrainCircuit, CalendarDays, CheckCircle2, Clock3, FilePlus2, LibraryBig, Network, Send, Sparkles, Tags, UploadCloud } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from './components/AppShell';
 import { CitationCard } from './components/CitationCard';
 import { DocumentCard } from './components/DocumentCard';
 import { SectionHeader } from './components/SectionHeader';
-import { StatCard } from './components/StatCard';
 import { mapEdges, mapNodes } from './data/mockData';
 import { useResearchState } from './hooks/useResearchState';
 import type { ChatMessage, DocumentChunk, PageId, ResearchDocument } from './types/research';
@@ -48,103 +47,127 @@ function Dashboard({
   setActivePage: (page: PageId) => void;
 }) {
   const indexedCount = documents.filter((document) => document.status === 'Indexed').length;
-  const newestDocuments = [...documents].slice(0, 3);
+  const newestDocuments = [...documents].slice(0, 2);
+  const primaryAction = state.actions[0];
 
   return (
-    <div className="space-y-7">
-      <section className="grid gap-4 xl:grid-cols-4">
-        <div className="rounded-[28px] border border-white/80 bg-ink p-6 text-white shadow-soft xl:col-span-2">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/55">Today at the desk</p>
-          <h2 className="mt-4 max-w-2xl font-serif text-4xl font-bold leading-tight sm:text-5xl">
-            Your research is organized, searchable, and ready for synthesis.
+    <div className="mx-auto max-w-6xl space-y-9">
+      <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+        <div className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Continue</p>
+          <h2 className="mt-4 max-w-2xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-5xl">
+            Return to your active reading desk.
           </h2>
-          <div className="mt-6 flex flex-wrap gap-3">
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
+            {indexedCount} indexed sources are ready in this workspace. Use chat for synthesis or open the library to keep reviewing source material.
+          </p>
+          <div className="mt-7 flex flex-wrap gap-3">
             <button
               type="button"
               onClick={() => setActivePage('chat')}
-              className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-ink"
+              className="inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm"
             >
-              Ask AI Chat
+              Ask research chat
               <ArrowRight size={17} />
             </button>
             <button
               type="button"
               onClick={() => setActivePage('library')}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/18 px-4 py-3 text-sm font-bold text-white"
+              className="inline-flex items-center gap-2 rounded-xl border border-ink/10 bg-paper px-4 py-3 text-sm font-semibold text-ink"
             >
-              Open Library
+              Open library
             </button>
           </div>
         </div>
-        <StatCard label="Documents" value={String(documents.length)} detail={`${indexedCount} indexed sources in this workspace.`} icon={Files} />
-        <StatCard label="Insights" value={String(state.insights.length)} detail="Saved claims, patterns, and useful synthesis fragments." icon={Sparkles} />
+        <div className="rounded-2xl border border-ink/8 bg-paper/75 p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workspace at a glance</p>
+          <div className="mt-6 space-y-5">
+            <div>
+              <p className="text-4xl font-semibold text-ink">{documents.length}</p>
+              <p className="mt-1 text-sm text-graphite/70">documents in scope</p>
+            </div>
+            <div className="border-t border-ink/8 pt-5">
+              <p className="text-4xl font-semibold text-ink">{state.insights.length}</p>
+              <p className="mt-1 text-sm text-graphite/70">saved insights</p>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1.35fr_0.85fr]">
+      <section className="grid gap-7 xl:grid-cols-[1.2fr_0.8fr]">
         <div>
-          <SectionHeader eyebrow="Recent documents" title="Fresh sources" copy="The documents most likely to need review, annotation, or synthesis." />
-          <div className="grid gap-4 md:grid-cols-2">
-            {newestDocuments.map((document) => (
-              <DocumentCard key={document.id} document={document} />
-            ))}
+          <SectionHeader eyebrow="Recent documents" title="Recently added" />
+          <div className="space-y-4">
+            {newestDocuments.length ? (
+              newestDocuments.map((document) => <DocumentCard key={document.id} document={document} />)
+            ) : (
+              <EmptyState title="No documents yet" copy="Add a source to begin building this workspace." action="Upload a source" onClick={() => setActivePage('upload')} />
+            )}
           </div>
         </div>
 
         <div>
-          <SectionHeader eyebrow="Next actions" title="Suggested focus" />
-          <div className="space-y-3">
-            {state.actions.map((action) => (
-              <button
-                key={action.id}
-                type="button"
-                onClick={() => setActivePage(action.page)}
-                className="w-full rounded-3xl border border-white/80 bg-white/78 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-extrabold text-ink">{action.title}</p>
-                    <p className="mt-2 text-sm leading-6 text-graphite/72">{action.detail}</p>
-                  </div>
-                  <ArrowRight className="mt-1 shrink-0 text-brass" size={18} />
+          <SectionHeader eyebrow="Suggested next action" title="One useful move" />
+          {primaryAction ? (
+            <button
+              type="button"
+              onClick={() => setActivePage(primaryAction.page)}
+              className="w-full rounded-2xl border border-ink/8 bg-white p-5 text-left shadow-sm transition hover:border-ink/14 hover:shadow-md"
+            >
+              <div className="flex items-start justify-between gap-5">
+                <div>
+                  <p className="text-lg font-semibold text-ink">{primaryAction.title}</p>
+                  <p className="mt-3 text-sm leading-7 text-graphite/72">{primaryAction.detail}</p>
                 </div>
-              </button>
-            ))}
-          </div>
+                <ArrowRight className="mt-1 shrink-0 text-graphite/55" size={18} />
+              </div>
+            </button>
+          ) : null}
         </div>
       </section>
 
-      <section>
-        <SectionHeader eyebrow="Saved insights" title="Research signals" />
-        <div className="grid gap-4 lg:grid-cols-3">
-          {state.insights.map((insight) => (
-            <article key={insight.id} className="rounded-3xl border border-white/80 bg-white/78 p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <Sparkles size={18} className="text-brass" />
-                <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-bold text-moss">{insight.confidence}% confidence</span>
-              </div>
-              <h3 className="mt-4 text-lg font-extrabold leading-6 text-ink">{insight.title}</h3>
-              <p className="mt-3 text-sm leading-6 text-graphite/74">{insight.body}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+      {state.insights[0] ? (
+        <section className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Saved insight</p>
+          <h3 className="mt-3 text-lg font-semibold text-ink">{state.insights[0].title}</h3>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-graphite/72">{state.insights[0].body}</p>
+        </section>
+      ) : null}
     </div>
   );
 }
 
 function Library({ documents, chunks }: { documents: ResearchDocument[]; chunks: DocumentChunk[] }) {
   return (
-    <div>
+    <div className="mx-auto max-w-6xl">
       <SectionHeader
         eyebrow="Document library"
         title="Sources by workspace"
-        copy="A clean catalogue for your indexed and in-progress materials. Filters and full-text search can sit naturally on top of this structure later."
+        copy="A calm catalogue for indexed and in-progress materials, with enough context to choose the next source without turning the library into a dashboard."
       />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {documents.map((document) => (
-          <DocumentCard key={document.id} document={document} chunkCount={chunks.filter((chunk) => chunk.documentId === document.id).length} />
-        ))}
-      </div>
+      {documents.length ? (
+        <div className="grid gap-5 md:grid-cols-2">
+          {documents.map((document) => (
+            <DocumentCard key={document.id} document={document} chunkCount={chunks.filter((chunk) => chunk.documentId === document.id).length} />
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="Your library is empty" copy="Upload a PDF or TXT file to create searchable source material for this workspace." />
+      )}
+    </div>
+  );
+}
+
+function EmptyState({ title, copy, action, onClick }: { title: string; copy: string; action?: string; onClick?: () => void }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-ink/14 bg-white/70 p-8 text-center">
+      <p className="font-serif text-2xl font-semibold text-ink">{title}</p>
+      <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-graphite/70">{copy}</p>
+      {action && onClick ? (
+        <button type="button" onClick={onClick} className="mt-5 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+          {action}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -351,31 +374,31 @@ function Upload({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+    <div className="mx-auto grid max-w-6xl gap-7 xl:grid-cols-[1.35fr_0.65fr]">
       <section>
         <SectionHeader
           eyebrow="Upload"
           title="Add research material"
-          copy="Drop in PDFs, text notes, or document drafts. TXT and PDF extraction run locally in your browser; DOCX is still queued for the future parser."
+          copy="Choose a source and let Research OS prepare it for the local library. TXT and PDF extraction stay in your browser."
         />
-        <div className="rounded-[28px] border border-dashed border-ink/18 bg-white/78 p-6 shadow-sm">
-          <div className="grid min-h-[260px] place-items-center rounded-3xl bg-paper/75 px-5 py-8 text-center">
+        <div className="rounded-2xl border border-dashed border-ink/16 bg-white p-5 shadow-sm">
+          <div className="grid min-h-[340px] place-items-center rounded-2xl bg-paper/65 px-5 py-10 text-center">
             <div>
-              <div className="mx-auto grid size-16 place-items-center rounded-3xl bg-ink text-white shadow-lg shadow-ink/15">
+              <div className="mx-auto grid size-16 place-items-center rounded-2xl border border-ink/8 bg-white text-ink shadow-sm">
                 <UploadCloud size={28} />
               </div>
-              <h3 className="mt-5 font-serif text-3xl font-bold text-ink">Upload source files</h3>
-              <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-graphite/72">
-                TXT and PDF files are extracted and chunked in your browser. DOCX uploads keep the existing mock extraction path.
+              <h3 className="mt-5 font-serif text-3xl font-semibold text-ink">Place a source on the desk</h3>
+              <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-graphite/72">
+                Select a TXT, PDF, or DOCX file. PDFs and text files are read locally; DOCX keeps the existing queued extraction path.
               </p>
-              <div className="mx-auto mt-6 flex max-w-xl flex-col gap-3 sm:flex-row">
+              <div className="mx-auto mt-7 flex max-w-xl flex-col gap-3 sm:flex-row">
                 <input
                   value={fileName}
                   onChange={(event) => setFileName(event.target.value)}
                   placeholder="optional-fallback-name.pdf"
-                  className="min-w-0 flex-1 rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-brass/30 transition focus:ring-4"
+                  className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4"
                 />
-                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm font-bold text-graphite shadow-sm transition hover:text-ink">
+                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-graphite shadow-sm transition hover:text-ink">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -393,29 +416,33 @@ function Upload({
                   type="button"
                   onClick={handleUpload}
                   disabled={isReading}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ink px-5 py-3 text-sm font-bold text-white shadow-lg shadow-ink/15 transition disabled:cursor-not-allowed disabled:bg-graphite/55"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
                 >
                   <FilePlus2 size={18} />
                   {isReading ? 'Processing...' : selectedFile?.name.toLowerCase().endsWith('.txt') ? 'Ingest TXT' : selectedFile?.name.toLowerCase().endsWith('.pdf') ? 'Extract PDF' : 'Mock Extract'}
                 </button>
               </div>
-              {selectedFile ? <p className="mt-3 text-xs font-bold uppercase tracking-[0.14em] text-graphite/55">{selectedFile.name}</p> : null}
-              <p className="mt-4 text-sm font-medium text-moss">{note}</p>
+              {selectedFile ? <p className="mt-4 text-sm font-medium text-ink">{selectedFile.name}</p> : null}
             </div>
           </div>
+        </div>
+        <div className="mt-4 rounded-2xl border border-ink/8 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{isReading ? 'Processing' : 'Latest result'}</p>
+          <p className="mt-2 text-sm leading-7 text-graphite/74">{note}</p>
         </div>
       </section>
 
       <section>
-        <SectionHeader eyebrow="Extraction queue" title="Review needed" />
-        <div className="space-y-3">
-          {recentUploads.map((document) => (
-            <div key={document.id} className="rounded-3xl border border-white/80 bg-white/78 p-4 shadow-sm">
+        <SectionHeader eyebrow="After upload" title="Recent intake" />
+        <div className="space-y-4">
+          {recentUploads.length ? (
+            recentUploads.map((document) => (
+            <div key={document.id} className="rounded-2xl border border-ink/8 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-extrabold text-ink">{document.title}</p>
-                  <p className="mt-2 text-sm leading-6 text-graphite/72">{document.summary}</p>
-                  <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em] text-graphite/55">
+                  <p className="font-semibold text-ink">{document.title}</p>
+                  <p className="mt-2 line-clamp-3 text-sm leading-7 text-graphite/72">{document.summary}</p>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
                     {[
                       document.status,
                       document.pageCount ? `${document.pageCount.toLocaleString()} pages` : null,
@@ -430,16 +457,19 @@ function Upload({
                       type="button"
                       onClick={() => processPdfUpload(failedPdfUpload)}
                       disabled={isReading}
-                      className="mt-3 rounded-2xl bg-ink px-4 py-2 text-sm font-bold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
+                      className="mt-3 rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
                     >
                       Retry extraction
                     </button>
                   ) : null}
                 </div>
-                <Clock3 className="shrink-0 text-brass" size={20} />
+                <Clock3 className="shrink-0 text-graphite/45" size={20} />
               </div>
             </div>
-          ))}
+            ))
+          ) : (
+            <EmptyState title="Nothing waiting" copy="Completed uploads and extraction attempts will appear here." />
+          )}
         </div>
       </section>
     </div>
@@ -521,6 +551,12 @@ function ResearchChat({
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const latestCitations = [...chat].reverse().find((message) => message.citations?.length)?.citations ?? [];
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [chat.length, isLoading]);
 
   async function sendMessage() {
     const question = prompt.trim();
@@ -566,29 +602,34 @@ function ResearchChat({
   }
 
   return (
-    <div className="grid min-h-[680px] gap-5 xl:grid-cols-[1fr_360px]">
-      <section className="flex min-h-0 flex-col rounded-[28px] border border-white/80 bg-white/78 shadow-sm">
-        <div className="border-b border-ink/10 p-5">
-          <SectionHeader eyebrow="AI research chat" title="Ask with sources" copy="A calm research assistant interface with citation cards tied to your local library." />
+    <div className="mx-auto grid h-[calc(100vh-23rem)] min-h-[420px] max-w-7xl gap-5 sm:h-[calc(100vh-12rem)] sm:min-h-[480px] xl:grid-cols-[minmax(0,1fr)_340px]">
+      <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-sm">
+        <div className="shrink-0 border-b border-ink/8 p-5">
+          <SectionHeader eyebrow="Research chat" title="Ask with sources" copy="A fixed research conversation area with source material kept close, but out of the way." />
         </div>
-        <div className="scrollbar-soft flex-1 space-y-5 overflow-auto p-5">
+        <div className="scrollbar-soft min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
           {chat.map((message) => (
-            <div key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[720px]' : 'mr-auto max-w-[820px]'}>
-              <div className={`rounded-3xl p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'bg-paper/85 text-ink'}`}>
-                <p className="text-sm leading-7">{message.content}</p>
+            <div key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[70ch]' : 'mr-auto max-w-[78ch]'}>
+              <div className={`rounded-2xl p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'border border-ink/8 bg-paper/70 text-ink'}`}>
+                <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
               </div>
               {message.citations ? (
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  {message.citations.map((citation) => (
-                    <CitationCard key={`${message.id}-${citation.documentTitle}`} citation={citation} />
-                  ))}
-                </div>
+                <details className="mt-3 rounded-2xl border border-ink/8 bg-white p-3 xl:hidden">
+                  <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
+                    {message.citations.length} sources
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    {message.citations.map((citation) => (
+                      <CitationCard key={`${message.id}-${citation.documentTitle}`} citation={citation} />
+                    ))}
+                  </div>
+                </details>
               ) : null}
             </div>
           ))}
           {isLoading ? (
             <div className="mr-auto max-w-[820px]">
-              <div className="rounded-3xl bg-paper/85 p-5 text-ink">
+              <div className="rounded-2xl border border-ink/8 bg-paper/70 p-5 text-ink">
                 <div className="flex items-center gap-3 text-sm font-semibold text-graphite/72">
                   <span className="size-2 animate-pulse rounded-full bg-brass" />
                   <span className="size-2 animate-pulse rounded-full bg-brass [animation-delay:120ms]" />
@@ -598,10 +639,11 @@ function ResearchChat({
               </div>
             </div>
           ) : null}
+          <div ref={bottomRef} />
         </div>
-        <div className="border-t border-ink/10 p-4">
+        <div className="shrink-0 border-t border-ink/8 bg-white p-4">
           {errorMessage ? (
-            <div className="mb-3 rounded-2xl border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
+            <div className="mb-3 rounded-xl border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
               Research chat could not answer right now. {errorMessage}
             </div>
           ) : null}
@@ -614,7 +656,7 @@ function ResearchChat({
               }}
               disabled={isLoading}
               placeholder="Ask about claims, contradictions, methods, or gaps..."
-              className="min-w-0 flex-1 rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-brass/30 transition focus:ring-4 disabled:cursor-not-allowed disabled:bg-paper"
+              className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4 disabled:cursor-not-allowed disabled:bg-paper"
             />
             <button
               type="button"
@@ -622,7 +664,7 @@ function ResearchChat({
               title="Send research question"
               onClick={sendMessage}
               disabled={isLoading}
-              className="grid size-12 place-items-center rounded-2xl bg-ink text-white shadow-lg shadow-ink/15 transition disabled:cursor-not-allowed disabled:bg-graphite/55"
+              className="grid size-12 place-items-center rounded-xl bg-ink text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
             >
               <Send size={18} />
             </button>
@@ -630,12 +672,20 @@ function ResearchChat({
         </div>
       </section>
 
-      <aside className="rounded-[28px] border border-white/80 bg-ink p-5 text-white shadow-soft">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/55">Citation posture</p>
-        <h3 className="mt-3 font-serif text-3xl font-bold">Every answer earns its place.</h3>
-        <p className="mt-4 text-sm leading-7 text-white/72">
-          The MVP keeps citation cards visible beside the conversation pattern, so future retrieval can feel trustworthy from day one.
-        </p>
+      <aside className="hidden min-h-0 overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-sm xl:flex xl:flex-col">
+        <div className="shrink-0 border-b border-ink/8 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Sources</p>
+          <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">Latest citations</h3>
+        </div>
+        <div className="scrollbar-soft min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          {latestCitations.length ? (
+            latestCitations.map((citation) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} />)
+          ) : (
+            <p className="rounded-2xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
+              Source cards will appear here after the assistant answers with citations.
+            </p>
+          )}
+        </div>
       </aside>
     </div>
   );
@@ -652,14 +702,14 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
   ];
 
   return (
-    <div>
+    <div className="mx-auto max-w-6xl">
       <SectionHeader
         eyebrow="Study tools"
         title="Turn sources into learning assets"
-        copy="Mock tools are wired as premium-feeling controls now, ready for real generation later."
+        copy="Choose a workflow and keep the source context visible. These controls remain presentation-only until generation is added."
       />
-      <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
-        <div className="space-y-3">
+      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+        <div className="space-y-4">
           {tools.map((tool) => {
             const Icon = tool.icon;
             return (
@@ -667,28 +717,43 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
                 key={tool.label}
                 type="button"
                 onClick={() => setActiveTool(tool.label)}
-                className={`flex w-full items-center gap-3 rounded-3xl border p-4 text-left transition ${
-                  activeTool === tool.label ? 'border-ink/20 bg-ink text-white shadow-soft' : 'border-white/80 bg-white/78 text-ink shadow-sm hover:bg-white'
+                className={`flex w-full items-start gap-4 rounded-2xl border p-5 text-left transition ${
+                  activeTool === tool.label ? 'border-ink/14 bg-paper text-ink shadow-sm' : 'border-ink/8 bg-white text-ink shadow-sm hover:border-ink/14'
                 }`}
               >
-                <Icon size={21} />
-                <span className="font-extrabold">{tool.label}</span>
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-ink/8 bg-white text-graphite">
+                  <Icon size={20} />
+                </span>
+                <span>
+                  <span className="block font-semibold">{tool.label}</span>
+                  <span className="mt-1 block text-sm leading-6 text-graphite/70">
+                    {tool.label === 'Summary'
+                      ? 'Condense a source set into durable notes.'
+                      : tool.label === 'Flashcards'
+                        ? 'Review terms, claims, and definitions.'
+                        : tool.label === 'Essay Plan'
+                          ? 'Shape an argument before drafting.'
+                          : tool.label === 'Quiz'
+                            ? 'Check recall and comprehension.'
+                            : 'Sequence people, papers, and events.'}
+                  </span>
+                </span>
               </button>
             );
           })}
         </div>
-        <div className="rounded-[28px] border border-white/80 bg-white/78 p-6 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brass">Generated preview</p>
-          <h3 className="mt-3 font-serif text-4xl font-bold text-ink">{activeTool}</h3>
-          <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/74">
+        <div className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workflow preview</p>
+          <h3 className="mt-3 font-serif text-4xl font-semibold text-ink">{activeTool}</h3>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
             {activeTool} output would be generated from {documents.length} workspace sources. This preview keeps the interaction model visible while the
             backend is still intentionally absent.
           </p>
-          <div className="mt-6 grid gap-3 md:grid-cols-2">
+          <div className="mt-7 space-y-3">
             {documents.slice(0, 4).map((document) => (
-              <div key={document.id} className="rounded-3xl bg-paper/80 p-4">
-                <p className="font-extrabold text-ink">{document.title}</p>
-                <p className="mt-2 text-sm leading-6 text-graphite/72">{document.summary}</p>
+              <div key={document.id} className="rounded-xl border border-ink/8 bg-paper/65 p-4">
+                <p className="font-semibold text-ink">{document.title}</p>
+                <p className="mt-2 line-clamp-2 text-sm leading-7 text-graphite/72">{document.summary}</p>
               </div>
             ))}
           </div>
@@ -699,67 +764,79 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
 }
 
 function KnowledgeMap() {
+  const [selectedNodeId, setSelectedNodeId] = useState(mapNodes[0]?.id ?? '');
   const nodeById = Object.fromEntries(mapNodes.map((node) => [node.id, node]));
+  const selectedNode = nodeById[selectedNodeId] ?? mapNodes[0];
   const toneClasses = {
-    moss: 'bg-moss text-white',
-    brass: 'bg-brass text-white',
-    graphite: 'bg-graphite text-white',
-    ink: 'bg-ink text-white',
+    moss: 'bg-white text-ink border-moss/35',
+    brass: 'bg-white text-ink border-brass/35',
+    graphite: 'bg-white text-ink border-graphite/30',
+    ink: 'bg-ink text-white border-ink',
   };
 
   return (
-    <div>
+    <div className="mx-auto max-w-6xl">
       <SectionHeader
         eyebrow="Knowledge map"
         title="Connected topic graph"
-        copy="A mock map of how concepts relate across the active research area. Nodes are positioned to suggest clusters without implying final ontology."
+        copy="A quieter map of relationships across the active research area. Select a node to inspect its role without treating the mock graph as final ontology."
       />
-      <div className="relative min-h-[640px] overflow-hidden rounded-[28px] border border-white/80 bg-white/78 shadow-soft">
-        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          {mapEdges.map((edge) => {
-            const from = nodeById[edge.from];
-            const to = nodeById[edge.to];
-            return <line key={`${edge.from}-${edge.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="rgba(68,81,94,0.22)" strokeWidth="0.35" />;
-          })}
-        </svg>
-        <div className="absolute left-6 top-6 z-10 rounded-3xl bg-ink px-4 py-3 text-white">
-          <div className="flex items-center gap-2">
-            <Network size={18} />
-            <span className="text-sm font-bold">6 topics / 6 links</span>
+      <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
+        <div className="relative min-h-[560px] overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-sm">
+          <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            {mapEdges.map((edge) => {
+              const from = nodeById[edge.from];
+              const to = nodeById[edge.to];
+              return <line key={`${edge.from}-${edge.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="rgba(68,81,94,0.18)" strokeWidth="0.28" />;
+            })}
+          </svg>
+          <div className="absolute left-5 top-5 z-10 rounded-xl border border-ink/8 bg-paper/80 px-4 py-3 text-ink">
+            <div className="flex items-center gap-2">
+              <Network size={18} />
+              <span className="text-sm font-semibold">6 topics / 6 links</span>
+            </div>
           </div>
+          {mapNodes.map((node) => (
+            <button
+              key={node.id}
+              type="button"
+              onClick={() => setSelectedNodeId(node.id)}
+              className={`absolute z-20 grid place-items-center rounded-full border px-4 text-center text-sm font-semibold leading-tight shadow-sm transition hover:scale-[1.02] ${toneClasses[node.tone]} ${
+                selectedNodeId === node.id ? 'ring-4 ring-ink/8' : ''
+              }`}
+              style={{
+                left: `${node.x}%`,
+                top: `${node.y}%`,
+                width: node.size,
+                height: node.size,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              {node.label}
+            </button>
+          ))}
         </div>
-        {mapNodes.map((node) => (
-          <div
-            key={node.id}
-            className={`absolute z-20 grid place-items-center rounded-full px-4 text-center text-sm font-extrabold leading-tight shadow-lg shadow-ink/12 ${toneClasses[node.tone]}`}
-            style={{
-              left: `${node.x}%`,
-              top: `${node.y}%`,
-              width: node.size,
-              height: node.size,
-              transform: 'translate(-50%, -50%)',
-            }}
-          >
-            {node.label}
+        <aside className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+            <Tags size={14} />
+            Selected node
+          </p>
+          <h3 className="mt-3 font-serif text-3xl font-semibold text-ink">{selectedNode?.label}</h3>
+          <div className="mt-6 space-y-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Cluster</p>
+              <p className="mt-2 text-sm font-semibold text-ink">Learning mechanics</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Strongest bridge</p>
+              <p className="mt-2 text-sm leading-7 text-graphite/72">Staged Complexity to Synthesis Quality</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Next useful action</p>
+              <p className="mt-2 text-sm leading-7 text-graphite/72">Ask for missing evidence connected to this theme.</p>
+            </div>
           </div>
-        ))}
-        <div className="absolute bottom-5 left-5 right-5 z-10 grid gap-3 rounded-3xl border border-ink/10 bg-ivory/86 p-4 backdrop-blur md:grid-cols-3">
-          <div>
-            <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-graphite/58">
-              <Tags size={14} />
-              Cluster
-            </p>
-            <p className="mt-2 font-extrabold text-ink">Learning mechanics</p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.15em] text-graphite/58">Strongest bridge</p>
-            <p className="mt-2 font-extrabold text-ink">Staged Complexity to Synthesis Quality</p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.15em] text-graphite/58">Next useful action</p>
-            <p className="mt-2 font-extrabold text-ink">Ask for missing evidence</p>
-          </div>
-        </div>
+        </aside>
       </div>
     </div>
   );

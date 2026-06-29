@@ -20,9 +20,7 @@
 body {
   min-width: 320px;
   margin: 0;
-  background:
-    radial-gradient(circle at top left, rgba(167, 121, 66, 0.16), transparent 32rem),
-    linear-gradient(135deg, #f7f5f0 0%, #eef1ed 48%, #f8f3eb 100%);
+  background: #f3f1eb;
 }
 
 button,
