@@ -10,6 +10,7 @@ import { useResearchState } from './hooks/useResearchState';
 import type { ChatMessage, DocumentChunk, PageId, ResearchDocument } from './types/research';
 import { askResearchChat } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
+import { extractPdfText } from './utils/extractPdfText';
 
 function App() {
   const { state, setState } = useResearchState();
@@ -160,9 +161,10 @@ function Upload({
   const [fileName, setFileName] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isReading, setIsReading] = useState(false);
-  const [note, setNote] = useState('TXT files are read locally and chunked into searchable research context. PDF and DOCX stay mocked for now.');
+  const [failedPdfUpload, setFailedPdfUpload] = useState<{ file: File; documentId: string; title: string; cleanName: string } | null>(null);
+  const [note, setNote] = useState('TXT and PDF files are extracted locally and chunked into searchable research context. DOCX stays mocked for now.');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const recentUploads = stateDocuments.filter((document) => document.status !== 'Indexed' || document.type === 'TXT').slice(0, 3);
+  const recentUploads = stateDocuments.filter((document) => document.status !== 'Indexed' || document.type === 'TXT' || document.type === 'PDF').slice(0, 4);
 
   function resetUploadFields() {
     setSelectedFile(null);
@@ -170,6 +172,107 @@ function Upload({
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  }
+
+  async function processPdfUpload({
+    file,
+    cleanName,
+    title,
+    documentId,
+  }: {
+    file: File;
+    cleanName: string;
+    title: string;
+    documentId: string;
+  }) {
+    setIsReading(true);
+    setFailedPdfUpload(null);
+
+    const processingDocument: ResearchDocument = {
+      id: documentId,
+      title,
+      type: 'PDF',
+      workspaceId: activeWorkspaceId,
+      authors: 'Local PDF upload',
+      addedAt: new Date().toISOString().slice(0, 10),
+      status: 'Extracting',
+      tags: ['pdf upload'],
+      insightCount: 0,
+      summary: 'Extracting selectable text from this PDF in your browser.',
+    };
+
+    setState((current) => ({
+      ...current,
+      documents: [processingDocument, ...current.documents.filter((document) => document.id !== documentId)],
+      chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
+    }));
+    setNote(`Extracting text from ${cleanName}...`);
+
+    try {
+      const extracted = await extractPdfText(file);
+
+      if (extracted.wordCount === 0 || !extracted.text.trim()) {
+        throw new Error('No selectable text found. This PDF may be scanned.');
+      }
+
+      setState((current) => ({
+        ...current,
+        documents: current.documents.map((document) =>
+          document.id === documentId
+            ? {
+                ...document,
+                status: 'Analysing',
+                summary: 'Analysing extracted text, topics, and searchable chunks.',
+                pageCount: extracted.pages.length,
+                wordCount: extracted.wordCount,
+              }
+            : document,
+        ),
+      }));
+      setNote(`Analysing ${extracted.wordCount.toLocaleString()} words from ${cleanName}...`);
+
+      const chunks = chunkText({ text: extracted.text, documentId, pages: extracted.pages });
+      const tags = extractTopics(extracted.text);
+      const readyDocument: ResearchDocument = {
+        ...processingDocument,
+        status: 'Ready',
+        tags: tags.length ? tags : ['pdf upload'],
+        summary: summarizeText(extracted.text),
+        extractedText: extracted.text,
+        pageCount: extracted.pages.length,
+        wordCount: extracted.wordCount,
+        chunkIds: chunks.map((chunk) => chunk.id),
+      };
+
+      setState((current) => ({
+        ...current,
+        documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
+        chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
+      }));
+      setNote(
+        `${cleanName} is ready with ${extracted.pages.length.toLocaleString()} pages, ${extracted.wordCount.toLocaleString()} words, and ${chunks.length} chunks.`,
+      );
+      resetUploadFields();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Research OS could not extract text from ${cleanName}. Please try another PDF.`;
+      const failedDocument: ResearchDocument = {
+        ...processingDocument,
+        status: 'Failed',
+        tags: ['pdf upload', 'failed'],
+        summary: message,
+        extractionError: message,
+      };
+
+      setState((current) => ({
+        ...current,
+        documents: current.documents.map((document) => (document.id === documentId ? failedDocument : document)),
+        chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
+      }));
+      setFailedPdfUpload({ file, documentId, title, cleanName });
+      setNote(`${message} You can retry the extraction without selecting the file again.`);
+    } finally {
+      setIsReading(false);
     }
   }
 
@@ -221,6 +324,11 @@ function Upload({
       return;
     }
 
+    if (type === 'PDF' && selectedFile) {
+      await processPdfUpload({ file: selectedFile, cleanName, title, documentId });
+      return;
+    }
+
     const newDocument: ResearchDocument = {
       id: documentId,
       title,
@@ -238,7 +346,7 @@ function Upload({
       ...current,
       documents: [newDocument, ...current.documents],
     }));
-    setNote(`${cleanName} was added to the library and queued for mock extraction. Real extraction is currently enabled for TXT files only.`);
+    setNote(`${cleanName} was added to the library and queued for mock extraction. Real extraction is currently enabled for TXT and PDF files.`);
     resetUploadFields();
   }
 
@@ -248,7 +356,7 @@ function Upload({
         <SectionHeader
           eyebrow="Upload"
           title="Add research material"
-          copy="Drop in PDFs, text notes, or document drafts. Extraction is mocked for now, but the flow is shaped for a real ingestion pipeline."
+          copy="Drop in PDFs, text notes, or document drafts. TXT and PDF extraction run locally in your browser; DOCX is still queued for the future parser."
         />
         <div className="rounded-[28px] border border-dashed border-ink/18 bg-white/78 p-6 shadow-sm">
           <div className="grid min-h-[260px] place-items-center rounded-3xl bg-paper/75 px-5 py-8 text-center">
@@ -258,7 +366,7 @@ function Upload({
               </div>
               <h3 className="mt-5 font-serif text-3xl font-bold text-ink">Upload source files</h3>
               <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-graphite/72">
-                TXT files are extracted and chunked in your browser. PDF and DOCX uploads keep the existing mock extraction path.
+                TXT and PDF files are extracted and chunked in your browser. DOCX uploads keep the existing mock extraction path.
               </p>
               <div className="mx-auto mt-6 flex max-w-xl flex-col gap-3 sm:flex-row">
                 <input
@@ -288,7 +396,7 @@ function Upload({
                   className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ink px-5 py-3 text-sm font-bold text-white shadow-lg shadow-ink/15 transition disabled:cursor-not-allowed disabled:bg-graphite/55"
                 >
                   <FilePlus2 size={18} />
-                  {isReading ? 'Reading...' : selectedFile?.name.toLowerCase().endsWith('.txt') ? 'Ingest TXT' : 'Mock Extract'}
+                  {isReading ? 'Processing...' : selectedFile?.name.toLowerCase().endsWith('.txt') ? 'Ingest TXT' : selectedFile?.name.toLowerCase().endsWith('.pdf') ? 'Extract PDF' : 'Mock Extract'}
                 </button>
               </div>
               {selectedFile ? <p className="mt-3 text-xs font-bold uppercase tracking-[0.14em] text-graphite/55">{selectedFile.name}</p> : null}
@@ -307,6 +415,26 @@ function Upload({
                 <div>
                   <p className="font-extrabold text-ink">{document.title}</p>
                   <p className="mt-2 text-sm leading-6 text-graphite/72">{document.summary}</p>
+                  <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em] text-graphite/55">
+                    {[
+                      document.status,
+                      document.pageCount ? `${document.pageCount.toLocaleString()} pages` : null,
+                      document.wordCount ? `${document.wordCount.toLocaleString()} words` : null,
+                      document.chunkIds?.length ? `${document.chunkIds.length.toLocaleString()} chunks` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' / ')}
+                  </p>
+                  {document.status === 'Failed' && failedPdfUpload?.documentId === document.id ? (
+                    <button
+                      type="button"
+                      onClick={() => processPdfUpload(failedPdfUpload)}
+                      disabled={isReading}
+                      className="mt-3 rounded-2xl bg-ink px-4 py-2 text-sm font-bold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
+                    >
+                      Retry extraction
+                    </button>
+                  ) : null}
                 </div>
                 <Clock3 className="shrink-0 text-brass" size={20} />
               </div>
@@ -351,9 +479,16 @@ function buildResearchChatContext(question: string, documents: ResearchDocument[
   if (matchingChunks.length > 0) {
     return matchingChunks.map(({ chunk }) => {
       const document = documentById.get(chunk.documentId)!;
+      const location =
+        chunk.pageStart && chunk.pageEnd
+          ? chunk.pageStart === chunk.pageEnd
+            ? `p. ${chunk.pageStart}`
+            : `pp. ${chunk.pageStart}-${chunk.pageEnd}`
+          : `chunk ${chunk.chunkIndex + 1}`;
 
       return {
-        title: `${document.title} / chunk ${chunk.chunkIndex + 1}`,
+        title: document.title,
+        location,
         summary: document.summary,
         topics: document.tags,
         extractedText: chunk.text,
@@ -363,6 +498,7 @@ function buildResearchChatContext(question: string, documents: ResearchDocument[
 
   return documents.map((document) => ({
     title: document.title,
+    location: document.pageCount ? `${document.pageCount.toLocaleString()} page PDF` : 'Supplied document context',
     summary: document.summary,
     topics: document.tags,
     extractedText: document.extractedText ? document.extractedText.slice(0, 2400) : document.summary,

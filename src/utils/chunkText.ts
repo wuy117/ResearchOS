@@ -2,6 +2,7 @@ import type { DocumentChunk } from '../types/research';
 
 const DEFAULT_CHUNK_WORDS = 800;
 const DEFAULT_OVERLAP_WORDS = 100;
+type ChunkWord = { word: string; pageNumber?: number };
 const STOP_WORDS = new Set([
   'about',
   'after',
@@ -48,21 +49,28 @@ export function getWordCount(text: string) {
 export function chunkText({
   text,
   documentId,
+  pages,
   chunkWords = DEFAULT_CHUNK_WORDS,
   overlapWords = DEFAULT_OVERLAP_WORDS,
 }: {
   text: string;
   documentId: string;
+  pages?: { pageNumber: number; text: string }[];
   chunkWords?: number;
   overlapWords?: number;
 }): DocumentChunk[] {
-  const words = getWords(text);
+  const words: ChunkWord[] = pages?.length
+    ? pages.flatMap((page) => getWords(page.text).map((word) => ({ word, pageNumber: page.pageNumber })))
+    : getWords(text).map((word) => ({ word }));
   const chunks: DocumentChunk[] = [];
   const step = Math.max(1, chunkWords - overlapWords);
   const createdAt = new Date().toISOString();
 
   for (let start = 0; start < words.length; start += step) {
     const slice = words.slice(start, start + chunkWords);
+    const pageNumbers = slice
+      .map((word) => word.pageNumber)
+      .filter((pageNumber): pageNumber is number => typeof pageNumber === 'number');
 
     if (slice.length === 0) {
       break;
@@ -72,8 +80,10 @@ export function chunkText({
       id: `${documentId}-chunk-${chunks.length}`,
       documentId,
       chunkIndex: chunks.length,
-      text: slice.join(' '),
+      text: slice.map((word) => word.word).join(' '),
       wordCount: slice.length,
+      pageStart: pageNumbers.length ? Math.min(...pageNumbers) : undefined,
+      pageEnd: pageNumbers.length ? Math.max(...pageNumbers) : undefined,
       createdAt,
     });
 

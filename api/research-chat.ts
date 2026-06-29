@@ -17,6 +17,7 @@ type ResearchChatDocument = {
   summary?: string;
   topics?: string[];
   extractedText?: string;
+  location?: string;
 };
 
 type ResearchChatBody = {
@@ -65,6 +66,7 @@ function normalizeDocuments(documents: unknown): ResearchChatDocument[] {
       summary: typeof document.summary === 'string' ? document.summary.trim() : '',
       topics: Array.isArray(document.topics) ? document.topics.filter((topic): topic is string => typeof topic === 'string') : [],
       extractedText: typeof document.extractedText === 'string' ? document.extractedText.trim().slice(0, MAX_TEXT_LENGTH) : '',
+      location: typeof document.location === 'string' ? document.location.trim() : '',
     }));
 }
 
@@ -81,6 +83,7 @@ function buildDocumentContext(documents: ResearchChatDocument[]) {
 
       return [
         `Document ${index + 1}: ${document.title}`,
+        `Location: ${document.location || 'Supplied document context'}`,
         `Topics: ${topics}`,
         `Summary: ${summary}`,
         `Extracted text: ${extractedText}`,
@@ -125,7 +128,7 @@ function extractSources(answer: string, documents: ResearchChatDocument[]): Sour
     .filter((document) => citedTitles.has(document.title))
     .map((document) => ({
       documentTitle: document.title,
-      location: 'Supplied document context',
+      location: document.location || 'Supplied document context',
       excerpt: document.summary || document.extractedText?.slice(0, 180) || 'Referenced in the AI answer.',
     }));
 }

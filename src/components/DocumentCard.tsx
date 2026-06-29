@@ -6,6 +6,8 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
     Indexed: 'bg-moss/10 text-moss',
     Ready: 'bg-moss/10 text-moss',
     Extracting: 'bg-brass/12 text-brass',
+    Analysing: 'bg-brass/12 text-brass',
+    Failed: 'bg-red-50 text-red-700',
     'Needs review': 'bg-ink/8 text-graphite',
   };
 
@@ -24,6 +26,7 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusClasses[document.status]}`}>{document.status}</span>
       </div>
       <p className="mt-4 line-clamp-2 text-sm leading-6 text-graphite/75">{document.summary}</p>
+      {document.status === 'Failed' && document.extractionError ? <p className="mt-3 text-sm font-semibold text-red-700">{document.extractionError}</p> : null}
       <div className="mt-4 flex flex-wrap gap-2">
         {document.tags.map((tag) => (
           <span key={tag} className="rounded-full bg-paper px-2.5 py-1 text-xs font-bold text-graphite/72">
@@ -32,8 +35,12 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
         ))}
       </div>
       <div className="mt-5 flex items-center justify-between border-t border-ink/8 pt-4 text-xs font-bold uppercase tracking-[0.12em] text-graphite/55">
-        <span>{document.wordCount ? `${document.type} / ${document.wordCount.toLocaleString()} words` : document.type}</span>
-        {document.type === 'TXT' ? <span>{chunkCount} chunks</span> : <span>{document.insightCount} insights</span>}
+        <span>
+          {[document.type, document.pageCount ? `${document.pageCount.toLocaleString()} pages` : null, document.wordCount ? `${document.wordCount.toLocaleString()} words` : null]
+            .filter(Boolean)
+            .join(' / ')}
+        </span>
+        <span>{chunkCount} chunks</span>
       </div>
     </article>
   );

@@ -15,13 +15,15 @@ export type ResearchDocument = {
   workspaceId: string;
   authors: string;
   addedAt: string;
-  status: 'Indexed' | 'Ready' | 'Extracting' | 'Needs review';
+  status: 'Indexed' | 'Ready' | 'Extracting' | 'Analysing' | 'Failed' | 'Needs review';
   tags: string[];
   insightCount: number;
   summary: string;
   extractedText?: string;
   wordCount?: number;
+  pageCount?: number;
   chunkIds?: string[];
+  extractionError?: string;
 };
 
 export type DocumentChunk = {
@@ -30,6 +32,8 @@ export type DocumentChunk = {
   chunkIndex: number;
   text: string;
   wordCount: number;
+  pageStart?: number;
+  pageEnd?: number;
   createdAt: string;
 };
 

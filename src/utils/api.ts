@@ -3,6 +3,7 @@ export type ResearchChatRequestDocument = {
   summary: string;
   topics: string[];
   extractedText: string;
+  location?: string;
 };
 
 export type ResearchChatSource = {
