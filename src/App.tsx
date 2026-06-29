@@ -767,6 +767,12 @@ function Upload({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const recentUploads = stateDocuments.filter((document) => document.status !== 'Indexed' || document.type === 'TXT' || document.type === 'PDF' || document.type === 'DOCX').slice(0, 4);
 
+  function logUploadError(context: string, error: unknown) {
+    if (import.meta.env.DEV) {
+      console.error(`[Upload] ${context}`, error);
+    }
+  }
+
   function resetUploadFields() {
     setSelectedFile(null);
     setFileName('');
@@ -820,19 +826,22 @@ function Upload({
         embeddingStatus: nextStatus,
         embeddingError: result.failed > 0 && result.embedded === 0 ? 'Embedding failed. Keyword search remains available.' : undefined,
       };
+      const finalChunks = pendingChunks.map((chunk) =>
+        chunk.documentId === document.id
+          ? {
+              ...chunk,
+              embeddingStatus: nextStatus === 'embedded' ? ('embedded' as const) : nextStatus === 'failed' ? ('failed' as const) : chunk.embeddingStatus,
+            }
+          : chunk,
+      );
 
       setState((current) => ({
         ...current,
         documents: current.documents.map((item) => (item.id === document.id ? finalDocument : item)),
-        chunks: current.chunks.map((chunk) =>
-          chunk.documentId === document.id
-            ? {
-                ...chunk,
-                embeddingStatus: nextStatus === 'embedded' ? ('embedded' as const) : nextStatus === 'failed' ? ('failed' as const) : chunk.embeddingStatus,
-              }
-            : chunk,
-        ),
+        chunks: current.chunks.map((chunk) => finalChunks.find((item) => item.id === chunk.id) ?? chunk),
       }));
+      await saveDocument(finalDocument);
+      await saveChunks(finalChunks);
       setNote(
         result.embedded > 0
           ? `${readyMessage} Semantic search is ready for ${result.embedded.toLocaleString()} chunks.`
@@ -845,11 +854,20 @@ function Upload({
         embeddingStatus: 'keyword_only',
         embeddingError: message,
       };
+      const failedEmbeddingChunks = pendingChunks.map((chunk) => ({
+        ...chunk,
+        embeddingStatus: 'failed' as const,
+        embeddingError: message,
+      }));
 
+      logUploadError('Embedding failed after document upload; keeping keyword search available.', error);
       setState((current) => ({
         ...current,
         documents: current.documents.map((item) => (item.id === document.id ? keywordOnlyDocument : item)),
+        chunks: current.chunks.map((chunk) => failedEmbeddingChunks.find((item) => item.id === chunk.id) ?? chunk),
       }));
+      await saveDocument(keywordOnlyDocument);
+      await saveChunks(failedEmbeddingChunks);
       setNote(`${readyMessage} Keyword search only.`);
     }
   }
@@ -912,6 +930,11 @@ function Upload({
       setNote(`Analysing ${extracted.wordCount.toLocaleString()} words from ${cleanName}...`);
 
       const chunks = chunkText({ text: extracted.text, documentId, pages: extracted.pages });
+
+      if (chunks.length === 0) {
+        throw new Error('No searchable chunks could be created from this PDF.');
+      }
+
       const tags = extractTopics(extracted.text);
       const readyDocument: ResearchDocument = {
         ...processingDocument,
@@ -943,6 +966,7 @@ function Upload({
         extractionError: message,
       };
 
+      logUploadError(`PDF upload failed for ${cleanName}.`, error);
       setState((current) => ({
         ...current,
         documents: current.documents.map((document) => (document.id === documentId ? failedDocument : document)),
@@ -992,6 +1016,10 @@ function Upload({
     try {
       const extracted = await extractDocxText(file);
 
+      if (extracted.wordCount === 0 || !extracted.text.trim()) {
+        throw new Error('No readable text found in this DOCX.');
+      }
+
       setState((current) => ({
         ...current,
         documents: current.documents.map((document) =>
@@ -1008,6 +1036,11 @@ function Upload({
       setNote(`Analysing ${extracted.wordCount.toLocaleString()} words from ${cleanName}...`);
 
       const chunks = chunkText({ text: extracted.text, documentId });
+
+      if (chunks.length === 0) {
+        throw new Error('No searchable chunks could be created from this DOCX.');
+      }
+
       const tags = extractTopics(extracted.text);
       const readyDocument: ResearchDocument = {
         ...processingDocument,
@@ -1038,6 +1071,7 @@ function Upload({
         extractionError: message,
       };
 
+      logUploadError(`DOCX upload failed for ${cleanName}.`, error);
       setState((current) => ({
         ...current,
         documents: current.documents.map((document) => (document.id === documentId ? failedDocument : document)),
@@ -1051,6 +1085,11 @@ function Upload({
   }
 
   async function handleUpload() {
+    if (!selectedFile) {
+      setNote('Choose a TXT, PDF, or DOCX file before uploading.');
+      return;
+    }
+
     const cleanName = selectedFile?.name || fileName.trim() || 'Untitled Research Source.pdf';
     const extension = cleanName.split('.').pop()?.toUpperCase();
     const type = extension === 'TXT' || extension === 'DOCX' ? extension : 'PDF';
@@ -1063,7 +1102,17 @@ function Upload({
       try {
         const extractedText = await selectedFile.text();
         const wordCount = getWordCount(extractedText);
+
+        if (wordCount === 0 || !extractedText.trim()) {
+          throw new Error('No readable text found in this TXT file.');
+        }
+
         const chunks = chunkText({ text: extractedText, documentId });
+
+        if (chunks.length === 0) {
+          throw new Error('No searchable chunks could be created from this TXT file.');
+        }
+
         const tags = extractTopics(extractedText);
 
         const newDocument: ResearchDocument = {
@@ -1090,8 +1139,29 @@ function Upload({
         const readyMessage = `${cleanName} was read locally, saved with ${wordCount.toLocaleString()} words, and split into ${chunks.length} chunks.`;
         setNote(readyMessage);
         await queueEmbeddings(newDocument, chunks, readyMessage);
-      } catch {
-        setNote(`Research OS could not read ${cleanName}. Please try a plain UTF-8 text file.`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : `Research OS could not read ${cleanName}. Please try a plain UTF-8 text file.`;
+        const failedDocument: ResearchDocument = {
+          id: documentId,
+          title,
+          type: 'TXT',
+          workspaceId: activeWorkspaceId,
+          authors: 'Local TXT upload',
+          addedAt: new Date().toISOString().slice(0, 10),
+          status: 'Failed',
+          tags: ['txt upload', 'failed'],
+          insightCount: 0,
+          summary: message,
+          extractionError: message,
+        };
+
+        logUploadError(`TXT upload failed for ${cleanName}.`, error);
+        setState((current) => ({
+          ...current,
+          documents: [failedDocument, ...current.documents.filter((document) => document.id !== documentId)],
+          chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
+        }));
+        setNote(message);
       } finally {
         setIsReading(false);
         resetUploadFields();
