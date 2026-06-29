@@ -10,6 +10,13 @@ export function CitationCard({ citation }: { citation: Citation }) {
           <p className="text-sm font-extrabold text-ink">{citation.documentTitle}</p>
           <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-graphite/55">{citation.location}</p>
           <p className="mt-3 text-sm leading-6 text-graphite/78">{citation.excerpt}</p>
+          {import.meta.env.DEV && (citation.score || citation.matchedTerms?.length || citation.reason) ? (
+            <p className="mt-3 text-xs font-semibold text-graphite/55">
+              Score {citation.score?.toFixed(1) ?? 'n/a'}
+              {citation.matchedTerms?.length ? ` · ${citation.matchedTerms.join(', ')}` : ''}
+              {citation.reason ? ` · ${citation.reason}` : ''}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

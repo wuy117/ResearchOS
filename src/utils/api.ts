@@ -4,12 +4,18 @@ export type ResearchChatRequestDocument = {
   topics: string[];
   extractedText: string;
   location?: string;
+  pageStart?: number;
+  pageEnd?: number;
+  matchedTerms?: string[];
 };
 
 export type ResearchChatSource = {
   documentTitle: string;
   location: string;
   excerpt: string;
+  matchedTerms?: string[];
+  score?: number;
+  reason?: string;
 };
 
 export type ResearchChatResponse = {

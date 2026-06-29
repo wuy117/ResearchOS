@@ -18,6 +18,9 @@ type ResearchChatDocument = {
   topics?: string[];
   extractedText?: string;
   location?: string;
+  pageStart?: number;
+  pageEnd?: number;
+  matchedTerms?: string[];
 };
 
 type ResearchChatBody = {
@@ -67,6 +70,9 @@ function normalizeDocuments(documents: unknown): ResearchChatDocument[] {
       topics: Array.isArray(document.topics) ? document.topics.filter((topic): topic is string => typeof topic === 'string') : [],
       extractedText: typeof document.extractedText === 'string' ? document.extractedText.trim().slice(0, MAX_TEXT_LENGTH) : '',
       location: typeof document.location === 'string' ? document.location.trim() : '',
+      pageStart: typeof document.pageStart === 'number' ? document.pageStart : undefined,
+      pageEnd: typeof document.pageEnd === 'number' ? document.pageEnd : undefined,
+      matchedTerms: Array.isArray(document.matchedTerms) ? document.matchedTerms.filter((term): term is string => typeof term === 'string') : [],
     }));
 }
 
@@ -80,14 +86,19 @@ function buildDocumentContext(documents: ResearchChatDocument[]) {
       const topics = document.topics?.length ? document.topics.join(', ') : 'No topics supplied';
       const summary = document.summary || 'No summary supplied';
       const extractedText = document.extractedText || 'No extracted text supplied';
+      const matchedTerms = document.matchedTerms?.length ? document.matchedTerms.join(', ') : 'No matched terms supplied';
 
       return [
         `Document ${index + 1}: ${document.title}`,
         `Location: ${document.location || 'Supplied document context'}`,
+        document.pageStart && document.pageEnd ? `Page range: ${document.pageStart}-${document.pageEnd}` : null,
+        `Matched terms: ${matchedTerms}`,
         `Topics: ${topics}`,
         `Summary: ${summary}`,
-        `Extracted text: ${extractedText}`,
-      ].join('\n');
+        `Retrieved chunk text: ${extractedText}`,
+      ]
+        .filter(Boolean)
+        .join('\n');
     })
     .join('\n\n---\n\n');
 }

@@ -56,6 +56,9 @@ export type Citation = {
   documentTitle: string;
   location: string;
   excerpt: string;
+  matchedTerms?: string[];
+  score?: number;
+  reason?: string;
 };
 
 export type ChatMessage = {

@@ -26,6 +26,7 @@ import { analysePerformanceDocument, askResearchChat, generatePerformanceAdvice,
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
 import { extractPdfText } from './utils/extractPdfText';
+import { retrieveChunks, type RetrievedChunk } from './utils/retrieveChunks';
 
 function App() {
   const { state, setState } = useResearchState();
@@ -1116,62 +1117,24 @@ function Upload({
   );
 }
 
-function getQuestionTerms(question: string) {
-  return new Set(
-    question
-      .toLowerCase()
-      .match(/[a-z0-9]+/g)
-      ?.filter((term) => term.length > 3) ?? [],
-  );
-}
-
-function scoreChunk(chunk: DocumentChunk, terms: Set<string>) {
-  const text = chunk.text.toLowerCase();
-
-  return [...terms].reduce((score, term) => {
-    return text.includes(term) ? score + 1 : score;
-  }, 0);
-}
-
-function buildResearchChatContext(question: string, documents: ResearchDocument[], chunks: DocumentChunk[]) {
-  const documentById = new Map(documents.map((document) => [document.id, document]));
-  const terms = getQuestionTerms(question);
-  const matchingChunks = chunks
-    .filter((chunk) => documentById.has(chunk.documentId))
-    .map((chunk) => ({
-      chunk,
-      score: scoreChunk(chunk, terms),
-    }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score || a.chunk.chunkIndex - b.chunk.chunkIndex)
-    .slice(0, 6);
-
-  if (matchingChunks.length > 0) {
-    return matchingChunks.map(({ chunk }) => {
-      const document = documentById.get(chunk.documentId)!;
-      const location =
-        chunk.pageStart && chunk.pageEnd
-          ? chunk.pageStart === chunk.pageEnd
-            ? `p. ${chunk.pageStart}`
-            : `pp. ${chunk.pageStart}-${chunk.pageEnd}`
-          : `chunk ${chunk.chunkIndex + 1}`;
-
-      return {
-        title: document.title,
-        location,
-        summary: document.summary,
-        topics: document.tags,
-        extractedText: chunk.text,
-      };
-    });
+function formatChunkLocation(result: RetrievedChunk) {
+  if (result.pageStart && result.pageEnd) {
+    return result.pageStart === result.pageEnd ? `p. ${result.pageStart}` : `pp. ${result.pageStart}-${result.pageEnd}`;
   }
 
-  return documents.map((document) => ({
-    title: document.title,
-    location: document.pageCount ? `${document.pageCount.toLocaleString()} page PDF` : 'Supplied document context',
-    summary: document.summary,
-    topics: document.tags,
-    extractedText: document.extractedText ? document.extractedText.slice(0, 2400) : document.summary,
+  return `chunk ${result.chunk.chunkIndex + 1}`;
+}
+
+function buildResearchChatContext(results: RetrievedChunk[]) {
+  return results.map((result) => ({
+    title: result.document.title,
+    location: formatChunkLocation(result),
+    pageStart: result.pageStart,
+    pageEnd: result.pageEnd,
+    summary: result.document.summary,
+    topics: result.document.tags,
+    extractedText: result.chunk.text,
+    matchedTerms: result.matchedTerms,
   }));
 }
 
@@ -1215,21 +1178,51 @@ function ResearchChat({
     setPrompt('');
 
     try {
+      const retrievedChunks = retrieveChunks(question, chunks, documents);
+      const lowConfidence = retrievedChunks.length === 0 || (retrievedChunks[0]?.score ?? 0) < 4;
+
+      if (import.meta.env.DEV) {
+        console.debug(
+          'Research chat retrieval',
+          retrievedChunks.map((result) => ({
+            document: result.document.title,
+            location: formatChunkLocation(result),
+            score: Number(result.score.toFixed(2)),
+            matchedTerms: result.matchedTerms,
+            reason: result.reason,
+          })),
+        );
+      }
+
       const response = await askResearchChat({
         question,
         workspaceName,
-        documents: buildResearchChatContext(question, documents, chunks),
+        documents: buildResearchChatContext(retrievedChunks),
       });
 
       const assistantMessage: ChatMessage = {
         id: `chat-${Date.now()}-assistant`,
         role: 'assistant',
-        content: response.answer,
-        citations: response.sources.map((source) => ({
-          documentTitle: source.documentTitle,
-          location: source.location,
-          excerpt: source.excerpt,
-        })),
+        content: lowConfidence
+          ? `I found limited direct evidence in your documents, so this answer may be incomplete.\n\n${response.answer}`
+          : response.answer,
+        citations: retrievedChunks.length
+          ? retrievedChunks.map((result) => ({
+              documentTitle: result.document.title,
+              location: formatChunkLocation(result),
+              excerpt: result.chunk.text.slice(0, 260),
+              matchedTerms: result.matchedTerms,
+              score: result.score,
+              reason: result.reason,
+            }))
+          : response.sources.map((source) => ({
+              documentTitle: source.documentTitle,
+              location: source.location,
+              excerpt: source.excerpt,
+              matchedTerms: source.matchedTerms,
+              score: source.score,
+              reason: source.reason,
+            })),
       };
 
       setState((current) => ({ ...current, chat: [...current.chat, assistantMessage] }));
@@ -1261,7 +1254,7 @@ function ResearchChat({
                     </summary>
                     <div className="mt-3 space-y-3">
                       {message.citations.map((citation) => (
-                        <CitationCard key={`${message.id}-${citation.documentTitle}`} citation={citation} />
+                        <CitationCard key={`${message.id}-${citation.documentTitle}-${citation.location}`} citation={citation} />
                       ))}
                     </div>
                   </details>
