@@ -4,11 +4,11 @@ import { AppShell } from './components/AppShell';
 import { CitationCard } from './components/CitationCard';
 import { DocumentCard } from './components/DocumentCard';
 import { SectionHeader } from './components/SectionHeader';
-import { mapEdges, mapNodes } from './data/mockData';
 import { useResearchState } from './hooks/useResearchState';
-import type { ChatMessage, DocumentChunk, PageId, ResearchDocument } from './types/research';
+import type { ChatMessage, DocumentChunk, MapEdge, MapNode, PageId, ResearchDocument } from './types/research';
 import { askResearchChat } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
+import { extractDocxText } from './utils/extractDocxText';
 import { extractPdfText } from './utils/extractPdfText';
 
 function App() {
@@ -27,7 +27,7 @@ function App() {
     upload: <Upload stateDocuments={state.documents} activeWorkspaceId={state.activeWorkspaceId} setState={setState} />,
     chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} documents={workspaceDocuments} chunks={state.chunks} setState={setState} />,
     study: <StudyTools documents={workspaceDocuments} />,
-    map: <KnowledgeMap />,
+    map: <KnowledgeMap documents={workspaceDocuments} />,
   }[activePage];
 
   return (
@@ -46,36 +46,39 @@ function Dashboard({
   documents: ResearchDocument[];
   setActivePage: (page: PageId) => void;
 }) {
-  const indexedCount = documents.filter((document) => document.status === 'Indexed').length;
+  const readyCount = documents.filter((document) => document.status === 'Indexed' || document.status === 'Ready').length;
   const newestDocuments = [...documents].slice(0, 2);
   const primaryAction = state.actions[0];
+  const hasDocuments = documents.length > 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-9">
       <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
         <div className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Continue</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{hasDocuments ? 'Continue' : 'Start'}</p>
           <h2 className="mt-4 max-w-2xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-5xl">
-            Return to your active reading desk.
+            {hasDocuments ? 'Return to your active reading desk.' : 'Build your research desk from real sources.'}
           </h2>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
-            {indexedCount} indexed sources are ready in this workspace. Use chat for synthesis or open the library to keep reviewing source material.
+            {hasDocuments
+              ? `${readyCount} sources are ready in this workspace. Use chat for synthesis or open the library to keep reviewing source material.`
+              : 'Upload a TXT, PDF, or DOCX file to create searchable source material. Research chat and study tools will use those documents once they are ready.'}
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => setActivePage('chat')}
+              onClick={() => setActivePage(hasDocuments ? 'chat' : 'upload')}
               className="inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm"
             >
-              Ask research chat
+              {hasDocuments ? 'Ask research chat' : 'Upload first source'}
               <ArrowRight size={17} />
             </button>
             <button
               type="button"
-              onClick={() => setActivePage('library')}
+              onClick={() => setActivePage(hasDocuments ? 'library' : 'upload')}
               className="inline-flex items-center gap-2 rounded-xl border border-ink/10 bg-paper px-4 py-3 text-sm font-semibold text-ink"
             >
-              Open library
+              {hasDocuments ? 'Open library' : 'Add document'}
             </button>
           </div>
         </div>
@@ -122,7 +125,9 @@ function Dashboard({
                 <ArrowRight className="mt-1 shrink-0 text-graphite/55" size={18} />
               </div>
             </button>
-          ) : null}
+          ) : (
+            <EmptyState title="No suggested actions yet" copy="Upload a source and Research OS will have real material to work with." action="Upload a source" onClick={() => setActivePage('upload')} />
+          )}
         </div>
       </section>
 
@@ -152,7 +157,7 @@ function Library({ documents, chunks }: { documents: ResearchDocument[]; chunks:
           ))}
         </div>
       ) : (
-        <EmptyState title="Your library is empty" copy="Upload a PDF or TXT file to create searchable source material for this workspace." />
+        <EmptyState title="Your library is empty" copy="Upload a TXT, PDF, or DOCX file to create searchable source material for this workspace." />
       )}
     </div>
   );
@@ -184,10 +189,10 @@ function Upload({
   const [fileName, setFileName] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isReading, setIsReading] = useState(false);
-  const [failedPdfUpload, setFailedPdfUpload] = useState<{ file: File; documentId: string; title: string; cleanName: string } | null>(null);
-  const [note, setNote] = useState('TXT and PDF files are extracted locally and chunked into searchable research context. DOCX stays mocked for now.');
+  const [failedUpload, setFailedUpload] = useState<{ file: File; documentId: string; title: string; cleanName: string; type: 'PDF' | 'DOCX' } | null>(null);
+  const [note, setNote] = useState('TXT, PDF, and DOCX files are extracted locally and chunked into searchable research context.');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const recentUploads = stateDocuments.filter((document) => document.status !== 'Indexed' || document.type === 'TXT' || document.type === 'PDF').slice(0, 4);
+  const recentUploads = stateDocuments.filter((document) => document.status !== 'Indexed' || document.type === 'TXT' || document.type === 'PDF' || document.type === 'DOCX').slice(0, 4);
 
   function resetUploadFields() {
     setSelectedFile(null);
@@ -210,7 +215,7 @@ function Upload({
     documentId: string;
   }) {
     setIsReading(true);
-    setFailedPdfUpload(null);
+    setFailedUpload(null);
 
     const processingDocument: ResearchDocument = {
       id: documentId,
@@ -292,7 +297,100 @@ function Upload({
         documents: current.documents.map((document) => (document.id === documentId ? failedDocument : document)),
         chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
       }));
-      setFailedPdfUpload({ file, documentId, title, cleanName });
+      setFailedUpload({ file, documentId, title, cleanName, type: 'PDF' });
+      setNote(`${message} You can retry the extraction without selecting the file again.`);
+    } finally {
+      setIsReading(false);
+    }
+  }
+
+  async function processDocxUpload({
+    file,
+    cleanName,
+    title,
+    documentId,
+  }: {
+    file: File;
+    cleanName: string;
+    title: string;
+    documentId: string;
+  }) {
+    setIsReading(true);
+    setFailedUpload(null);
+
+    const processingDocument: ResearchDocument = {
+      id: documentId,
+      title,
+      type: 'DOCX',
+      workspaceId: activeWorkspaceId,
+      authors: 'Local DOCX upload',
+      addedAt: new Date().toISOString().slice(0, 10),
+      status: 'Extracting',
+      tags: ['docx upload'],
+      insightCount: 0,
+      summary: 'Extracting document text from this DOCX in your browser.',
+    };
+
+    setState((current) => ({
+      ...current,
+      documents: [processingDocument, ...current.documents.filter((document) => document.id !== documentId)],
+      chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
+    }));
+    setNote(`Extracting text from ${cleanName}...`);
+
+    try {
+      const extracted = await extractDocxText(file);
+
+      setState((current) => ({
+        ...current,
+        documents: current.documents.map((document) =>
+          document.id === documentId
+            ? {
+                ...document,
+                status: 'Analysing',
+                summary: 'Analysing extracted text, topics, and searchable chunks.',
+                wordCount: extracted.wordCount,
+              }
+            : document,
+        ),
+      }));
+      setNote(`Analysing ${extracted.wordCount.toLocaleString()} words from ${cleanName}...`);
+
+      const chunks = chunkText({ text: extracted.text, documentId });
+      const tags = extractTopics(extracted.text);
+      const readyDocument: ResearchDocument = {
+        ...processingDocument,
+        status: 'Ready',
+        tags: tags.length ? tags : ['docx upload'],
+        summary: summarizeText(extracted.text),
+        extractedText: extracted.text,
+        wordCount: extracted.wordCount,
+        chunkIds: chunks.map((chunk) => chunk.id),
+      };
+
+      setState((current) => ({
+        ...current,
+        documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
+        chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
+      }));
+      setNote(`${cleanName} is ready with ${extracted.wordCount.toLocaleString()} words and ${chunks.length} chunks.`);
+      resetUploadFields();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Research OS could not extract text from ${cleanName}. Please try another DOCX.`;
+      const failedDocument: ResearchDocument = {
+        ...processingDocument,
+        status: 'Failed',
+        tags: ['docx upload', 'failed'],
+        summary: message,
+        extractionError: message,
+      };
+
+      setState((current) => ({
+        ...current,
+        documents: current.documents.map((document) => (document.id === documentId ? failedDocument : document)),
+        chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
+      }));
+      setFailedUpload({ file, documentId, title, cleanName, type: 'DOCX' });
       setNote(`${message} You can retry the extraction without selecting the file again.`);
     } finally {
       setIsReading(false);
@@ -352,25 +450,12 @@ function Upload({
       return;
     }
 
-    const newDocument: ResearchDocument = {
-      id: documentId,
-      title,
-      type,
-      workspaceId: activeWorkspaceId,
-      authors: 'Pending extraction',
-      addedAt: new Date().toISOString().slice(0, 10),
-      status: 'Extracting',
-      tags: ['new source', 'mock extraction'],
-      insightCount: 0,
-      summary: 'Research OS has queued this source for mock extraction. The future backend can replace this with real parsing and embeddings.',
-    };
+    if (type === 'DOCX' && selectedFile) {
+      await processDocxUpload({ file: selectedFile, cleanName, title, documentId });
+      return;
+    }
 
-    setState((current) => ({
-      ...current,
-      documents: [newDocument, ...current.documents],
-    }));
-    setNote(`${cleanName} was added to the library and queued for mock extraction. Real extraction is currently enabled for TXT and PDF files.`);
-    resetUploadFields();
+    setNote('Choose a TXT, PDF, or DOCX file to extract. Research OS no longer creates placeholder documents from a filename alone.');
   }
 
   return (
@@ -379,7 +464,7 @@ function Upload({
         <SectionHeader
           eyebrow="Upload"
           title="Add research material"
-          copy="Choose a source and let Research OS prepare it for the local library. TXT and PDF extraction stay in your browser."
+          copy="Choose a source and let Research OS prepare it for the local library. TXT, PDF, and DOCX extraction stay in your browser."
         />
         <div className="rounded-2xl border border-dashed border-ink/16 bg-white p-5 shadow-sm">
           <div className="grid min-h-[340px] place-items-center rounded-2xl bg-paper/65 px-5 py-10 text-center">
@@ -389,7 +474,7 @@ function Upload({
               </div>
               <h3 className="mt-5 font-serif text-3xl font-semibold text-ink">Place a source on the desk</h3>
               <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-graphite/72">
-                Select a TXT, PDF, or DOCX file. PDFs and text files are read locally; DOCX keeps the existing queued extraction path.
+                Select a TXT, PDF, or DOCX file. Research OS extracts readable text locally, builds topics and summaries, then chunks it for chat.
               </p>
               <div className="mx-auto mt-7 flex max-w-xl flex-col gap-3 sm:flex-row">
                 <input
@@ -419,7 +504,15 @@ function Upload({
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
                 >
                   <FilePlus2 size={18} />
-                  {isReading ? 'Processing...' : selectedFile?.name.toLowerCase().endsWith('.txt') ? 'Ingest TXT' : selectedFile?.name.toLowerCase().endsWith('.pdf') ? 'Extract PDF' : 'Mock Extract'}
+                  {isReading
+                    ? 'Processing...'
+                    : selectedFile?.name.toLowerCase().endsWith('.txt')
+                      ? 'Ingest TXT'
+                      : selectedFile?.name.toLowerCase().endsWith('.pdf')
+                        ? 'Extract PDF'
+                        : selectedFile?.name.toLowerCase().endsWith('.docx')
+                          ? 'Extract DOCX'
+                          : 'Choose File'}
                 </button>
               </div>
               {selectedFile ? <p className="mt-4 text-sm font-medium text-ink">{selectedFile.name}</p> : null}
@@ -452,10 +545,14 @@ function Upload({
                       .filter(Boolean)
                       .join(' / ')}
                   </p>
-                  {document.status === 'Failed' && failedPdfUpload?.documentId === document.id ? (
+                  {document.status === 'Failed' && failedUpload?.documentId === document.id ? (
                     <button
                       type="button"
-                      onClick={() => processPdfUpload(failedPdfUpload)}
+                      onClick={() =>
+                        failedUpload.type === 'PDF'
+                          ? processPdfUpload(failedUpload)
+                          : processDocxUpload(failedUpload)
+                      }
                       disabled={isReading}
                       className="mt-3 rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
                     >
@@ -608,25 +705,32 @@ function ResearchChat({
           <SectionHeader eyebrow="Research chat" title="Ask with sources" copy="A fixed research conversation area with source material kept close, but out of the way." />
         </div>
         <div className="scrollbar-soft min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
-          {chat.map((message) => (
-            <div key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[70ch]' : 'mr-auto max-w-[78ch]'}>
-              <div className={`rounded-2xl p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'border border-ink/8 bg-paper/70 text-ink'}`}>
-                <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
+          {chat.length ? (
+            chat.map((message) => (
+              <div key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[70ch]' : 'mr-auto max-w-[78ch]'}>
+                <div className={`rounded-2xl p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'border border-ink/8 bg-paper/70 text-ink'}`}>
+                  <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
+                </div>
+                {message.citations ? (
+                  <details className="mt-3 rounded-2xl border border-ink/8 bg-white p-3 xl:hidden">
+                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
+                      {message.citations.length} sources
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      {message.citations.map((citation) => (
+                        <CitationCard key={`${message.id}-${citation.documentTitle}`} citation={citation} />
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
               </div>
-              {message.citations ? (
-                <details className="mt-3 rounded-2xl border border-ink/8 bg-white p-3 xl:hidden">
-                  <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
-                    {message.citations.length} sources
-                  </summary>
-                  <div className="mt-3 space-y-3">
-                    {message.citations.map((citation) => (
-                      <CitationCard key={`${message.id}-${citation.documentTitle}`} citation={citation} />
-                    ))}
-                  </div>
-                </details>
-              ) : null}
-            </div>
-          ))}
+            ))
+          ) : (
+            <EmptyState
+              title="Chat is ready when your sources are"
+              copy="You can ask a question now, but answers become more grounded after you upload TXT, PDF, or DOCX documents to this workspace."
+            />
+          )}
           {isLoading ? (
             <div className="mr-auto max-w-[820px]">
               <div className="rounded-2xl border border-ink/8 bg-paper/70 p-5 text-ink">
@@ -678,11 +782,17 @@ function ResearchChat({
           <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">Latest citations</h3>
         </div>
         <div className="scrollbar-soft min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          {latestCitations.length ? (
+          {documents.length ? (
+            latestCitations.length ? (
             latestCitations.map((citation) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} />)
-          ) : (
+            ) : (
             <p className="rounded-2xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
               Source cards will appear here after the assistant answers with citations.
+            </p>
+            )
+          ) : (
+            <p className="rounded-2xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
+              Upload documents to give research chat source material for grounded answers.
             </p>
           )}
         </div>
@@ -746,16 +856,21 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workflow preview</p>
           <h3 className="mt-3 font-serif text-4xl font-semibold text-ink">{activeTool}</h3>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
-            {activeTool} output would be generated from {documents.length} workspace sources. This preview keeps the interaction model visible while the
-            backend is still intentionally absent.
+            {documents.length
+              ? `${activeTool} output would be generated from ${documents.length} workspace sources. This preview keeps the interaction model visible while generation is still intentionally absent.`
+              : 'Upload or select documents before generating study outputs. Your summaries, flashcards, essay plans, quizzes, and timelines will be based on real workspace sources.'}
           </p>
           <div className="mt-7 space-y-3">
-            {documents.slice(0, 4).map((document) => (
-              <div key={document.id} className="rounded-xl border border-ink/8 bg-paper/65 p-4">
-                <p className="font-semibold text-ink">{document.title}</p>
-                <p className="mt-2 line-clamp-2 text-sm leading-7 text-graphite/72">{document.summary}</p>
-              </div>
-            ))}
+            {documents.length ? (
+              documents.slice(0, 4).map((document) => (
+                <div key={document.id} className="rounded-xl border border-ink/8 bg-paper/65 p-4">
+                  <p className="font-semibold text-ink">{document.title}</p>
+                  <p className="mt-2 line-clamp-2 text-sm leading-7 text-graphite/72">{document.summary}</p>
+                </div>
+              ))
+            ) : (
+              <EmptyState title="No source set selected" copy="Add a document to this workspace before generating study material." />
+            )}
           </div>
         </div>
       </div>
@@ -763,8 +878,30 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
   );
 }
 
-function KnowledgeMap() {
-  const [selectedNodeId, setSelectedNodeId] = useState(mapNodes[0]?.id ?? '');
+function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
+  const mapNodes = useMemo<MapNode[]>(() => {
+    const topics = [...new Set(documents.flatMap((document) => document.tags).filter((tag) => !tag.includes('upload') && tag !== 'failed'))].slice(0, 6);
+
+    return topics.map((topic, index) => {
+      const positions = [
+        { x: 48, y: 44, size: 90, tone: 'moss' },
+        { x: 24, y: 26, size: 72, tone: 'brass' },
+        { x: 68, y: 24, size: 78, tone: 'graphite' },
+        { x: 72, y: 66, size: 74, tone: 'brass' },
+        { x: 30, y: 70, size: 68, tone: 'ink' },
+        { x: 50, y: 82, size: 58, tone: 'moss' },
+      ] as const;
+      const position = positions[index];
+
+      return {
+        id: `topic-${topic}`,
+        label: topic,
+        ...position,
+      };
+    });
+  }, [documents]);
+  const mapEdges = useMemo<MapEdge[]>(() => mapNodes.slice(1).map((node) => ({ from: mapNodes[0].id, to: node.id })), [mapNodes]);
+  const [selectedNodeId, setSelectedNodeId] = useState('');
   const nodeById = Object.fromEntries(mapNodes.map((node) => [node.id, node]));
   const selectedNode = nodeById[selectedNodeId] ?? mapNodes[0];
   const toneClasses = {
@@ -779,21 +916,27 @@ function KnowledgeMap() {
       <SectionHeader
         eyebrow="Knowledge map"
         title="Connected topic graph"
-        copy="A quieter map of relationships across the active research area. Select a node to inspect its role without treating the mock graph as final ontology."
+        copy="A quieter map of relationships across the active research area. Topic nodes appear after documents have been extracted."
       />
+      {mapNodes.length === 0 ? (
+        <EmptyState title="No knowledge map yet" copy="Upload documents with readable text and Research OS will use their topics to start a workspace map." />
+      ) : (
       <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
         <div className="relative min-h-[560px] overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-sm">
           <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             {mapEdges.map((edge) => {
               const from = nodeById[edge.from];
               const to = nodeById[edge.to];
+              if (!from || !to) return null;
               return <line key={`${edge.from}-${edge.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="rgba(68,81,94,0.18)" strokeWidth="0.28" />;
             })}
           </svg>
           <div className="absolute left-5 top-5 z-10 rounded-xl border border-ink/8 bg-paper/80 px-4 py-3 text-ink">
             <div className="flex items-center gap-2">
               <Network size={18} />
-              <span className="text-sm font-semibold">6 topics / 6 links</span>
+              <span className="text-sm font-semibold">
+                {mapNodes.length} topics / {mapEdges.length} links
+              </span>
             </div>
           </div>
           {mapNodes.map((node) => (
@@ -825,19 +968,20 @@ function KnowledgeMap() {
           <div className="mt-6 space-y-5">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Cluster</p>
-              <p className="mt-2 text-sm font-semibold text-ink">Learning mechanics</p>
+              <p className="mt-2 text-sm font-semibold text-ink">Workspace topics</p>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Strongest bridge</p>
-              <p className="mt-2 text-sm leading-7 text-graphite/72">Staged Complexity to Synthesis Quality</p>
+              <p className="mt-2 text-sm leading-7 text-graphite/72">Shared source tags from extracted documents</p>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Next useful action</p>
-              <p className="mt-2 text-sm leading-7 text-graphite/72">Ask for missing evidence connected to this theme.</p>
+              <p className="mt-2 text-sm leading-7 text-graphite/72">Ask research chat for evidence connected to this topic.</p>
             </div>
           </div>
         </aside>
       </div>
+      )}
     </div>
   );
 }

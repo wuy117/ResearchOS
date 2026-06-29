@@ -1,7 +1,22 @@
-import { initialState } from '../data/mockData';
+import { initialState } from '../data/initialState';
 import type { ResearchState } from '../types/research';
 
 const STORAGE_KEY = 'research-os-state-v1';
+const DEMO_DOCUMENT_IDS = new Set(['doc-1', 'doc-2', 'doc-3', 'doc-4']);
+const DEMO_INSIGHT_IDS = new Set(['insight-1', 'insight-2', 'insight-3']);
+const DEMO_ACTION_IDS = new Set(['action-1', 'action-2', 'action-3']);
+const DEMO_CHAT_IDS = new Set(['chat-1', 'chat-2']);
+
+function removeKnownDemoData(state: ResearchState): ResearchState {
+  return {
+    ...state,
+    documents: state.documents.filter((document) => !DEMO_DOCUMENT_IDS.has(document.id)),
+    chunks: state.chunks.filter((chunk) => !DEMO_DOCUMENT_IDS.has(chunk.documentId)),
+    insights: state.insights.filter((insight) => !DEMO_INSIGHT_IDS.has(insight.id) && !DEMO_DOCUMENT_IDS.has(insight.sourceId)),
+    actions: state.actions.filter((action) => !DEMO_ACTION_IDS.has(action.id)),
+    chat: state.chat.filter((message) => !DEMO_CHAT_IDS.has(message.id)),
+  };
+}
 
 export function loadResearchState(): ResearchState {
   try {
@@ -12,12 +27,17 @@ export function loadResearchState(): ResearchState {
 
     const parsed = JSON.parse(saved) as Partial<ResearchState>;
 
-    return {
+    const state = {
       ...initialState,
       ...parsed,
       chunks: parsed.chunks ?? [],
       documents: parsed.documents ?? initialState.documents,
+      insights: parsed.insights ?? [],
+      actions: parsed.actions ?? [],
+      chat: parsed.chat ?? [],
     };
+
+    return removeKnownDemoData(state);
   } catch {
     return initialState;
   }

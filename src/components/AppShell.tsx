@@ -21,6 +21,7 @@ type AppShellProps = {
 
 export function AppShell({ state, activePage, setActivePage, setState, children }: AppShellProps) {
   const activeWorkspace = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
+  const getWorkspaceDocumentCount = (workspaceId: string) => state.documents.filter((document) => document.workspaceId === workspaceId).length;
 
   return (
     <div className="min-h-screen p-0 text-ink sm:p-4 lg:p-6">
@@ -83,7 +84,7 @@ export function AppShell({ state, activePage, setActivePage, setState, children 
                       <span className={`mt-1.5 size-2 rounded-full ${workspace.color}`} />
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-semibold text-ink">{workspace.name}</span>
-                        <span className="mt-1 block text-xs leading-5 text-graphite/70">{workspace.documentCount} documents</span>
+                        <span className="mt-1 block text-xs leading-5 text-graphite/70">{getWorkspaceDocumentCount(workspace.id)} documents</span>
                       </span>
                     </div>
                   </button>
