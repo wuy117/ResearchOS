@@ -1,6 +1,15 @@
 import { FileText } from 'lucide-react';
 import type { ResearchDocument } from '../types/research';
 
+function getEmbeddingLabel(document: ResearchDocument) {
+  if (document.embeddingStatus === 'embedding') return 'Embedding';
+  if (document.embeddingStatus === 'embedded') return 'Embedded';
+  if (document.embeddingStatus === 'failed') return 'Failed';
+  if (document.embeddingStatus === 'keyword_only') return 'Keyword search only';
+
+  return 'Not embedded';
+}
+
 export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchDocument; chunkCount?: number }) {
   const statusClasses = {
     Indexed: 'bg-moss/10 text-moss',
@@ -29,6 +38,9 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
       </div>
       <p className="mt-4 line-clamp-3 text-sm leading-7 text-graphite/75">{document.summary}</p>
       {document.status === 'Failed' && document.extractionError ? <p className="mt-3 text-sm font-semibold text-red-700">{document.extractionError}</p> : null}
+      {document.status !== 'Failed' ? (
+        <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{getEmbeddingLabel(document)}</p>
+      ) : null}
       <div className="mt-5 grid grid-cols-3 gap-3 rounded-xl bg-paper/70 p-3 text-center text-xs text-graphite/70">
         <div>
           <p className="font-semibold text-ink">{document.pageCount ? document.pageCount.toLocaleString() : '-'}</p>

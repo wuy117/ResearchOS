@@ -23,6 +23,29 @@ export type ResearchChatResponse = {
   sources: ResearchChatSource[];
 };
 
+export type EmbedChunksResponse = {
+  embedded: number;
+  failed: number;
+  skipped: number;
+  configurationMissing?: boolean;
+};
+
+export type SemanticSearchMatch = {
+  id: string;
+  documentId: string;
+  text: string;
+  similarity: number;
+  pageStart?: number;
+  pageEnd?: number;
+  documentTitle: string;
+  documentType: string;
+};
+
+export type SemanticSearchResponse = {
+  matches: SemanticSearchMatch[];
+  configurationMissing?: boolean;
+};
+
 export type PerformanceAnalysisRecord = {
   title?: string;
   date?: string;
@@ -174,5 +197,41 @@ export async function generatePerformanceAdvice(records: unknown[]): Promise<Per
     recurringWeaknesses: Array.isArray(data.recurringWeaknesses) ? data.recurringWeaknesses : [],
     recommendedActions: Array.isArray(data.recommendedActions) ? data.recommendedActions : [],
     overallCommentary: typeof data.overallCommentary === 'string' ? data.overallCommentary : '',
+  };
+}
+
+export async function embedChunks({ documentId, chunkIds }: { documentId?: string; chunkIds?: string[] }): Promise<EmbedChunksResponse> {
+  const data = await postJson<EmbedChunksResponse>(
+    '/api/embed-chunks',
+    { documentId, chunkIds },
+    'Chunk embedding is unavailable. Keyword search remains available.',
+  );
+
+  return {
+    embedded: typeof data.embedded === 'number' ? data.embedded : 0,
+    failed: typeof data.failed === 'number' ? data.failed : 0,
+    skipped: typeof data.skipped === 'number' ? data.skipped : 0,
+    configurationMissing: Boolean(data.configurationMissing),
+  };
+}
+
+export async function semanticSearch({
+  query,
+  workspaceId,
+  matchCount,
+}: {
+  query: string;
+  workspaceId?: string;
+  matchCount?: number;
+}): Promise<SemanticSearchResponse> {
+  const data = await postJson<SemanticSearchResponse>(
+    '/api/semantic-search',
+    { query, workspaceId, matchCount },
+    'Semantic search is unavailable. Keyword search remains available.',
+  );
+
+  return {
+    matches: Array.isArray(data.matches) ? data.matches : [],
+    configurationMissing: Boolean(data.configurationMissing),
   };
 }

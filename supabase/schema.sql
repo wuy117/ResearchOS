@@ -1,4 +1,5 @@
 create extension if not exists pgcrypto;
+create extension if not exists vector;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -41,10 +42,35 @@ create table if not exists public.document_chunks (
   chunk_index integer,
   text_content text,
   word_count integer,
+  embedding vector,
+  embedding_model text,
+  embedding_status text not null default 'pending' check (embedding_status in ('pending', 'embedded', 'failed')),
+  embedding_error text,
   data jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.document_chunks add column if not exists embedding vector;
+alter table public.document_chunks add column if not exists embedding_model text;
+alter table public.document_chunks add column if not exists embedding_status text not null default 'pending';
+alter table public.document_chunks add column if not exists embedding_error text;
+alter table public.document_chunks add column if not exists updated_at timestamptz not null default now();
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'document_chunks_embedding_status_check'
+      and conrelid = 'public.document_chunks'::regclass
+  ) then
+    alter table public.document_chunks
+      add constraint document_chunks_embedding_status_check
+      check (embedding_status in ('pending', 'embedded', 'failed'));
+  end if;
+end;
+$$;
 
 create table if not exists public.insights (
   id uuid primary key default gen_random_uuid(),
@@ -118,6 +144,48 @@ create or replace trigger set_document_chunks_updated_at
 before update on public.document_chunks
 for each row execute function public.set_updated_at();
 
+create or replace function public.match_document_chunks(
+  query_embedding vector,
+  match_count int,
+  workspace_filter text default null
+)
+returns table (
+  id text,
+  document_id text,
+  text text,
+  similarity double precision,
+  page_start int,
+  page_end int,
+  document_title text,
+  document_type text
+)
+language sql
+stable
+as $$
+  select
+    c.local_id as id,
+    coalesce(c.document_local_id, c.data->>'documentId') as document_id,
+    coalesce(c.text_content, c.data->>'text') as text,
+    1 - (c.embedding <=> query_embedding) as similarity,
+    nullif(c.data->>'pageStart', '')::int as page_start,
+    nullif(c.data->>'pageEnd', '')::int as page_end,
+    coalesce(d.title, d.data->>'title') as document_title,
+    coalesce(d.document_type, d.data->>'type') as document_type
+  from public.document_chunks c
+  join public.documents d
+    on d.local_id = coalesce(c.document_local_id, c.data->>'documentId')
+  where c.embedding is not null
+    and c.embedding_status = 'embedded'
+    and (
+      workspace_filter is null
+      or workspace_filter = ''
+      or d.workspace_local_id = workspace_filter
+      or d.data->>'workspaceId' = workspace_filter
+    )
+  order by c.embedding <=> query_embedding
+  limit greatest(match_count, 1);
+$$;
+
 create or replace trigger set_insights_updated_at
 before update on public.insights
 for each row execute function public.set_updated_at();
@@ -149,3 +217,4 @@ alter table public.performance_summaries disable row level security;
 
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+grant execute on function public.match_document_chunks(vector, int, text) to anon, authenticated;

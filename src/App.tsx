@@ -21,8 +21,10 @@ import { CitationCard } from './components/CitationCard';
 import { DocumentCard } from './components/DocumentCard';
 import { SectionHeader } from './components/SectionHeader';
 import { useResearchState } from './hooks/useResearchState';
+import { isSupabaseEnabled } from './lib/supabase';
+import { saveChunks, saveDocument } from './services/researchStore';
 import type { AssessmentType, ChatMessage, DocumentChunk, MapEdge, MapNode, PageId, PerformanceRecord, PerformanceSummary, ResearchDocument } from './types/research';
-import { analysePerformanceDocument, askResearchChat, generatePerformanceAdvice, type PerformanceAnalysisRecord } from './utils/api';
+import { analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
 import { extractPdfText } from './utils/extractPdfText';
@@ -42,8 +44,8 @@ function App() {
     dashboard: <Dashboard state={state} documents={workspaceDocuments} setActivePage={setActivePage} />,
     library: <Library documents={workspaceDocuments} chunks={state.chunks} />,
     performance: <PerformancePage records={state.performanceRecords} summaries={state.performanceSummaries} documents={state.documents} setState={setState} />,
-    upload: <Upload stateDocuments={state.documents} activeWorkspaceId={state.activeWorkspaceId} setState={setState} />,
-    chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} documents={workspaceDocuments} chunks={state.chunks} setState={setState} />,
+    upload: <Upload stateDocuments={state.documents} activeWorkspaceId={state.activeWorkspaceId} storageStatus={storageStatus} setState={setState} />,
+    chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} workspaceId={state.activeWorkspaceId} documents={workspaceDocuments} chunks={state.chunks} setState={setState} />,
     study: <StudyTools documents={workspaceDocuments} />,
     map: <KnowledgeMap documents={workspaceDocuments} />,
   }[activePage];
@@ -721,13 +723,24 @@ function EmptyState({ title, copy, action, onClick }: { title: string; copy: str
   );
 }
 
+function formatEmbeddingStatus(document: ResearchDocument) {
+  if (document.embeddingStatus === 'embedding') return 'Embedding';
+  if (document.embeddingStatus === 'embedded') return 'Embedded';
+  if (document.embeddingStatus === 'failed') return 'Failed';
+  if (document.embeddingStatus === 'keyword_only') return 'Keyword search only';
+
+  return 'Not embedded';
+}
+
 function Upload({
   stateDocuments,
   activeWorkspaceId,
+  storageStatus,
   setState,
 }: {
   stateDocuments: ResearchDocument[];
   activeWorkspaceId: string;
+  storageStatus: ReturnType<typeof useResearchState>['storageStatus'];
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
   const [fileName, setFileName] = useState('');
@@ -744,6 +757,84 @@ function Upload({
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  }
+
+  async function queueEmbeddings(document: ResearchDocument, chunks: DocumentChunk[], readyMessage: string) {
+    if (!isSupabaseEnabled || storageStatus !== 'connected') {
+      const notEmbeddedDocument: ResearchDocument = {
+        ...document,
+        embeddingStatus: 'not_embedded',
+      };
+
+      setState((current) => ({
+        ...current,
+        documents: current.documents.map((item) => (item.id === document.id ? notEmbeddedDocument : item)),
+      }));
+      setNote(`${readyMessage} Not embedded until Supabase is connected.`);
+      return;
+    }
+
+    const embeddingDocument: ResearchDocument = {
+      ...document,
+      embeddingStatus: 'embedding',
+      embeddingError: undefined,
+    };
+    const pendingChunks = chunks.map((chunk) => ({
+      ...chunk,
+      embeddingStatus: 'pending' as const,
+      embeddingError: undefined,
+    }));
+
+    setState((current) => ({
+      ...current,
+      documents: current.documents.map((item) => (item.id === document.id ? embeddingDocument : item)),
+      chunks: [...pendingChunks, ...current.chunks.filter((chunk) => chunk.documentId !== document.id)],
+    }));
+    setNote(`${readyMessage} Embedding chunks for semantic search...`);
+
+    try {
+      await saveDocument(embeddingDocument);
+      await saveChunks(pendingChunks);
+
+      const result = await embedChunks({ documentId: document.id });
+      const nextStatus = result.embedded > 0 ? 'embedded' : result.failed > 0 ? 'failed' : 'keyword_only';
+      const finalDocument: ResearchDocument = {
+        ...embeddingDocument,
+        embeddingStatus: nextStatus,
+        embeddingError: result.failed > 0 && result.embedded === 0 ? 'Embedding failed. Keyword search remains available.' : undefined,
+      };
+
+      setState((current) => ({
+        ...current,
+        documents: current.documents.map((item) => (item.id === document.id ? finalDocument : item)),
+        chunks: current.chunks.map((chunk) =>
+          chunk.documentId === document.id
+            ? {
+                ...chunk,
+                embeddingStatus: nextStatus === 'embedded' ? ('embedded' as const) : nextStatus === 'failed' ? ('failed' as const) : chunk.embeddingStatus,
+              }
+            : chunk,
+        ),
+      }));
+      setNote(
+        result.embedded > 0
+          ? `${readyMessage} Semantic search is ready for ${result.embedded.toLocaleString()} chunks.`
+          : `${readyMessage} Keyword search only.`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Embedding is unavailable. Keyword search remains available.';
+      const keywordOnlyDocument: ResearchDocument = {
+        ...embeddingDocument,
+        embeddingStatus: 'keyword_only',
+        embeddingError: message,
+      };
+
+      setState((current) => ({
+        ...current,
+        documents: current.documents.map((item) => (item.id === document.id ? keywordOnlyDocument : item)),
+      }));
+      setNote(`${readyMessage} Keyword search only.`);
     }
   }
 
@@ -822,10 +913,10 @@ function Upload({
         documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
       }));
-      setNote(
-        `${cleanName} is ready with ${extracted.pages.length.toLocaleString()} pages, ${extracted.wordCount.toLocaleString()} words, and ${chunks.length} chunks.`,
-      );
+      const readyMessage = `${cleanName} is ready with ${extracted.pages.length.toLocaleString()} pages, ${extracted.wordCount.toLocaleString()} words, and ${chunks.length} chunks.`;
+      setNote(readyMessage);
       resetUploadFields();
+      await queueEmbeddings(readyDocument, chunks, readyMessage);
     } catch (error) {
       const message = error instanceof Error ? error.message : `Research OS could not extract text from ${cleanName}. Please try another PDF.`;
       const failedDocument: ResearchDocument = {
@@ -917,8 +1008,10 @@ function Upload({
         documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
       }));
-      setNote(`${cleanName} is ready with ${extracted.wordCount.toLocaleString()} words and ${chunks.length} chunks.`);
+      const readyMessage = `${cleanName} is ready with ${extracted.wordCount.toLocaleString()} words and ${chunks.length} chunks.`;
+      setNote(readyMessage);
       resetUploadFields();
+      await queueEmbeddings(readyDocument, chunks, readyMessage);
     } catch (error) {
       const message = error instanceof Error ? error.message : `Research OS could not extract text from ${cleanName}. Please try another DOCX.`;
       const failedDocument: ResearchDocument = {
@@ -978,7 +1071,9 @@ function Upload({
           documents: [newDocument, ...current.documents],
           chunks: [...chunks, ...current.chunks],
         }));
-        setNote(`${cleanName} was read locally, saved with ${wordCount.toLocaleString()} words, and split into ${chunks.length} chunks.`);
+        const readyMessage = `${cleanName} was read locally, saved with ${wordCount.toLocaleString()} words, and split into ${chunks.length} chunks.`;
+        setNote(readyMessage);
+        await queueEmbeddings(newDocument, chunks, readyMessage);
       } catch {
         setNote(`Research OS could not read ${cleanName}. Please try a plain UTF-8 text file.`);
       } finally {
@@ -1085,6 +1180,7 @@ function Upload({
                       document.pageCount ? `${document.pageCount.toLocaleString()} pages` : null,
                       document.wordCount ? `${document.wordCount.toLocaleString()} words` : null,
                       document.chunkIds?.length ? `${document.chunkIds.length.toLocaleString()} chunks` : null,
+                      formatEmbeddingStatus(document),
                     ]
                       .filter(Boolean)
                       .join(' / ')}
@@ -1138,15 +1234,59 @@ function buildResearchChatContext(results: RetrievedChunk[]) {
   }));
 }
 
+function semanticMatchesToRetrievedChunks(matches: SemanticSearchMatch[], documents: ResearchDocument[]): RetrievedChunk[] {
+  const documentById = new Map(documents.map((document) => [document.id, document]));
+
+  return matches.map((match, index) => {
+    const document =
+      documentById.get(match.documentId) ??
+      ({
+        id: match.documentId,
+        title: match.documentTitle || 'Untitled source',
+        type: match.documentType === 'TXT' || match.documentType === 'DOCX' ? match.documentType : 'PDF',
+        workspaceId: '',
+        authors: 'Supabase semantic search',
+        addedAt: '',
+        status: 'Ready',
+        tags: [],
+        insightCount: 0,
+        summary: '',
+      } satisfies ResearchDocument);
+    const chunk: DocumentChunk = {
+      id: match.id,
+      documentId: match.documentId,
+      chunkIndex: index,
+      text: match.text,
+      wordCount: match.text.trim().split(/\s+/).filter(Boolean).length,
+      pageStart: match.pageStart,
+      pageEnd: match.pageEnd,
+      createdAt: '',
+      embeddingStatus: 'embedded',
+    };
+
+    return {
+      chunk,
+      document,
+      score: match.similarity,
+      matchedTerms: [],
+      reason: 'semantic similarity',
+      pageStart: match.pageStart,
+      pageEnd: match.pageEnd,
+    };
+  });
+}
+
 function ResearchChat({
   chat,
   workspaceName,
+  workspaceId,
   documents,
   chunks,
   setState,
 }: {
   chat: ChatMessage[];
   workspaceName: string;
+  workspaceId: string;
   documents: ResearchDocument[];
   chunks: DocumentChunk[];
   setState: ReturnType<typeof useResearchState>['setState'];
@@ -1178,13 +1318,38 @@ function ResearchChat({
     setPrompt('');
 
     try {
-      const retrievedChunks = retrieveChunks(question, chunks, documents);
-      const lowConfidence = retrievedChunks.length === 0 || (retrievedChunks[0]?.score ?? 0) < 4;
+      let retrievedChunks: RetrievedChunk[] = [];
+      let retrievalMode: 'semantic' | 'keyword' = 'keyword';
+
+      if (isSupabaseEnabled) {
+        try {
+          const semanticResult = await semanticSearch({ query: question, workspaceId, matchCount: 6 });
+          const semanticChunks = semanticMatchesToRetrievedChunks(semanticResult.matches, documents);
+          const semanticLowConfidence = semanticChunks.length === 0 || (semanticChunks[0]?.score ?? 0) < 0.68;
+
+          if (!semanticLowConfidence) {
+            retrievedChunks = semanticChunks;
+            retrievalMode = 'semantic';
+          }
+        } catch (error) {
+          if (import.meta.env.DEV) {
+            console.debug('Semantic retrieval unavailable; falling back to keyword retrieval.', error);
+          }
+        }
+      }
+
+      if (retrievedChunks.length === 0) {
+        retrievedChunks = retrieveChunks(question, chunks, documents);
+      }
+
+      const lowConfidence =
+        retrievedChunks.length === 0 || (retrievalMode === 'semantic' ? (retrievedChunks[0]?.score ?? 0) < 0.68 : (retrievedChunks[0]?.score ?? 0) < 4);
 
       if (import.meta.env.DEV) {
         console.debug(
           'Research chat retrieval',
           retrievedChunks.map((result) => ({
+            mode: retrievalMode,
             document: result.document.title,
             location: formatChunkLocation(result),
             score: Number(result.score.toFixed(2)),

@@ -24,6 +24,8 @@ export type ResearchDocument = {
   pageCount?: number;
   chunkIds?: string[];
   extractionError?: string;
+  embeddingStatus?: 'not_embedded' | 'embedding' | 'embedded' | 'failed' | 'keyword_only';
+  embeddingError?: string;
 };
 
 export type DocumentChunk = {
@@ -35,6 +37,9 @@ export type DocumentChunk = {
   pageStart?: number;
   pageEnd?: number;
   createdAt: string;
+  embeddingStatus?: 'pending' | 'embedded' | 'failed';
+  embeddingModel?: string;
+  embeddingError?: string;
 };
 
 export type Insight = {

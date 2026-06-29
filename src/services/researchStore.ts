@@ -20,6 +20,23 @@ type StoredRow<T> = {
   updated_at?: string;
 };
 
+type SupabasePayload<T extends { id: string }> = {
+  local_id: string;
+  data: T;
+  updated_at: string;
+  workspace_local_id?: string;
+  title?: string;
+  document_type?: string;
+  status?: string;
+  tags?: string[];
+  document_local_id?: string;
+  chunk_index?: number;
+  text_content?: string;
+  word_count?: number;
+  embedding_status?: string;
+  embedding_error?: string | null;
+};
+
 export type LoadStateResult = {
   state: ResearchState;
   status: StorageStatus;
@@ -89,14 +106,7 @@ async function upsertData<T extends { id: string }>(table: string, item: T) {
   if (!client) throw new Error('Supabase is not configured.');
 
   const now = getNow();
-  const { error } = await client.from(table).upsert(
-    {
-      local_id: item.id,
-      data: item,
-      updated_at: now,
-    },
-    { onConflict: 'local_id' },
-  );
+  const { error } = await client.from(table).upsert(buildSupabasePayload(table, item, now), { onConflict: 'local_id' });
 
   if (error) throw error;
 }
@@ -106,16 +116,46 @@ async function upsertMany<T extends { id: string }>(table: string, items: T[]) {
   if (!client || items.length === 0) return;
 
   const now = getNow();
-  const { error } = await client.from(table).upsert(
-    items.map((item) => ({
-      local_id: item.id,
-      data: item,
-      updated_at: now,
-    })),
-    { onConflict: 'local_id' },
-  );
+  const { error } = await client.from(table).upsert(items.map((item) => buildSupabasePayload(table, item, now)), { onConflict: 'local_id' });
 
   if (error) throw error;
+}
+
+function buildSupabasePayload<T extends { id: string }>(table: string, item: T, updatedAt: string): SupabasePayload<T> {
+  const payload: SupabasePayload<T> = {
+    local_id: item.id,
+    data: item,
+    updated_at: updatedAt,
+  };
+
+  if (table === 'documents') {
+    const document = item as unknown as ResearchDocument;
+
+    return {
+      ...payload,
+      workspace_local_id: document.workspaceId,
+      title: document.title,
+      document_type: document.type,
+      status: document.status,
+      tags: document.tags,
+    };
+  }
+
+  if (table === 'document_chunks') {
+    const chunk = item as unknown as DocumentChunk;
+
+    return {
+      ...payload,
+      document_local_id: chunk.documentId,
+      chunk_index: chunk.chunkIndex,
+      text_content: chunk.text,
+      word_count: chunk.wordCount,
+      embedding_status: chunk.embeddingStatus ?? 'pending',
+      embedding_error: chunk.embeddingError ?? null,
+    };
+  }
+
+  return payload;
 }
 
 export async function loadState(): Promise<LoadStateResult> {
