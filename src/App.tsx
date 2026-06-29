@@ -29,7 +29,7 @@ import { extractPdfText } from './utils/extractPdfText';
 import { retrieveChunks, type RetrievedChunk } from './utils/retrieveChunks';
 
 function App() {
-  const { state, setState } = useResearchState();
+  const { state, setState, storageStatus } = useResearchState();
   const [activePage, setActivePage] = useState<PageId>('dashboard');
 
   const workspaceDocuments = useMemo(
@@ -49,7 +49,7 @@ function App() {
   }[activePage];
 
   return (
-    <AppShell state={state} activePage={activePage} setActivePage={setActivePage} setState={setState}>
+    <AppShell state={state} activePage={activePage} setActivePage={setActivePage} setState={setState} storageStatus={storageStatus}>
       {page}
     </AppShell>
   );

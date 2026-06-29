@@ -1,5 +1,6 @@
 import { BarChart3, BookOpen, BrainCircuit, Files, LayoutDashboard, Map, MessageSquareText, Search, UploadCloud } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
+import type { StorageStatus } from '../hooks/useResearchState';
 import type { PageId, ResearchState } from '../types/research';
 
 const navItems: Array<{ id: PageId; label: string; icon: typeof LayoutDashboard }> = [
@@ -17,12 +18,15 @@ type AppShellProps = {
   activePage: PageId;
   setActivePage: (page: PageId) => void;
   setState: Dispatch<SetStateAction<ResearchState>>;
+  storageStatus: StorageStatus;
   children: React.ReactNode;
 };
 
-export function AppShell({ state, activePage, setActivePage, setState, children }: AppShellProps) {
+export function AppShell({ state, activePage, setActivePage, setState, storageStatus, children }: AppShellProps) {
   const activeWorkspace = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
   const getWorkspaceDocumentCount = (workspaceId: string) => state.documents.filter((document) => document.workspaceId === workspaceId).length;
+  const storageLabel =
+    storageStatus === 'supabase' ? 'Supabase connected' : storageStatus === 'loading' ? 'Checking storage' : 'Local only';
 
   return (
     <div className="min-h-screen p-0 text-ink sm:p-4 lg:p-6">
@@ -94,11 +98,21 @@ export function AppShell({ state, activePage, setActivePage, setState, children 
             </div>
           </div>
 
-          <div className="mt-auto rounded-2xl border border-ink/8 bg-paper/75 p-4">
-            <p className="text-sm font-semibold text-ink">Desk focus</p>
-            <p className="mt-2 text-sm leading-6 text-graphite/72">
-              {activeWorkspace?.description ?? 'Choose a workspace to focus your desk.'}
-            </p>
+          <div className="mt-auto space-y-3">
+            <div className="rounded-2xl border border-ink/8 bg-paper/75 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Storage</p>
+              <div className="mt-3 flex items-center gap-2">
+                <span className={`size-2 rounded-full ${storageStatus === 'supabase' ? 'bg-moss' : storageStatus === 'loading' ? 'bg-brass' : 'bg-graphite/45'}`} />
+                <p className="text-sm font-semibold text-ink">{storageLabel}</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-ink/8 bg-paper/75 p-4">
+              <p className="text-sm font-semibold text-ink">Desk focus</p>
+              <p className="mt-2 text-sm leading-6 text-graphite/72">
+                {activeWorkspace?.description ?? 'Choose a workspace to focus your desk.'}
+              </p>
+            </div>
           </div>
         </aside>
 
@@ -117,6 +131,10 @@ export function AppShell({ state, activePage, setActivePage, setState, children 
                 <UploadCloud size={18} />
                 Add Source
               </button>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-semibold text-graphite/65 lg:hidden">
+              <span className={`size-2 rounded-full ${storageStatus === 'supabase' ? 'bg-moss' : storageStatus === 'loading' ? 'bg-brass' : 'bg-graphite/45'}`} />
+              {storageLabel}
             </div>
             <div className="grid grid-cols-2 gap-2 lg:hidden">
               {navItems.map((item) => {
