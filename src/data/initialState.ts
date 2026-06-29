@@ -48,4 +48,13 @@ export const initialState: ResearchState = {
   chat: [],
   performanceRecords: [],
   performanceSummaries: [],
+  tutorLessons: [],
+  tutorAttempts: [],
+  tutorSocraticTurns: [],
+  tutorExamSessions: [],
+  tutorMemory: {
+    lessonsCompleted: 0,
+    topicsStudied: [],
+    revisionStreak: 0,
+  },
 };

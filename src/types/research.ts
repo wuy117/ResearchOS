@@ -1,4 +1,4 @@
-export type PageId = 'dashboard' | 'library' | 'performance' | 'upload' | 'chat' | 'study' | 'map';
+export type PageId = 'dashboard' | 'library' | 'performance' | 'tutor' | 'upload' | 'chat' | 'study' | 'map';
 
 export type Workspace = {
   id: string;
@@ -124,6 +124,94 @@ export type PerformanceSummary = {
   overallCommentary: string;
 };
 
+export type TutorDifficulty = 'Foundation' | 'Core' | 'Stretch';
+
+export type TutorCheckpointQuestion = {
+  id: string;
+  prompt: string;
+  answer: string;
+  explanation: string;
+  difficulty: TutorDifficulty;
+};
+
+export type TutorLesson = {
+  id: string;
+  workspaceId: string;
+  topic: string;
+  objective: string;
+  estimatedDuration: string;
+  difficulty: TutorDifficulty;
+  explanation: string;
+  checkpointQuestions: TutorCheckpointQuestion[];
+  recap: string;
+  nextRecommendation: string;
+  citations: Citation[];
+  status: 'in_progress' | 'completed';
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+};
+
+export type TutorMemoryTopic = {
+  topic: string;
+  confidence: number;
+  quizAccuracy: number;
+  lessonsCompleted: number;
+  attempts: number;
+  correctAttempts: number;
+  lastReviewed: string;
+};
+
+export type TutorAttempt = {
+  id: string;
+  workspaceId: string;
+  lessonId?: string;
+  mode: 'lesson' | 'socratic' | 'exam';
+  topic: string;
+  prompt: string;
+  answer: string;
+  feedback: string;
+  correct: boolean;
+  createdAt: string;
+};
+
+export type TutorSocraticTurn = {
+  id: string;
+  workspaceId: string;
+  topic: string;
+  question: string;
+  studentAnswer?: string;
+  feedback?: string;
+  followUp?: string;
+  difficulty: TutorDifficulty;
+  citations: Citation[];
+  createdAt: string;
+};
+
+export type TutorExamQuestion = {
+  id: string;
+  prompt: string;
+  marks: number;
+  commandWord: string;
+  markScheme: string;
+};
+
+export type TutorExamSession = {
+  id: string;
+  workspaceId: string;
+  topic: string;
+  questions: TutorExamQuestion[];
+  citations: Citation[];
+  createdAt: string;
+};
+
+export type TutorMemory = {
+  lessonsCompleted: number;
+  topicsStudied: TutorMemoryTopic[];
+  revisionStreak: number;
+  lastReviewed?: string;
+};
+
 export type ResearchState = {
   workspaces: Workspace[];
   activeWorkspaceId: string;
@@ -134,4 +222,9 @@ export type ResearchState = {
   chat: ChatMessage[];
   performanceRecords: PerformanceRecord[];
   performanceSummaries: PerformanceSummary[];
+  tutorLessons: TutorLesson[];
+  tutorAttempts: TutorAttempt[];
+  tutorSocraticTurns: TutorSocraticTurn[];
+  tutorExamSessions: TutorExamSession[];
+  tutorMemory: TutorMemory;
 };

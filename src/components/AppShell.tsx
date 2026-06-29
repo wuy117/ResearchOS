@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, BrainCircuit, Files, LayoutDashboard, Map, MessageSquareText, Search, UploadCloud } from 'lucide-react';
+import { BarChart3, BookOpen, BrainCircuit, Files, GraduationCap, LayoutDashboard, Map, MessageSquareText, Search, UploadCloud } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { AppStorageStatus } from '../hooks/useResearchState';
 import type { PageId, ResearchState } from '../types/research';
@@ -7,6 +7,7 @@ const navItems: Array<{ id: PageId; label: string; icon: typeof LayoutDashboard 
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'library', label: 'Library', icon: Files },
   { id: 'performance', label: 'Performance', icon: BarChart3 },
+  { id: 'tutor', label: 'Tutor', icon: GraduationCap },
   { id: 'upload', label: 'Upload', icon: UploadCloud },
   { id: 'chat', label: 'AI Chat', icon: MessageSquareText },
   { id: 'study', label: 'Study Tools', icon: BrainCircuit },

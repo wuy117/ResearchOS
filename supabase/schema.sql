@@ -132,6 +132,58 @@ create table if not exists public.performance_summaries (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.tutor_lessons (
+  id uuid primary key default gen_random_uuid(),
+  local_id text not null unique,
+  workspace_local_id text,
+  topic text,
+  status text,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.tutor_attempts (
+  id uuid primary key default gen_random_uuid(),
+  local_id text not null unique,
+  workspace_local_id text,
+  lesson_local_id text,
+  mode text,
+  topic text,
+  correct boolean,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.tutor_socratic_turns (
+  id uuid primary key default gen_random_uuid(),
+  local_id text not null unique,
+  workspace_local_id text,
+  topic text,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.tutor_exam_sessions (
+  id uuid primary key default gen_random_uuid(),
+  local_id text not null unique,
+  workspace_local_id text,
+  topic text,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.tutor_memory (
+  id uuid primary key default gen_random_uuid(),
+  local_id text not null unique,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create or replace trigger set_workspaces_updated_at
 before update on public.workspaces
 for each row execute function public.set_updated_at();
@@ -206,6 +258,26 @@ create or replace trigger set_performance_summaries_updated_at
 before update on public.performance_summaries
 for each row execute function public.set_updated_at();
 
+create or replace trigger set_tutor_lessons_updated_at
+before update on public.tutor_lessons
+for each row execute function public.set_updated_at();
+
+create or replace trigger set_tutor_attempts_updated_at
+before update on public.tutor_attempts
+for each row execute function public.set_updated_at();
+
+create or replace trigger set_tutor_socratic_turns_updated_at
+before update on public.tutor_socratic_turns
+for each row execute function public.set_updated_at();
+
+create or replace trigger set_tutor_exam_sessions_updated_at
+before update on public.tutor_exam_sessions
+for each row execute function public.set_updated_at();
+
+create or replace trigger set_tutor_memory_updated_at
+before update on public.tutor_memory
+for each row execute function public.set_updated_at();
+
 alter table public.workspaces disable row level security;
 alter table public.documents disable row level security;
 alter table public.document_chunks disable row level security;
@@ -214,6 +286,11 @@ alter table public.chat_messages disable row level security;
 alter table public.study_artifacts disable row level security;
 alter table public.performance_records disable row level security;
 alter table public.performance_summaries disable row level security;
+alter table public.tutor_lessons disable row level security;
+alter table public.tutor_attempts disable row level security;
+alter table public.tutor_socratic_turns disable row level security;
+alter table public.tutor_exam_sessions disable row level security;
+alter table public.tutor_memory disable row level security;
 
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to anon, authenticated;

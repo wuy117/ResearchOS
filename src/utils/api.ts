@@ -81,6 +81,52 @@ export type PerformanceAdviceResponse = {
   overallCommentary: string;
 };
 
+export type TutorRequestDocument = ResearchChatRequestDocument;
+
+export type TutorLessonResponse = {
+  topic: string;
+  objective: string;
+  estimatedDuration: string;
+  difficulty: 'Foundation' | 'Core' | 'Stretch';
+  explanation: string;
+  checkpointQuestions: Array<{
+    prompt: string;
+    answer: string;
+    explanation: string;
+    difficulty: 'Foundation' | 'Core' | 'Stretch';
+  }>;
+  recap: string;
+  nextRecommendation: string;
+};
+
+export type TutorSocraticResponse = {
+  question: string;
+  feedback: string;
+  followUp: string;
+  difficulty: 'Foundation' | 'Core' | 'Stretch';
+  idealAnswer: string;
+};
+
+export type TutorExamResponse = {
+  topic: string;
+  questions: Array<{
+    prompt: string;
+    marks: number;
+    commandWord: string;
+    markScheme: string;
+  }>;
+};
+
+export type TutorMarkResponse = {
+  score: number;
+  maxScore: number;
+  feedback: string;
+  markSchemeReasoning: string;
+  suggestedImprovements: string[];
+  modelAnswer: string;
+  correct: boolean;
+};
+
 type ResearchChatErrorResponse = {
   error?: string;
 };
@@ -234,4 +280,28 @@ export async function semanticSearch({
     matches: Array.isArray(data.matches) ? data.matches : [],
     configurationMissing: Boolean(data.configurationMissing),
   };
+}
+
+export async function generateTutorContent<TResponse>({
+  action,
+  topic,
+  difficulty,
+  documents,
+  history,
+  question,
+  answer,
+}: {
+  action: 'lesson' | 'socratic' | 'exam' | 'mark';
+  topic?: string;
+  difficulty?: string;
+  documents: TutorRequestDocument[];
+  history?: unknown;
+  question?: string;
+  answer?: string;
+}): Promise<TResponse> {
+  return postJson<TResponse>(
+    '/api/tutor',
+    { action, topic, difficulty, documents, history, question, answer },
+    'AI Tutor is unreachable. Please try again.',
+  );
 }

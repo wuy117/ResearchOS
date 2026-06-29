@@ -8,6 +8,11 @@ import type {
   PerformanceSummary,
   ResearchDocument,
   ResearchState,
+  TutorAttempt,
+  TutorExamSession,
+  TutorLesson,
+  TutorMemory,
+  TutorSocraticTurn,
   Workspace,
 } from '../types/research';
 import { loadResearchState, saveResearchState } from '../utils/storage';
@@ -58,6 +63,11 @@ function mergeStateFromSupabase(localState: ResearchState, rows: {
   chat: ChatMessage[];
   performanceRecords: PerformanceRecord[];
   performanceSummaries: PerformanceSummary[];
+  tutorLessons: TutorLesson[];
+  tutorAttempts: TutorAttempt[];
+  tutorSocraticTurns: TutorSocraticTurn[];
+  tutorExamSessions: TutorExamSession[];
+  tutorMemory: TutorMemory[];
 }): ResearchState {
   return {
     ...initialState,
@@ -70,6 +80,11 @@ function mergeStateFromSupabase(localState: ResearchState, rows: {
     chat: rows.chat,
     performanceRecords: rows.performanceRecords,
     performanceSummaries: rows.performanceSummaries,
+    tutorLessons: rows.tutorLessons,
+    tutorAttempts: rows.tutorAttempts,
+    tutorSocraticTurns: rows.tutorSocraticTurns,
+    tutorExamSessions: rows.tutorExamSessions,
+    tutorMemory: rows.tutorMemory[0] ?? localState.tutorMemory ?? initialState.tutorMemory,
   };
 }
 
@@ -80,6 +95,11 @@ function hasRemoteResearchData(rows: {
   chat: ChatMessage[];
   performanceRecords: PerformanceRecord[];
   performanceSummaries: PerformanceSummary[];
+  tutorLessons: TutorLesson[];
+  tutorAttempts: TutorAttempt[];
+  tutorSocraticTurns: TutorSocraticTurn[];
+  tutorExamSessions: TutorExamSession[];
+  tutorMemory: TutorMemory[];
 }) {
   return (
     rows.documents.length > 0 ||
@@ -87,7 +107,12 @@ function hasRemoteResearchData(rows: {
     rows.insights.length > 0 ||
     rows.chat.length > 0 ||
     rows.performanceRecords.length > 0 ||
-    rows.performanceSummaries.length > 0
+    rows.performanceSummaries.length > 0 ||
+    rows.tutorLessons.length > 0 ||
+    rows.tutorAttempts.length > 0 ||
+    rows.tutorSocraticTurns.length > 0 ||
+    rows.tutorExamSessions.length > 0 ||
+    rows.tutorMemory.length > 0
   );
 }
 
@@ -99,6 +124,18 @@ async function selectData<T>(table: string): Promise<T[]> {
   if (error) throw error;
 
   return ((data ?? []) as StoredRow<T>[]).map((row) => row.data);
+}
+
+async function selectOptionalData<T>(table: string): Promise<T[]> {
+  try {
+    return await selectData<T>(table);
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.debug(`${table} is unavailable; continuing without optional Tutor data.`, error);
+    }
+
+    return [];
+  }
 }
 
 async function upsertData<T extends { id: string }>(table: string, item: T) {
@@ -119,6 +156,26 @@ async function upsertMany<T extends { id: string }>(table: string, items: T[]) {
   const { error } = await client.from(table).upsert(items.map((item) => buildSupabasePayload(table, item, now)), { onConflict: 'local_id' });
 
   if (error) throw error;
+}
+
+async function upsertOptionalData<T extends { id: string }>(table: string, item: T) {
+  try {
+    await upsertData(table, item);
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.debug(`${table} was not saved; optional table may be missing.`, error);
+    }
+  }
+}
+
+async function upsertOptionalMany<T extends { id: string }>(table: string, items: T[]) {
+  try {
+    await upsertMany(table, items);
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.debug(`${table} was not saved; optional table may be missing.`, error);
+    }
+  }
 }
 
 function buildSupabasePayload<T extends { id: string }>(table: string, item: T, updatedAt: string): SupabasePayload<T> {
@@ -166,7 +223,7 @@ export async function loadState(): Promise<LoadStateResult> {
   }
 
   try {
-    const [workspaces, documents, chunks, insights, chat, performanceRecords, performanceSummaries] = await Promise.all([
+    const [workspaces, documents, chunks, insights, chat, performanceRecords, performanceSummaries, tutorLessons, tutorAttempts, tutorSocraticTurns, tutorExamSessions, tutorMemory] = await Promise.all([
       selectData<Workspace>('workspaces'),
       selectData<ResearchDocument>('documents'),
       selectData<DocumentChunk>('document_chunks'),
@@ -174,6 +231,11 @@ export async function loadState(): Promise<LoadStateResult> {
       selectData<ChatMessage>('chat_messages'),
       selectData<PerformanceRecord>('performance_records'),
       selectData<PerformanceSummary>('performance_summaries'),
+      selectOptionalData<TutorLesson>('tutor_lessons'),
+      selectOptionalData<TutorAttempt>('tutor_attempts'),
+      selectOptionalData<TutorSocraticTurn>('tutor_socratic_turns'),
+      selectOptionalData<TutorExamSession>('tutor_exam_sessions'),
+      selectOptionalData<TutorMemory>('tutor_memory'),
     ]);
 
     const rows = {
@@ -184,6 +246,11 @@ export async function loadState(): Promise<LoadStateResult> {
       chat,
       performanceRecords,
       performanceSummaries,
+      tutorLessons,
+      tutorAttempts,
+      tutorSocraticTurns,
+      tutorExamSessions,
+      tutorMemory,
     };
     const state = hasRemoteResearchData(rows) ? mergeStateFromSupabase(localState, rows) : localState;
 
@@ -211,6 +278,11 @@ export async function saveState(state: ResearchState): Promise<StorageStatus> {
       upsertMany('chat_messages', state.chat),
       upsertMany('performance_records', state.performanceRecords),
       upsertMany('performance_summaries', state.performanceSummaries),
+      upsertOptionalMany('tutor_lessons', state.tutorLessons),
+      upsertOptionalMany('tutor_attempts', state.tutorAttempts),
+      upsertOptionalMany('tutor_socratic_turns', state.tutorSocraticTurns),
+      upsertOptionalMany('tutor_exam_sessions', state.tutorExamSessions),
+      upsertOptionalData('tutor_memory', { id: 'tutor-memory', ...state.tutorMemory }),
     ]);
 
     return 'connected';

@@ -20,6 +20,7 @@ import { AppShell } from './components/AppShell';
 import { CitationCard } from './components/CitationCard';
 import { DocumentCard } from './components/DocumentCard';
 import { SectionHeader } from './components/SectionHeader';
+import { TutorPage } from './components/TutorPage';
 import { useResearchState } from './hooks/useResearchState';
 import { isSupabaseEnabled } from './lib/supabase';
 import { saveChunks, saveDocument } from './services/researchStore';
@@ -44,6 +45,21 @@ function App() {
     dashboard: <Dashboard state={state} documents={workspaceDocuments} setActivePage={setActivePage} />,
     library: <Library documents={workspaceDocuments} chunks={state.chunks} />,
     performance: <PerformancePage records={state.performanceRecords} summaries={state.performanceSummaries} documents={state.documents} setState={setState} />,
+    tutor: (
+      <TutorPage
+        workspaceId={state.activeWorkspaceId}
+        documents={workspaceDocuments}
+        chunks={state.chunks}
+        performanceRecords={state.performanceRecords}
+        performanceSummaries={state.performanceSummaries}
+        tutorLessons={state.tutorLessons}
+        tutorAttempts={state.tutorAttempts}
+        tutorSocraticTurns={state.tutorSocraticTurns}
+        tutorExamSessions={state.tutorExamSessions}
+        tutorMemory={state.tutorMemory}
+        setState={setState}
+      />
+    ),
     upload: <Upload stateDocuments={state.documents} activeWorkspaceId={state.activeWorkspaceId} storageStatus={storageStatus} setState={setState} />,
     chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} workspaceId={state.activeWorkspaceId} documents={workspaceDocuments} chunks={state.chunks} setState={setState} />,
     study: <StudyTools documents={workspaceDocuments} />,
