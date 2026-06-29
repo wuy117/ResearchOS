@@ -4,8 +4,8 @@ import type { ResearchDocument } from '../types/research';
 function getEmbeddingLabel(document: ResearchDocument) {
   if (document.embeddingStatus === 'embedding') return 'Embedding';
   if (document.embeddingStatus === 'embedded') return 'Embedded';
-  if (document.embeddingStatus === 'failed') return 'Failed';
-  if (document.embeddingStatus === 'keyword_only') return 'Keyword search only';
+  if (document.embeddingStatus === 'failed') return 'Keyword search ready; semantic embedding failed';
+  if (document.embeddingStatus === 'keyword_only') return 'Keyword search ready';
 
   return 'Not embedded';
 }
@@ -37,7 +37,7 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[document.status]}`}>{document.status}</span>
       </div>
       <p className="mt-4 line-clamp-3 text-sm leading-7 text-graphite/75">{document.summary}</p>
-      {document.status === 'Failed' && document.extractionError ? <p className="mt-3 text-sm font-semibold text-red-700">{document.extractionError}</p> : null}
+      {document.status === 'Failed' && document.extractionError && document.extractionError !== document.summary ? <p className="mt-3 text-sm font-semibold text-red-700">{document.extractionError}</p> : null}
       {document.status !== 'Failed' ? (
         <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{getEmbeddingLabel(document)}</p>
       ) : null}

@@ -28,10 +28,17 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
   const getWorkspaceDocumentCount = (workspaceId: string) => state.documents.filter((document) => document.workspaceId === workspaceId).length;
   const storageLabel = {
     loading: 'Checking storage',
-    'missing-env': 'Missing Supabase env vars',
-    'client-created': 'Supabase client created',
-    'connection-failed': 'Supabase connection failed',
+    'missing-env': 'Local storage',
+    'client-created': 'Checking Supabase',
+    'connection-failed': 'Local fallback active',
     connected: 'Supabase connected',
+  }[storageStatus];
+  const storageDescription = {
+    loading: 'Loading saved workspace data.',
+    'missing-env': 'Saved in this browser. Add Supabase env vars to sync remotely.',
+    'client-created': 'Remote storage is configured; checking the connection.',
+    'connection-failed': 'Saved locally for now. Remote sync will resume when Supabase is reachable.',
+    connected: 'Remote sync is active, with localStorage as a fallback.',
   }[storageStatus];
   const storageDotClass = {
     loading: 'bg-brass',
@@ -58,7 +65,7 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
           <div className="mb-6 rounded-xl border border-ink/8 bg-paper/70 px-3 py-2.5">
             <div className="flex items-center gap-2 text-sm text-graphite/70">
               <Search size={16} />
-              <span>Search papers, notes, insights</span>
+              <span>Use Library and Chat to search sources</span>
             </div>
           </div>
 
@@ -118,6 +125,7 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
                 <span className={`size-2 rounded-full ${storageDotClass}`} />
                 <p className="text-sm font-semibold text-ink">{storageLabel}</p>
               </div>
+              <p className="mt-2 text-xs leading-5 text-graphite/68">{storageDescription}</p>
             </div>
 
             <div className="rounded-2xl border border-ink/8 bg-paper/75 p-4">
@@ -145,9 +153,12 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
                 Add Source
               </button>
             </div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-graphite/65 lg:hidden">
-              <span className={`size-2 rounded-full ${storageDotClass}`} />
-              {storageLabel}
+            <div className="rounded-xl border border-ink/8 bg-paper/65 px-3 py-2 text-xs leading-5 text-graphite/70 lg:hidden">
+              <div className="flex items-center gap-2 font-semibold text-ink">
+                <span className={`size-2 rounded-full ${storageDotClass}`} />
+                {storageLabel}
+              </div>
+              <p className="mt-1">{storageDescription}</p>
             </div>
             <div className="grid grid-cols-2 gap-2 lg:hidden">
               {navItems.map((item) => {

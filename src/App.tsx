@@ -60,7 +60,7 @@ function App() {
         setState={setState}
       />
     ),
-    upload: <Upload stateDocuments={state.documents} activeWorkspaceId={state.activeWorkspaceId} storageStatus={storageStatus} setState={setState} />,
+    upload: <Upload stateDocuments={workspaceDocuments} activeWorkspaceId={state.activeWorkspaceId} storageStatus={storageStatus} setState={setState} />,
     chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} workspaceId={state.activeWorkspaceId} documents={workspaceDocuments} chunks={state.chunks} setState={setState} />,
     study: <StudyTools documents={workspaceDocuments} />,
     map: <KnowledgeMap documents={workspaceDocuments} />,
@@ -86,35 +86,38 @@ function Dashboard({
   const newestDocuments = [...documents].slice(0, 2);
   const primaryAction = state.actions[0];
   const hasDocuments = documents.length > 0;
+  const hasReadySources = readyCount > 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-9">
       <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
         <div className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{hasDocuments ? 'Continue' : 'Start'}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{hasReadySources ? 'Continue' : 'Start'}</p>
           <h2 className="mt-4 max-w-2xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-5xl">
-            {hasDocuments ? 'Return to your active reading desk.' : 'Build your research desk from real sources.'}
+            {hasReadySources ? 'Return to your active reading desk.' : 'Build your research desk from real sources.'}
           </h2>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
-            {hasDocuments
+            {hasReadySources
               ? `${readyCount} sources are ready in this workspace. Use chat for synthesis or open the library to keep reviewing source material.`
-              : 'Upload a TXT, PDF, or DOCX file to create searchable source material. Research chat and study tools will use those documents once they are ready.'}
+              : hasDocuments
+                ? 'The current workspace has uploads that still need recovery or readable text. Upload a TXT, PDF, or DOCX file to create searchable source material.'
+                : 'Upload a TXT, PDF, or DOCX file to create searchable source material. Research chat and study tools will use those documents once they are ready.'}
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => setActivePage(hasDocuments ? 'chat' : 'upload')}
+              onClick={() => setActivePage(hasReadySources ? 'chat' : 'upload')}
               className="inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm"
             >
-              {hasDocuments ? 'Ask research chat' : 'Upload first source'}
+              {hasReadySources ? 'Ask research chat' : 'Upload first source'}
               <ArrowRight size={17} />
             </button>
             <button
               type="button"
-              onClick={() => setActivePage(hasDocuments ? 'library' : 'upload')}
+              onClick={() => setActivePage(hasReadySources ? 'library' : 'upload')}
               className="inline-flex items-center gap-2 rounded-xl border border-ink/10 bg-paper px-4 py-3 text-sm font-semibold text-ink"
             >
-              {hasDocuments ? 'Open library' : 'Add document'}
+              {hasReadySources ? 'Open library' : 'Add document'}
             </button>
           </div>
         </div>
@@ -184,7 +187,7 @@ function Library({ documents, chunks }: { documents: ResearchDocument[]; chunks:
       <SectionHeader
         eyebrow="Document library"
         title="Sources by workspace"
-        copy="A calm catalogue for indexed and in-progress materials, with enough context to choose the next source without turning the library into a dashboard."
+        copy="A catalogue of uploaded sources, extraction state, chunk count, and search readiness for the active workspace."
       />
       {documents.length ? (
         <div className="grid gap-5 md:grid-cols-2">
@@ -342,7 +345,7 @@ function PerformancePage({
   const strongestSubject = [...latestPercentages].sort((a, b) => b.percentage - a.percentage)[0]?.subject;
   const weakestSubject = [...latestPercentages].sort((a, b) => a.percentage - b.percentage)[0]?.subject;
   const latestSummary = summaries[0];
-  const analysableDocuments = documents.filter((document) => document.extractedText?.trim() && document.status === 'Ready');
+  const analysableDocuments = documents.filter((document) => document.extractedText?.trim() && (document.status === 'Ready' || document.status === 'Indexed'));
   const computedPercentage = (() => {
     const score = parseOptionalNumber(form.score);
     const maxScore = parseOptionalNumber(form.maxScore);
@@ -465,7 +468,7 @@ function PerformancePage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <SectionHeader eyebrow="Performance" title="Performance" copy="Understand reports, exam results, and academic patterns." />
+      <SectionHeader eyebrow="Performance" title="Performance" copy="Add marks manually or analyse uploaded reports that contain readable academic results." />
 
       <div className="rounded-2xl border border-ink/8 bg-white p-4 shadow-sm">
         <p className="text-sm leading-7 text-graphite/74">{statusMessage}</p>
@@ -555,7 +558,7 @@ function PerformancePage({
               <Sparkles size={15} />
               Analyse uploaded report
             </div>
-            <p className="mt-3 text-sm leading-7 text-graphite/72">Select a document that has already been extracted. Research OS will ask the model for structured academic records and will not invent missing marks.</p>
+            <p className="mt-3 text-sm leading-7 text-graphite/72">Select an uploaded report with extracted text. Research OS will ask the model for structured academic records and will not invent missing marks.</p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
                 <option value="">Choose uploaded document</option>
@@ -565,10 +568,13 @@ function PerformancePage({
                   </option>
                 ))}
               </select>
-              <button type="button" onClick={handleAnalyseDocument} disabled={isAnalysing} className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+              <button type="button" onClick={handleAnalyseDocument} disabled={isAnalysing || analysableDocuments.length === 0} className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
                 {isAnalysing ? 'Analysing...' : 'Analyse'}
               </button>
             </div>
+            {analysableDocuments.length === 0 ? (
+              <p className="mt-3 rounded-xl bg-paper/70 p-3 text-sm leading-6 text-graphite/70">Upload a TXT, PDF, or DOCX report first. Documents without readable text cannot be analysed.</p>
+            ) : null}
           </div>
 
           <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
@@ -590,7 +596,7 @@ function PerformancePage({
               </div>
             ) : (
               <p className="mt-5 rounded-xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
-                Generate advice after adding records. With limited data, the summary will include a confidence caveat.
+                Add at least one performance record before generating advice. With limited data, the summary will include a confidence caveat.
               </p>
             )}
           </div>
@@ -742,8 +748,8 @@ function EmptyState({ title, copy, action, onClick }: { title: string; copy: str
 function formatEmbeddingStatus(document: ResearchDocument) {
   if (document.embeddingStatus === 'embedding') return 'Embedding';
   if (document.embeddingStatus === 'embedded') return 'Embedded';
-  if (document.embeddingStatus === 'failed') return 'Failed';
-  if (document.embeddingStatus === 'keyword_only') return 'Keyword search only';
+  if (document.embeddingStatus === 'failed') return 'Keyword search ready';
+  if (document.embeddingStatus === 'keyword_only') return 'Keyword search ready';
 
   return 'Not embedded';
 }
@@ -793,7 +799,7 @@ function Upload({
         ...current,
         documents: current.documents.map((item) => (item.id === document.id ? notEmbeddedDocument : item)),
       }));
-      setNote(`${readyMessage} Not embedded until Supabase is connected.`);
+      setNote(`${readyMessage} Keyword search is ready now. Semantic search will start after Supabase connects.`);
       return;
     }
 
@@ -845,7 +851,7 @@ function Upload({
       setNote(
         result.embedded > 0
           ? `${readyMessage} Semantic search is ready for ${result.embedded.toLocaleString()} chunks.`
-          : `${readyMessage} Keyword search only.`,
+          : `${readyMessage} Keyword search is ready; semantic embeddings were skipped.`,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Embedding is unavailable. Keyword search remains available.';
@@ -868,7 +874,7 @@ function Upload({
       }));
       await saveDocument(keywordOnlyDocument);
       await saveChunks(failedEmbeddingChunks);
-      setNote(`${readyMessage} Keyword search only.`);
+      setNote(`${readyMessage} Keyword search is ready; semantic embeddings failed but upload is saved.`);
     }
   }
 
@@ -1189,7 +1195,7 @@ function Upload({
         <SectionHeader
           eyebrow="Upload"
           title="Add research material"
-          copy="Choose a source and let Research OS prepare it for the local library. TXT, PDF, and DOCX extraction stay in your browser."
+          copy="Choose a TXT, PDF, or DOCX file. Research OS extracts readable text, creates chunks for keyword search, then adds semantic embeddings when Supabase is connected."
         />
         <div className="rounded-2xl border border-dashed border-ink/16 bg-white p-5 shadow-sm">
           <div className="grid min-h-[340px] place-items-center rounded-2xl bg-paper/65 px-5 py-10 text-center">
@@ -1199,13 +1205,13 @@ function Upload({
               </div>
               <h3 className="mt-5 font-serif text-3xl font-semibold text-ink">Place a source on the desk</h3>
               <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-graphite/72">
-                Select a TXT, PDF, or DOCX file. Research OS extracts readable text locally, builds topics and summaries, then chunks it for chat.
+                Upload first, then ask Chat or Tutor questions against the extracted source chunks. Scanned PDFs may need OCR before they can be searched.
               </p>
               <div className="mx-auto mt-7 flex max-w-xl flex-col gap-3 sm:flex-row">
                 <input
                   value={fileName}
                   onChange={(event) => setFileName(event.target.value)}
-                  placeholder="optional-fallback-name.pdf"
+                  placeholder="optional-display-name.pdf"
                   className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4"
                 />
                 <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-graphite shadow-sm transition hover:text-ink">
@@ -1266,7 +1272,11 @@ function Upload({
                       document.pageCount ? `${document.pageCount.toLocaleString()} pages` : null,
                       document.wordCount ? `${document.wordCount.toLocaleString()} words` : null,
                       document.chunkIds?.length ? `${document.chunkIds.length.toLocaleString()} chunks` : null,
-                      formatEmbeddingStatus(document),
+                      document.status === 'Failed'
+                        ? null
+                        : document.embeddingStatus === 'keyword_only'
+                          ? 'Keyword search ready'
+                          : formatEmbeddingStatus(document),
                     ]
                       .filter(Boolean)
                       .join(' / ')}
@@ -1382,6 +1392,7 @@ function ResearchChat({
   const [errorMessage, setErrorMessage] = useState('');
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const latestCitations = [...chat].reverse().find((message) => message.citations?.length)?.citations ?? [];
+  const searchableDocuments = documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed');
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -1391,6 +1402,10 @@ function ResearchChat({
     const question = prompt.trim();
 
     if (!question || isLoading) return;
+    if (searchableDocuments.length === 0) {
+      setErrorMessage('Upload a readable TXT, PDF, or DOCX file before asking source-grounded questions.');
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: `chat-${Date.now()}-user`,
@@ -1486,10 +1501,10 @@ function ResearchChat({
   }
 
   return (
-    <div className="mx-auto grid h-[calc(100vh-23rem)] min-h-[420px] max-w-7xl gap-5 sm:h-[calc(100vh-12rem)] sm:min-h-[480px] xl:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="mx-auto grid min-h-[620px] max-w-7xl gap-5 sm:h-[calc(100vh-12rem)] sm:min-h-[480px] xl:grid-cols-[minmax(0,1fr)_340px]">
       <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-sm">
         <div className="shrink-0 border-b border-ink/8 p-5">
-          <SectionHeader eyebrow="Research chat" title="Ask with sources" copy="A fixed research conversation area with source material kept close, but out of the way." />
+          <SectionHeader eyebrow="Research chat" title="Ask with sources" copy="Answers are grounded in uploaded source chunks. Citations appear with each response when evidence is retrieved." />
         </div>
         <div className="scrollbar-soft min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
           {chat.length ? (
@@ -1514,8 +1529,8 @@ function ResearchChat({
             ))
           ) : (
             <EmptyState
-              title="Chat is ready when your sources are"
-              copy="You can ask a question now, but answers become more grounded after you upload TXT, PDF, or DOCX documents to this workspace."
+              title="Upload a source before chatting"
+              copy="Chat uses extracted document chunks for grounded answers. Add a readable TXT, PDF, or DOCX file, then ask about claims, methods, contradictions, or gaps."
             />
           )}
           {isLoading ? (
@@ -1545,8 +1560,8 @@ function ResearchChat({
               onKeyDown={(event) => {
                 if (event.key === 'Enter') sendMessage();
               }}
-              disabled={isLoading}
-              placeholder="Ask about claims, contradictions, methods, or gaps..."
+              disabled={isLoading || searchableDocuments.length === 0}
+              placeholder={searchableDocuments.length ? 'Ask about claims, contradictions, methods, or gaps...' : 'Upload a readable source before asking...'}
               className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4 disabled:cursor-not-allowed disabled:bg-paper"
             />
             <button
@@ -1554,7 +1569,7 @@ function ResearchChat({
               aria-label="Send research question"
               title="Send research question"
               onClick={sendMessage}
-              disabled={isLoading}
+              disabled={isLoading || searchableDocuments.length === 0}
               className="grid size-12 place-items-center rounded-xl bg-ink text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
             >
               <Send size={18} />
@@ -1590,6 +1605,7 @@ function ResearchChat({
 
 function StudyTools({ documents }: { documents: ResearchDocument[] }) {
   const [activeTool, setActiveTool] = useState('Summary');
+  const sourceDocuments = documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed');
   const tools = [
     { label: 'Summary', icon: Sparkles },
     { label: 'Flashcards', icon: BrainCircuit },
@@ -1603,7 +1619,7 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
       <SectionHeader
         eyebrow="Study tools"
         title="Turn sources into learning assets"
-        copy="Choose a workflow and keep the source context visible. These controls remain presentation-only until generation is added."
+        copy="Choose a study format and review the uploaded source context that would support it."
       />
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <div className="space-y-4">
@@ -1643,20 +1659,20 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workflow preview</p>
           <h3 className="mt-3 font-serif text-4xl font-semibold text-ink">{activeTool}</h3>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
-            {documents.length
-              ? `${activeTool} output would be generated from ${documents.length} workspace sources. This preview keeps the interaction model visible while generation is still intentionally absent.`
-              : 'Upload or select documents before generating study outputs. Your summaries, flashcards, essay plans, quizzes, and timelines will be based on real workspace sources.'}
+            {sourceDocuments.length
+              ? `${sourceDocuments.length} readable source${sourceDocuments.length === 1 ? '' : 's'} are available for ${activeTool.toLowerCase()} work. Use Chat or Tutor for generated help from these sources.`
+              : 'Upload readable documents before using study workflows. Summaries, flashcards, essay plans, quizzes, and timelines should be based on real workspace sources.'}
           </p>
           <div className="mt-7 space-y-3">
-            {documents.length ? (
-              documents.slice(0, 4).map((document) => (
+            {sourceDocuments.length ? (
+              sourceDocuments.slice(0, 4).map((document) => (
                 <div key={document.id} className="rounded-xl border border-ink/8 bg-paper/65 p-4">
                   <p className="font-semibold text-ink">{document.title}</p>
                   <p className="mt-2 line-clamp-2 text-sm leading-7 text-graphite/72">{document.summary}</p>
                 </div>
               ))
             ) : (
-              <EmptyState title="No source set selected" copy="Add a document to this workspace before generating study material." />
+              <EmptyState title="No readable source set" copy="Upload a document with extracted text before preparing study material." />
             )}
           </div>
         </div>
@@ -1709,7 +1725,7 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
         <EmptyState title="No knowledge map yet" copy="Upload documents with readable text and Research OS will use their topics to start a workspace map." />
       ) : (
       <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
-        <div className="relative min-h-[560px] overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-sm">
+        <div className="relative min-h-[460px] overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-sm sm:min-h-[560px]">
           <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             {mapEdges.map((edge) => {
               const from = nodeById[edge.from];
@@ -1731,7 +1747,7 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
               key={node.id}
               type="button"
               onClick={() => setSelectedNodeId(node.id)}
-              className={`absolute z-20 grid place-items-center rounded-full border px-4 text-center text-sm font-semibold leading-tight shadow-sm transition hover:scale-[1.02] ${toneClasses[node.tone]} ${
+              className={`absolute z-20 grid place-items-center overflow-hidden rounded-full border px-3 text-center text-xs font-semibold leading-tight shadow-sm transition hover:scale-[1.02] sm:px-4 sm:text-sm ${toneClasses[node.tone]} ${
                 selectedNodeId === node.id ? 'ring-4 ring-ink/8' : ''
               }`}
               style={{
@@ -1742,7 +1758,7 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
                 transform: 'translate(-50%, -50%)',
               }}
             >
-              {node.label}
+              <span className="max-w-full break-words">{node.label}</span>
             </button>
           ))}
         </div>

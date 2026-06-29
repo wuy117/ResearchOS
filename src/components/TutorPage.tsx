@@ -239,6 +239,7 @@ export function TutorPage({
 }: TutorPageProps) {
   const weakTopics = useMemo(() => getWeakTopics(performanceRecords, performanceSummaries, tutorMemory), [performanceRecords, performanceSummaries, tutorMemory]);
   const recommendedTopics = useMemo(() => getRecommendedTopics(documents, weakTopics), [documents, weakTopics]);
+  const hasReadableSources = documents.some((document) => document.extractedText?.trim() && document.status !== 'Failed');
   const recentTopics = tutorMemory.topicsStudied.slice(0, 5);
   const activeLesson = tutorLessons.find((lesson) => lesson.workspaceId === workspaceId && lesson.status === 'in_progress') ?? tutorLessons.find((lesson) => lesson.workspaceId === workspaceId);
   const latestExam = tutorExamSessions.find((exam) => exam.workspaceId === workspaceId);
@@ -286,7 +287,7 @@ export function TutorPage({
   async function startLesson(nextTopic = topic || suggestedTopic) {
     const cleanTopic = nextTopic.trim();
     if (!cleanTopic) {
-      setStatus('Choose a topic after uploading source material.');
+      setStatus(hasReadableSources ? 'Choose a topic before starting a lesson.' : 'Upload a readable source before starting a source-grounded lesson.');
       return;
     }
 
@@ -375,7 +376,7 @@ export function TutorPage({
   async function askSocratic(nextTopic = topic || suggestedTopic) {
     const cleanTopic = nextTopic.trim();
     if (!cleanTopic) {
-      setStatus('Choose a topic before Socratic mode.');
+      setStatus(hasReadableSources ? 'Choose a topic before Socratic mode.' : 'Upload a readable source before starting Socratic mode.');
       return;
     }
 
@@ -439,7 +440,7 @@ export function TutorPage({
   async function generateExam(nextTopic = topic || suggestedTopic) {
     const cleanTopic = nextTopic.trim();
     if (!cleanTopic) {
-      setStatus('Choose a topic before exam mode.');
+      setStatus(hasReadableSources ? 'Choose a topic before exam mode.' : 'Upload a readable source before generating exam questions.');
       return;
     }
 
@@ -543,7 +544,7 @@ export function TutorPage({
       <SectionHeader
         eyebrow="AI Tutor"
         title="Tutor"
-        copy="A structured learning space for lessons, active recall, Socratic questioning, and exam practice grounded in your uploaded sources."
+        copy="Lessons, active recall, Socratic questioning, and exam practice grounded in retrieved source chunks."
       />
 
       <div className="rounded-2xl border border-ink/8 bg-white p-4 shadow-sm">
@@ -598,16 +599,19 @@ export function TutorPage({
         <TutorHome
           activeLesson={activeLesson}
           weakestTopic={weakestTopic}
-          suggestedTopic={suggestedTopic}
+          suggestedTopic={hasReadableSources ? suggestedTopic : ''}
           recentTopics={recentTopics}
-          weakTopics={weakTopics}
-          recommendedTopics={recommendedTopics}
+          weakTopics={hasReadableSources ? weakTopics : []}
+          recommendedTopics={hasReadableSources ? recommendedTopics : []}
           tutorMemory={tutorMemory}
           tutorAttempts={tutorAttempts}
+          hasReadableSources={hasReadableSources}
           onContinue={() => {
             if (activeLesson) {
               setCurrentLessonId(activeLesson.id);
               setView('lesson');
+            } else if (!suggestedTopic) {
+              setStatus(hasReadableSources ? 'Type a topic to start a lesson.' : 'Upload a readable source before starting a lesson.');
             } else {
               startLesson(suggestedTopic);
             }
@@ -676,6 +680,7 @@ function TutorHome({
   recommendedTopics,
   tutorMemory,
   tutorAttempts,
+  hasReadableSources,
   onContinue,
   onStartTopic,
 }: {
@@ -687,6 +692,7 @@ function TutorHome({
   recommendedTopics: string[];
   tutorMemory: TutorMemory;
   tutorAttempts: TutorAttempt[];
+  hasReadableSources: boolean;
   onContinue: () => void;
   onStartTopic: (topic: string) => void;
 }) {
@@ -702,10 +708,19 @@ function TutorHome({
           </div>
           <h3 className="mt-4 font-serif text-4xl font-semibold text-ink">{activeLesson?.topic ?? suggestedTopic ?? 'Build a lesson from your sources'}</h3>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
-            {activeLesson ? activeLesson.objective : 'Tutor will retrieve source chunks, teach the topic, and test recall before showing answers.'}
+            {activeLesson
+              ? activeLesson.objective
+              : hasReadableSources
+                ? 'Tutor will retrieve source chunks, teach the topic, and test recall before showing answers.'
+                : 'Upload a readable TXT, PDF, or DOCX source first. Tutor needs extracted chunks before it can teach from your material.'}
           </p>
-          <button type="button" onClick={onContinue} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
-            {activeLesson ? 'Continue previous lesson' : 'Start suggested lesson'}
+          <button
+            type="button"
+            onClick={onContinue}
+            disabled={!activeLesson && !hasReadableSources}
+            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55"
+          >
+            {activeLesson ? 'Continue previous lesson' : hasReadableSources ? 'Start suggested lesson' : 'Upload sources first'}
             <ArrowRight size={17} />
           </button>
         </div>
@@ -717,8 +732,8 @@ function TutorHome({
       </section>
 
       <section className="grid gap-6 lg:grid-cols-3">
-        <TopicPanel title="Recommended topics" icon={Sparkles} topics={recommendedTopics} onStartTopic={onStartTopic} emptyCopy="Upload documents to create recommendations." />
-        <TopicPanel title="Weak topics from Performance" icon={Lightbulb} topics={weakTopics} onStartTopic={onStartTopic} emptyCopy="Performance weaknesses will appear here." />
+        <TopicPanel title="Recommended topics" icon={Sparkles} topics={recommendedTopics} onStartTopic={onStartTopic} emptyCopy="Upload readable documents to create source-grounded recommendations." />
+        <TopicPanel title="Weak topics from Performance" icon={Lightbulb} topics={weakTopics} onStartTopic={onStartTopic} emptyCopy={hasReadableSources ? 'Performance weaknesses will appear here.' : 'Upload readable source material before turning performance weaknesses into lessons.'} />
         <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
             <RotateCcw size={15} />
