@@ -12,7 +12,7 @@ import type {
 } from '../types/research';
 import { loadResearchState, saveResearchState } from '../utils/storage';
 
-type StorageMode = 'local' | 'supabase';
+export type StorageStatus = 'missing-env' | 'client-created' | 'connection-failed' | 'connected';
 type StoredRow<T> = {
   local_id: string;
   data: T;
@@ -22,7 +22,7 @@ type StoredRow<T> = {
 
 export type LoadStateResult = {
   state: ResearchState;
-  mode: StorageMode;
+  status: StorageStatus;
 };
 
 function getNow() {
@@ -122,7 +122,7 @@ export async function loadState(): Promise<LoadStateResult> {
   const localState = loadResearchState();
 
   if (!isSupabaseEnabled) {
-    return { state: localState, mode: 'local' };
+    return { state: localState, status: 'missing-env' };
   }
 
   try {
@@ -148,18 +148,18 @@ export async function loadState(): Promise<LoadStateResult> {
     const state = hasRemoteResearchData(rows) ? mergeStateFromSupabase(localState, rows) : localState;
 
     saveResearchState(state);
-    return { state, mode: 'supabase' };
+    return { state, status: 'connected' };
   } catch (error) {
     console.warn('Supabase load failed; using localStorage fallback.', error);
-    return { state: localState, mode: 'local' };
+    return { state: localState, status: 'connection-failed' };
   }
 }
 
-export async function saveState(state: ResearchState): Promise<StorageMode> {
+export async function saveState(state: ResearchState): Promise<StorageStatus> {
   saveResearchState(state);
 
   if (!isSupabaseEnabled) {
-    return 'local';
+    return 'missing-env';
   }
 
   try {
@@ -173,10 +173,10 @@ export async function saveState(state: ResearchState): Promise<StorageMode> {
       upsertMany('performance_summaries', state.performanceSummaries),
     ]);
 
-    return 'supabase';
+    return 'connected';
   } catch (error) {
     console.warn('Supabase save failed; localStorage fallback remains current.', error);
-    return 'local';
+    return 'connection-failed';
   }
 }
 

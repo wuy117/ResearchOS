@@ -1,23 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
-import { loadState, saveState } from '../services/researchStore';
+import { isSupabaseEnabled } from '../lib/supabase';
+import { loadState, saveState, type StorageStatus } from '../services/researchStore';
 import type { ResearchState } from '../types/research';
 import { loadResearchState } from '../utils/storage';
 
-export type StorageStatus = 'loading' | 'local' | 'supabase';
+export type AppStorageStatus = 'loading' | StorageStatus;
 
 export function useResearchState() {
   const [state, setState] = useState<ResearchState>(() => loadResearchState());
-  const [storageStatus, setStorageStatus] = useState<StorageStatus>('loading');
+  const [storageStatus, setStorageStatus] = useState<AppStorageStatus>(isSupabaseEnabled ? 'client-created' : 'missing-env');
   const hasLoadedRemoteState = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
 
-    loadState().then(({ state: loadedState, mode }) => {
+    loadState().then(({ state: loadedState, status }) => {
       if (!isMounted) return;
 
       setState(loadedState);
-      setStorageStatus(mode);
+      setStorageStatus(status);
       hasLoadedRemoteState.current = true;
     });
 
@@ -29,8 +30,8 @@ export function useResearchState() {
   useEffect(() => {
     if (!hasLoadedRemoteState.current) return;
 
-    saveState(state).then((mode) => {
-      setStorageStatus(mode);
+    saveState(state).then((status) => {
+      setStorageStatus(status);
     });
   }, [state]);
 
