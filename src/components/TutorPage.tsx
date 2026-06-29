@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Sparkles,
   Target,
+  Trash2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
@@ -45,6 +46,8 @@ import { retrieveChunks, type RetrievedChunk } from '../utils/retrieveChunks';
 import { CitationCard } from './CitationCard';
 import { SectionHeader } from './SectionHeader';
 import { getDocumentMetadata } from '../utils/learningModel';
+import { deleteSupabaseRows } from '../services/researchStore';
+import type { AppStorageStatus } from '../hooks/useResearchState';
 
 type TutorView = 'home' | 'lesson' | 'socratic' | 'exam';
 
@@ -59,6 +62,7 @@ type TutorPageProps = {
   tutorSocraticTurns: TutorSocraticTurn[];
   tutorExamSessions: TutorExamSession[];
   tutorMemory: TutorMemory;
+  storageStatus: AppStorageStatus;
   setState: Dispatch<SetStateAction<ResearchState>>;
 };
 
@@ -248,6 +252,7 @@ export function TutorPage({
   tutorSocraticTurns,
   tutorExamSessions,
   tutorMemory,
+  storageStatus,
   setState,
 }: TutorPageProps) {
   const weakTopics = useMemo(() => getWeakTopics(performanceRecords, performanceSummaries, tutorMemory), [performanceRecords, performanceSummaries, tutorMemory]);
@@ -269,6 +274,7 @@ export function TutorPage({
   const [socraticAnswer, setSocraticAnswer] = useState('');
   const [examAnswers, setExamAnswers] = useState<Record<string, string>>({});
   const [examFeedback, setExamFeedback] = useState<Record<string, TutorMarkResponse>>({});
+  const [confirmAction, setConfirmAction] = useState<{ title: string; body: string; confirmLabel: string; onConfirm: () => Promise<void> | void } | null>(null);
 
   const currentLesson = tutorLessons.find((lesson) => lesson.id === currentLessonId) ?? activeLesson;
   const latestSocraticTurn = tutorSocraticTurns.find((turn) => turn.workspaceId === workspaceId);
@@ -552,6 +558,52 @@ export function TutorPage({
     }
   }
 
+  async function deleteTutorSession(kind: 'lesson' | 'socratic' | 'exam', id: string) {
+    try {
+      if (storageStatus === 'connected') {
+        await deleteSupabaseRows({
+          tutor_lessons: kind === 'lesson' ? [id] : [],
+          tutor_socratic_turns: kind === 'socratic' ? [id] : [],
+          tutor_exam_sessions: kind === 'exam' ? [id] : [],
+        });
+      }
+
+      setState((current) => ({
+        ...current,
+        tutorLessons: kind === 'lesson' ? current.tutorLessons.filter((lesson) => lesson.id !== id) : current.tutorLessons,
+        tutorSocraticTurns: kind === 'socratic' ? current.tutorSocraticTurns.filter((turn) => turn.id !== id) : current.tutorSocraticTurns,
+        tutorExamSessions: kind === 'exam' ? current.tutorExamSessions.filter((exam) => exam.id !== id) : current.tutorExamSessions,
+      }));
+      setStatus('Tutor session deleted.');
+    } catch (error) {
+      setStatus(error instanceof Error ? `Tutor session was not deleted: ${error.message}` : 'Tutor session was not deleted because Supabase failed.');
+    }
+  }
+
+  async function clearTutorMemory() {
+    try {
+      if (storageStatus === 'connected') {
+        await deleteSupabaseRows({
+          tutor_memory: ['tutor-memory'],
+          tutor_attempts: tutorAttempts.map((attempt) => attempt.id),
+        });
+      }
+
+      setState((current) => ({
+        ...current,
+        tutorAttempts: [],
+        tutorMemory: {
+          lessonsCompleted: 0,
+          topicsStudied: [],
+          revisionStreak: 0,
+        },
+      }));
+      setStatus('Tutor memory was cleared. Lessons and exam sets were kept.');
+    } catch (error) {
+      setStatus(error instanceof Error ? `Tutor memory was not cleared: ${error.message}` : 'Tutor memory was not cleared because Supabase failed.');
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-7">
       <SectionHeader
@@ -563,6 +615,77 @@ export function TutorPage({
       <div className="rounded-2xl border border-ink/8 bg-white p-4 shadow-sm">
         <p className="text-sm leading-7 text-graphite/74">{isLoading ? 'Working with retrieved context...' : status}</p>
       </div>
+
+      <section className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Tutor data</p>
+            <h3 className="mt-2 text-lg font-semibold text-ink">Sessions and learning memory</h3>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              setConfirmAction({
+                title: 'Clear Tutor memory?',
+                body: 'This clears recall attempts, topic confidence, revision streak, and Tutor memory. Existing lesson and exam session content is kept.',
+                confirmLabel: 'Clear memory',
+                onConfirm: clearTutorMemory,
+              })
+            }
+            className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"
+          >
+            <Trash2 size={14} />
+            Clear memory
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          {tutorLessons.slice(0, 3).map((lesson) => (
+            <TutorDataCard
+              key={lesson.id}
+              title={lesson.topic}
+              detail={lesson.objective}
+              onDelete={() =>
+                setConfirmAction({
+                  title: `Delete lesson on ${lesson.topic}?`,
+                  body: 'This deletes the saved Tutor lesson. Tutor memory and attempts are kept unless cleared separately.',
+                  confirmLabel: 'Delete lesson',
+                  onConfirm: () => deleteTutorSession('lesson', lesson.id),
+                })
+              }
+            />
+          ))}
+          {tutorSocraticTurns.slice(0, 2).map((turn) => (
+            <TutorDataCard
+              key={turn.id}
+              title={turn.topic}
+              detail={turn.question}
+              onDelete={() =>
+                setConfirmAction({
+                  title: `Delete Socratic session on ${turn.topic}?`,
+                  body: 'This deletes the saved Socratic turn. Tutor memory and attempts are kept unless cleared separately.',
+                  confirmLabel: 'Delete session',
+                  onConfirm: () => deleteTutorSession('socratic', turn.id),
+                })
+              }
+            />
+          ))}
+          {tutorExamSessions.slice(0, 2).map((exam) => (
+            <TutorDataCard
+              key={exam.id}
+              title={exam.topic}
+              detail={`${exam.questions.length} exam question${exam.questions.length === 1 ? '' : 's'}`}
+              onDelete={() =>
+                setConfirmAction({
+                  title: `Delete exam set on ${exam.topic}?`,
+                  body: 'This deletes the saved Tutor exam session. Marking attempts are kept unless memory is cleared separately.',
+                  confirmLabel: 'Delete exam set',
+                  onConfirm: () => deleteTutorSession('exam', exam.id),
+                })
+              }
+            />
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
         <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
@@ -680,6 +803,60 @@ export function TutorPage({
           <EmptyPanel title="No exam set yet" copy="Generate exam-style questions from uploaded documents." />
         )
       ) : null}
+      <TutorConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
+    </div>
+  );
+}
+
+function TutorDataCard({ title, detail, onDelete }: { title: string; detail: string; onDelete: () => void }) {
+  return (
+    <article className="rounded-lg border border-ink/8 bg-paper/65 p-4">
+      <p className="font-semibold text-ink">{title}</p>
+      <p className="mt-2 line-clamp-2 text-sm leading-6 text-graphite/70">{detail}</p>
+      <button type="button" onClick={onDelete} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+        <Trash2 size={14} />
+        Delete
+      </button>
+    </article>
+  );
+}
+
+function TutorConfirmModal({
+  action,
+  onClose,
+}: {
+  action: { title: string; body: string; confirmLabel: string; onConfirm: () => Promise<void> | void } | null;
+  onClose: () => void;
+}) {
+  const [isWorking, setIsWorking] = useState(false);
+  if (!action) return null;
+
+  async function confirm() {
+    if (!action) return;
+    setIsWorking(true);
+    try {
+      await action.onConfirm();
+      onClose();
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
+      <div className="w-full max-w-lg rounded-xl border border-ink/10 bg-white p-5 shadow-soft">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Confirm destructive action</p>
+        <h2 className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
+        <p className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={onClose} disabled={isWorking} className="rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink">
+            Cancel
+          </button>
+          <button type="button" onClick={confirm} disabled={isWorking} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:bg-red-400">
+            {isWorking ? 'Working...' : action.confirmLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,8 +1,14 @@
-import { BarChart3, BookOpen, BrainCircuit, CalendarDays, Files, GraduationCap, LayoutDashboard, Map, MessageSquareText, Plus, Search, UploadCloud } from 'lucide-react';
+import { BarChart3, BookOpen, BrainCircuit, CalendarDays, Files, GraduationCap, LayoutDashboard, Map, MessageSquareText, Plus, Search, Trash2, UploadCloud, Wrench } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useState } from 'react';
+import { initialState } from '../data/initialState';
 import type { AppStorageStatus } from '../hooks/useResearchState';
+import { isSupabaseEnabled } from '../lib/supabase';
+import { clearLocalStateOnly, clearSupabaseScope, type SupabaseResetScope } from '../services/researchStore';
 import type { PageId, ResearchState } from '../types/research';
+import { embedChunks } from '../utils/api';
+import { buildDocumentMetadata, deriveCollections } from '../utils/learningModel';
+import { getResearchStorageStats } from '../utils/storage';
 
 const navItems: Array<{ id: PageId; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -50,6 +56,7 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
     'connection-failed': 'bg-red-500',
     connected: 'bg-moss',
   }[storageStatus];
+  const showDeveloperTools = import.meta.env.DEV || new URLSearchParams(window.location.search).get('dev') === '1';
 
   function createWorkspace() {
     const name = workspaceName.trim();
@@ -172,6 +179,10 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
                 {activeWorkspace?.description ?? 'Choose a workspace to focus your desk.'}
               </p>
             </div>
+
+            {showDeveloperTools ? (
+              <DeveloperTools state={state} setState={setState} storageStatus={storageStatus} storageLabel={storageLabel} />
+            ) : null}
           </div>
         </aside>
 
@@ -220,6 +231,337 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
 
           <div className="scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6 xl:px-10 2xl:px-12">{children}</div>
         </main>
+      </div>
+    </div>
+  );
+}
+
+type DeveloperConfirmAction = {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  onConfirm: () => Promise<void> | void;
+};
+
+function DeveloperTools({
+  state,
+  setState,
+  storageStatus,
+  storageLabel,
+}: {
+  state: ResearchState;
+  setState: Dispatch<SetStateAction<ResearchState>>;
+  storageStatus: AppStorageStatus;
+  storageLabel: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [message, setMessage] = useState('');
+  const [lastError, setLastError] = useState('');
+  const [confirmAction, setConfirmAction] = useState<DeveloperConfirmAction | null>(null);
+  const [documentId, setDocumentId] = useState(state.documents[0]?.id ?? '');
+  const storageStats = getResearchStorageStats();
+  const embeddedChunkCount = state.chunks.filter((chunk) => chunk.embeddingStatus === 'embedded').length;
+  const tutorSessionCount = state.tutorLessons.length + state.tutorSocraticTurns.length + state.tutorExamSessions.length;
+  const embeddingConfigured = isSupabaseEnabled && storageStatus === 'connected';
+
+  function runLocalReset(label: string, updater: (current: ResearchState) => ResearchState) {
+    setState((current) => updater(current));
+    setMessage(`${label} completed locally.`);
+  }
+
+  async function runSupabaseReset(scope: SupabaseResetScope) {
+    try {
+      await clearSupabaseScope(scope);
+      setState((current) => applyScopedStateClear(current, scope));
+      setMessage(`${scope === 'full' ? 'Full Supabase reset' : `Supabase ${scope} reset`} completed.`);
+      setLastError('');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Supabase reset failed.';
+      setLastError(message);
+      setMessage(`Supabase reset did not run: ${message}`);
+    }
+  }
+
+  async function rerunEmbeddings(chunkIds: string[], label: string) {
+    if (!embeddingConfigured || chunkIds.length === 0) return;
+    try {
+      const result = await embedChunks({ chunkIds });
+      setMessage(`${label}: embedded ${result.embedded}, failed ${result.failed}, skipped ${result.skipped}.`);
+      setLastError('');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Embedding rebuild failed.';
+      setLastError(message);
+      setMessage(message);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-ink/8 bg-white p-4">
+      <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
+        <span>
+          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Developer Tools</span>
+          <span className="mt-1 block text-sm font-semibold text-ink">Diagnostics and resets</span>
+        </span>
+        <Wrench size={17} className="text-graphite/60" />
+      </button>
+      {isOpen ? (
+        <div className="mt-4 space-y-4">
+          {message ? <p className="rounded-lg bg-paper px-3 py-2 text-xs leading-5 text-graphite/75">{message}</p> : null}
+          <DeveloperStatGrid
+            items={[
+              ['Version', import.meta.env.VITE_APP_VERSION ?? '0.1.0'],
+              ['Environment', import.meta.env.DEV ? 'development' : 'production'],
+              ['Storage mode', storageLabel],
+              ['Supabase', isSupabaseEnabled ? 'enabled' : 'disabled'],
+              ['Embedding', embeddingConfigured ? 'configured' : 'not ready'],
+              ['localStorage keys', storageStats.keys.toLocaleString()],
+              ['localStorage bytes', storageStats.bytes.toLocaleString()],
+              ['Documents', state.documents.length.toLocaleString()],
+              ['Chunks', state.chunks.length.toLocaleString()],
+              ['Embedded chunks', embeddedChunkCount.toLocaleString()],
+              ['Performance', state.performanceRecords.length.toLocaleString()],
+              ['Tutor sessions', tutorSessionCount.toLocaleString()],
+              ['Collections', state.collections.length.toLocaleString()],
+              ['Last error', lastError || 'none'],
+            ]}
+          />
+
+          <DeveloperSection title="Local reset tools">
+            <DeveloperDangerButton
+              label="Clear local browser data only"
+              onClick={() =>
+                setConfirmAction({
+                  title: 'Clear local browser data only?',
+                  body: 'This removes the Research OS localStorage item. Current in-memory data stays visible until a refresh.',
+                  confirmLabel: 'Clear local browser data',
+                  onConfirm: () => {
+                    clearLocalStateOnly();
+                    setMessage('Local browser data was cleared. Refresh to reload from available remote state or defaults.');
+                  },
+                })
+              }
+            />
+            <DeveloperDangerButton label="Clear chat history" onClick={() => confirmLocal('Clear chat history?', 'This deletes all local chat messages.', 'Clear chat', (current) => ({ ...current, chat: [] }))} />
+            <DeveloperDangerButton label="Clear documents and chunks" onClick={() => confirmLocal('Clear documents and chunks?', 'This deletes local documents, chunks, and document insights.', 'Clear documents', (current) => applyScopedStateClear(current, 'documents'))} />
+            <DeveloperDangerButton label="Clear performance data" onClick={() => confirmLocal('Clear performance data?', 'This deletes local performance records and summaries.', 'Clear performance', (current) => applyScopedStateClear(current, 'performance'))} />
+            <DeveloperDangerButton label="Clear tutor data" onClick={() => confirmLocal('Clear tutor data?', 'This deletes local Tutor sessions, attempts, and memory.', 'Clear tutor', (current) => applyScopedStateClear(current, 'tutor'))} />
+            <DeveloperDangerButton label="Clear collections/timeline metadata" onClick={() => confirmLocal('Clear collections and metadata?', 'This clears local collections and document metadata. Timeline remains derived from current data.', 'Clear metadata', (current) => applyScopedStateClear(current, 'collections'))} />
+            <DeveloperDangerButton label="Full local reset" onClick={() => confirmLocal('Full local reset?', 'This resets the current local app state to the first-launch defaults.', 'Reset local state', () => initialState)} />
+          </DeveloperSection>
+
+          <DeveloperSection title="Supabase reset tools">
+            {(['documents', 'performance', 'tutor', 'collections', 'full'] as SupabaseResetScope[]).map((scope) => (
+              <DeveloperDangerButton
+                key={scope}
+                label={scope === 'full' ? 'Full Supabase reset' : `Clear Supabase ${scope}${scope === 'documents' ? '/chunks' : ''}`}
+                disabled={storageStatus !== 'connected'}
+                reason={storageStatus === 'connected' ? undefined : 'Supabase is not connected.'}
+                onClick={() =>
+                  setConfirmAction({
+                    title: scope === 'full' ? 'Full Supabase reset?' : `Clear Supabase ${scope}?`,
+                    body: 'This deletes remote rows for the selected scope. It does not require authentication beyond the configured Supabase client.',
+                    confirmLabel: scope === 'full' ? 'Reset Supabase' : 'Clear Supabase data',
+                    onConfirm: () => runSupabaseReset(scope),
+                  })
+                }
+              />
+            ))}
+          </DeveloperSection>
+
+          <DeveloperSection title="Rebuild tools">
+            <DeveloperActionButton label="Rebuild local derived metadata" onClick={() => runLocalReset('Metadata rebuild', rebuildMetadata)} />
+            <DeveloperActionButton label="Rebuild collections from documents" onClick={() => runLocalReset('Collections rebuild', (current) => ({ ...current, collections: deriveCollections(current) }))} />
+            <DeveloperActionButton label="Rebuild timeline from current data" onClick={() => setMessage('Timeline is derived live from current data; no stored timeline rows needed rebuilding.')} />
+            <DeveloperActionButton
+              label="Re-run embeddings for all chunks"
+              disabled={!embeddingConfigured || state.chunks.length === 0}
+              reason={!embeddingConfigured ? 'Semantic search is not connected.' : state.chunks.length === 0 ? 'No chunks to embed.' : undefined}
+              onClick={() => rerunEmbeddings(state.chunks.map((chunk) => chunk.id), 'All chunk embeddings')}
+            />
+            <select value={documentId} onChange={(event) => setDocumentId(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs outline-none">
+              <option value="">Choose document</option>
+              {state.documents.map((document) => (
+                <option key={document.id} value={document.id}>{document.title}</option>
+              ))}
+            </select>
+            <DeveloperActionButton
+              label="Re-run embeddings for one document"
+              disabled={!embeddingConfigured || !documentId}
+              reason={!embeddingConfigured ? 'Semantic search is not connected.' : !documentId ? 'Choose a document first.' : undefined}
+              onClick={() => rerunEmbeddings(state.chunks.filter((chunk) => chunk.documentId === documentId).map((chunk) => chunk.id), 'Document embeddings')}
+            />
+          </DeveloperSection>
+        </div>
+      ) : null}
+      <DeveloperConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
+    </div>
+  );
+
+  function confirmLocal(title: string, body: string, confirmLabel: string, updater: (current: ResearchState) => ResearchState) {
+    setConfirmAction({
+      title,
+      body,
+      confirmLabel,
+      onConfirm: () => runLocalReset(confirmLabel, updater),
+    });
+  }
+}
+
+function applyScopedStateClear(state: ResearchState, scope: SupabaseResetScope): ResearchState {
+  if (scope === 'documents') {
+    return {
+      ...state,
+      documents: [],
+      chunks: [],
+      insights: [],
+      collections: deriveCollections({ ...state, documents: [], chunks: [], insights: [] }),
+      performanceRecords: state.performanceRecords.map((record) => ({ ...record, sourceDocumentId: undefined })),
+    };
+  }
+
+  if (scope === 'performance') {
+    return rebuildMetadata({
+      ...state,
+      performanceRecords: [],
+      performanceSummaries: [],
+    });
+  }
+
+  if (scope === 'tutor') {
+    return {
+      ...state,
+      tutorLessons: [],
+      tutorAttempts: [],
+      tutorSocraticTurns: [],
+      tutorExamSessions: [],
+      tutorMemory: {
+        lessonsCompleted: 0,
+        topicsStudied: [],
+        revisionStreak: 0,
+      },
+    };
+  }
+
+  if (scope === 'collections') {
+    return {
+      ...state,
+      collections: [],
+      documents: state.documents.map((document) => ({
+        ...document,
+        metadata: undefined,
+        collectionIds: [],
+      })),
+    };
+  }
+
+  return initialState;
+}
+
+function rebuildMetadata(state: ResearchState): ResearchState {
+  const documents = state.documents.map((document) => {
+    const metadata = buildDocumentMetadata(document, state.performanceRecords);
+    return {
+      ...document,
+      metadata,
+      collectionIds: metadata.collections.map((collection) => `collection-${collection.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`),
+    };
+  });
+
+  const nextState = {
+    ...state,
+    documents,
+  };
+
+  return {
+    ...nextState,
+    collections: deriveCollections(nextState),
+  };
+}
+
+function DeveloperStatGrid({ items }: { items: Array<[string, string]> }) {
+  return (
+    <div className="grid gap-2">
+      {items.map(([label, value]) => (
+        <div key={label} className="flex justify-between gap-3 rounded-lg bg-paper/65 px-3 py-2 text-xs">
+          <span className="text-graphite/65">{label}</span>
+          <span className="max-w-[130px] truncate font-semibold text-ink">{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DeveloperSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="border-t border-ink/8 pt-3">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{title}</p>
+      <div className="space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function DeveloperDangerButton({ label, onClick, disabled = false, reason }: { label: string; onClick: () => void; disabled?: boolean; reason?: string }) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className="inline-flex w-full items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-left text-xs font-semibold text-red-700 disabled:cursor-not-allowed disabled:border-ink/8 disabled:bg-paper disabled:text-graphite/45"
+      >
+        <Trash2 size={14} />
+        {label}
+      </button>
+      {disabled && reason ? <p className="mt-1 text-xs leading-5 text-graphite/60">{reason}</p> : null}
+    </div>
+  );
+}
+
+function DeveloperActionButton({ label, onClick, disabled = false, reason }: { label: string; onClick: () => void; disabled?: boolean; reason?: string }) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-left text-xs font-semibold text-ink disabled:cursor-not-allowed disabled:bg-paper disabled:text-graphite/45"
+      >
+        {label}
+      </button>
+      {disabled && reason ? <p className="mt-1 text-xs leading-5 text-graphite/60">{reason}</p> : null}
+    </div>
+  );
+}
+
+function DeveloperConfirmModal({ action, onClose }: { action: DeveloperConfirmAction | null; onClose: () => void }) {
+  const [isWorking, setIsWorking] = useState(false);
+  if (!action) return null;
+
+  async function confirm() {
+    if (!action) return;
+    setIsWorking(true);
+    try {
+      await action.onConfirm();
+      onClose();
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
+      <div className="w-full max-w-lg rounded-xl border border-ink/10 bg-white p-5 shadow-soft">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Developer confirmation</p>
+        <h2 className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
+        <p className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={onClose} disabled={isWorking} className="rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink">
+            Cancel
+          </button>
+          <button type="button" onClick={confirm} disabled={isWorking} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:bg-red-400">
+            {isWorking ? 'Working...' : action.confirmLabel}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -79,3 +79,28 @@ export function saveResearchState(state: ResearchState) {
     // Local-first apps should keep running even when browser storage is unavailable.
   }
 }
+
+export function clearResearchState() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Clearing local data should never crash the app.
+  }
+}
+
+export function getResearchStorageStats() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return {
+      hasState: Boolean(saved),
+      bytes: saved ? new Blob([saved]).size : 0,
+      keys: Object.keys(localStorage).length,
+    };
+  } catch {
+    return {
+      hasState: false,
+      bytes: 0,
+      keys: 0,
+    };
+  }
+}

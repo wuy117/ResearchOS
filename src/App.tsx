@@ -6,10 +6,12 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock3,
+  Edit3,
   FilePlus2,
   FolderKanban,
   LibraryBig,
   Network,
+  Trash2,
   Send,
   Sparkles,
   Tags,
@@ -24,8 +26,8 @@ import { SectionHeader } from './components/SectionHeader';
 import { TutorPage } from './components/TutorPage';
 import { useResearchState } from './hooks/useResearchState';
 import { isSupabaseEnabled } from './lib/supabase';
-import { saveChunks, saveDocument } from './services/researchStore';
-import type { AssessmentType, ChatMessage, DocumentChunk, MapEdge, MapNode, PageId, PerformanceRecord, PerformanceSummary, ResearchDocument } from './types/research';
+import { deleteSupabaseRows, saveChunks, saveDocument } from './services/researchStore';
+import type { AssessmentType, ChatMessage, Collection, DocumentChunk, DocumentMetadata, MapEdge, MapNode, PageId, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState } from './types/research';
 import { analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
@@ -45,8 +47,8 @@ function App() {
 
   const page = {
     dashboard: <Dashboard state={state} documents={workspaceDocuments} setActivePage={setActivePage} />,
-    library: <Library state={state} documents={workspaceDocuments} chunks={state.chunks} />,
-    performance: <PerformancePage records={state.performanceRecords} summaries={state.performanceSummaries} documents={state.documents} setState={setState} />,
+    library: <Library state={state} documents={workspaceDocuments} chunks={state.chunks} storageStatus={storageStatus} setState={setState} />,
+    performance: <PerformancePage records={state.performanceRecords} summaries={state.performanceSummaries} documents={state.documents} storageStatus={storageStatus} setState={setState} />,
     timeline: <TimelinePage events={buildTimelineEvents(state)} />,
     tutor: (
       <TutorPage
@@ -60,11 +62,12 @@ function App() {
         tutorSocraticTurns={state.tutorSocraticTurns}
         tutorExamSessions={state.tutorExamSessions}
         tutorMemory={state.tutorMemory}
+        storageStatus={storageStatus}
         setState={setState}
       />
     ),
     upload: <Upload stateDocuments={workspaceDocuments} activeWorkspaceId={state.activeWorkspaceId} storageStatus={storageStatus} performanceRecords={state.performanceRecords} setState={setState} />,
-    chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} workspaceId={state.activeWorkspaceId} documents={workspaceDocuments} chunks={state.chunks} performanceRecords={state.performanceRecords} performanceSummaries={state.performanceSummaries} tutorLessons={state.tutorLessons} tutorAttempts={state.tutorAttempts} setState={setState} />,
+    chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} workspaceId={state.activeWorkspaceId} documents={workspaceDocuments} chunks={state.chunks} performanceRecords={state.performanceRecords} performanceSummaries={state.performanceSummaries} tutorLessons={state.tutorLessons} tutorAttempts={state.tutorAttempts} storageStatus={storageStatus} setState={setState} />,
     study: <StudyTools documents={workspaceDocuments} />,
     map: <KnowledgeMap documents={workspaceDocuments} />,
   }[activePage];
@@ -216,8 +219,72 @@ function Dashboard({
   );
 }
 
-function Library({ state, documents, chunks }: { state: ReturnType<typeof useResearchState>['state']; documents: ResearchDocument[]; chunks: DocumentChunk[] }) {
+function Library({
+  state,
+  documents,
+  chunks,
+  storageStatus,
+  setState,
+}: {
+  state: ReturnType<typeof useResearchState>['state'];
+  documents: ResearchDocument[];
+  chunks: DocumentChunk[];
+  storageStatus: ReturnType<typeof useResearchState>['storageStatus'];
+  setState: ReturnType<typeof useResearchState>['setState'];
+}) {
   const collections = deriveCollections(state);
+  const [message, setMessage] = useState('');
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+
+  function renameCollection(collection: Collection, name: string) {
+    const nextName = name.trim();
+    if (!nextName) return;
+
+    setState((current) =>
+      withDerivedCollections({
+        ...current,
+        collections: current.collections.map((item) => (item.id === collection.id ? { ...item, name: nextName, source: 'user' } : item)),
+        documents: current.documents.map((document) => {
+          const metadata = getDocumentMetadata(document, current.performanceRecords);
+          if (!metadata.collections.some((item) => item.toLowerCase() === collection.name.toLowerCase())) return document;
+          const nextCollections = metadata.collections.map((item) => (item.toLowerCase() === collection.name.toLowerCase() ? nextName : item));
+          return {
+            ...document,
+            metadata: { ...metadata, collections: nextCollections },
+            collectionIds: nextCollections.map(collectionIdFromName),
+          };
+        }),
+      }),
+    );
+    setMessage(`${collection.name} was renamed.`);
+  }
+
+  async function deleteCollection(collection: Collection) {
+    try {
+      await deleteRemoteRowsIfNeeded({ collections: [collection.id] }, storageStatus);
+      setState((current) =>
+        withDerivedCollections({
+          ...current,
+          collections: current.collections.filter((item) => item.id !== collection.id),
+          documents: current.documents.map((document) => removeCollectionFromDocument(document, collection.name, current.performanceRecords)),
+        }),
+      );
+      setMessage(`${collection.name} was deleted. Documents were kept.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? `Collection was not deleted: ${error.message}` : 'Collection was not deleted because Supabase failed.');
+    }
+  }
+
+  async function deleteDocument(document: ResearchDocument) {
+    try {
+      await deleteRemoteDocumentIfNeeded(state, document.id, storageStatus);
+      setState((current) => removeDocumentFromState(current, document.id));
+      setMessage(`${document.title} and its chunks were deleted.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? `Document was not deleted: ${error.message}` : 'Document was not deleted because Supabase failed.');
+    }
+  }
+
   return (
     <div className="space-y-7">
       <SectionHeader
@@ -225,28 +292,268 @@ function Library({ state, documents, chunks }: { state: ReturnType<typeof useRes
         title="Sources, metadata, and collections"
         copy="Documents are sources. Metadata and virtual collections let the same upload enrich Chat, Tutor, Performance, Timeline, and the Knowledge Map without duplication."
       />
+      {message ? <StatusNote message={message} /> : null}
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {collections.slice(0, 8).map((collection) => (
-          <div key={collection.id} className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
-              <FolderKanban size={14} />
-              Collection
-            </div>
-            <p className="mt-3 truncate text-lg font-semibold text-ink">{collection.name}</p>
-            <p className="mt-1 text-sm text-graphite/68">{getCollectionDocumentCount(collection, documents, state.performanceRecords)} source links</p>
-          </div>
+          <ManagedCollectionCard
+            key={collection.id}
+            collection={collection}
+            documentCount={getCollectionDocumentCount(collection, documents, state.performanceRecords)}
+            onRename={renameCollection}
+            onDelete={(item) =>
+              setConfirmAction({
+                title: `Delete ${item.name}?`,
+                body: 'This removes the virtual collection label from documents. The documents themselves will not be deleted.',
+                confirmLabel: 'Delete collection',
+                onConfirm: () => deleteCollection(item),
+              })
+            }
+          />
         ))}
       </section>
       {documents.length ? (
         <div className="grid gap-5 xl:grid-cols-2">
           {documents.map((document) => (
-            <DocumentCard key={document.id} document={document} chunkCount={chunks.filter((chunk) => chunk.documentId === document.id).length} />
+            <ManagedDocumentCard
+              key={document.id}
+              document={document}
+              records={state.performanceRecords}
+              chunkCount={chunks.filter((chunk) => chunk.documentId === document.id).length}
+              onSave={(documentId, patch) => {
+                setState((current) => applyDocumentEdit(current, documentId, patch));
+                setMessage('Document details were updated.');
+              }}
+              onRemoveCollection={(documentId, collectionName) => {
+                setState((current) =>
+                  withDerivedCollections({
+                    ...current,
+                    documents: current.documents.map((item) => (item.id === documentId ? removeCollectionFromDocument(item, collectionName, current.performanceRecords) : item)),
+                  }),
+                );
+                setMessage(`${collectionName} was removed from the document.`);
+              }}
+              onDelete={(item) =>
+                setConfirmAction({
+                  title: `Delete ${item.title}?`,
+                  body: 'This deletes the document, its chunks, semantic embedding rows, and document-derived timeline events. Performance records are kept but unlinked from this source.',
+                  confirmLabel: 'Delete document',
+                  onConfirm: () => deleteDocument(item),
+                })
+              }
+            />
           ))}
         </div>
       ) : (
         <EmptyState title="Your library is empty" copy="Upload a TXT, PDF, or DOCX file to create searchable source material for this workspace." />
       )}
+      <ConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
     </div>
+  );
+}
+
+type ConfirmAction = {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  onConfirm: () => void | Promise<void>;
+};
+
+function StatusNote({ message }: { message: string }) {
+  return (
+    <div className="rounded-lg border border-ink/8 bg-paper/70 px-4 py-3 text-sm leading-6 text-graphite/76">
+      {message}
+    </div>
+  );
+}
+
+function ConfirmModal({ action, onClose }: { action: ConfirmAction | null; onClose: () => void }) {
+  const [isWorking, setIsWorking] = useState(false);
+  if (!action) return null;
+
+  async function confirm() {
+    if (!action) return;
+    setIsWorking(true);
+    try {
+      await action.onConfirm();
+      onClose();
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
+      <div className="w-full max-w-lg rounded-xl border border-ink/10 bg-white p-5 shadow-soft">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Confirm destructive action</p>
+        <h2 className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
+        <p className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <button type="button" onClick={onClose} disabled={isWorking} className="rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink">
+            Cancel
+          </button>
+          <button type="button" onClick={confirm} disabled={isWorking} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:bg-red-400">
+            {isWorking ? 'Working...' : action.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ManagedCollectionCard({
+  collection,
+  documentCount,
+  onRename,
+  onDelete,
+}: {
+  collection: Collection;
+  documentCount: number;
+  onRename: (collection: Collection, name: string) => void;
+  onDelete: (collection: Collection) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [name, setName] = useState(collection.name);
+
+  return (
+    <div className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
+        <FolderKanban size={14} />
+        Collection
+      </div>
+      {isEditing ? (
+        <div className="mt-3 space-y-3">
+          <input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+          <div className="flex gap-2">
+            <button type="button" onClick={() => { onRename(collection, name); setIsEditing(false); }} className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white">Save</button>
+            <button type="button" onClick={() => { setName(collection.name); setIsEditing(false); }} className="rounded-lg border border-ink/10 px-3 py-2 text-xs font-semibold text-ink">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="mt-3 truncate text-lg font-semibold text-ink">{collection.name}</p>
+          <p className="mt-1 text-sm text-graphite/68">{documentCount} source links</p>
+          <div className="mt-4 flex gap-2">
+            <IconTextButton icon={Edit3} label="Rename" onClick={() => setIsEditing(true)} />
+            <IconTextButton icon={Trash2} label="Delete" onClick={() => onDelete(collection)} danger />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ManagedDocumentCard({
+  document,
+  records,
+  chunkCount,
+  onSave,
+  onRemoveCollection,
+  onDelete,
+}: {
+  document: ResearchDocument;
+  records: PerformanceRecord[];
+  chunkCount: number;
+  onSave: (documentId: string, patch: { title?: string; metadata?: Partial<DocumentMetadata> }) => void;
+  onRemoveCollection: (documentId: string, collectionName: string) => void;
+  onDelete: (document: ResearchDocument) => void;
+}) {
+  const metadata = getDocumentMetadata(document, records);
+  const [isEditing, setIsEditing] = useState(false);
+  const [title, setTitle] = useState(document.title);
+  const [subjects, setSubjects] = useState(metadata.subjects.join(', '));
+  const [topics, setTopics] = useState(metadata.topics.join(', '));
+  const [academicYears, setAcademicYears] = useState(metadata.academicYears.join(', '));
+  const [terms, setTerms] = useState(metadata.terms.join(', '));
+  const [documentTypes, setDocumentTypes] = useState(metadata.documentTypes.join(', '));
+  const [teacherNames, setTeacherNames] = useState(metadata.teacherNames.join(', '));
+  const [skills, setSkills] = useState(metadata.skills.join(', '));
+  const [collections, setCollections] = useState(metadata.collections.join(', '));
+  const [tags, setTags] = useState(metadata.tags.join(', '));
+
+  function save() {
+    const nextMetadata: Partial<DocumentMetadata> = {
+      subjects: normalizeListInput(subjects),
+      topics: normalizeListInput(topics),
+      academicYears: normalizeListInput(academicYears),
+      terms: normalizeListInput(terms),
+      documentTypes: normalizeListInput(documentTypes),
+      teacherNames: normalizeListInput(teacherNames),
+      skills: normalizeListInput(skills),
+      collections: normalizeListInput(collections),
+      tags: normalizeListInput(tags),
+    };
+    onSave(document.id, { title, metadata: nextMetadata });
+    setIsEditing(false);
+  }
+
+  return (
+    <div className="space-y-3">
+      <DocumentCard document={document} chunkCount={chunkCount} />
+      {isEditing ? (
+        <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Edit source metadata</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Document title" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4 md:col-span-2" />
+            <EditListField label="Subjects" value={subjects} setValue={setSubjects} />
+            <EditListField label="Topics" value={topics} setValue={setTopics} />
+            <EditListField label="Academic years" value={academicYears} setValue={setAcademicYears} />
+            <EditListField label="Terms" value={terms} setValue={setTerms} />
+            <EditListField label="Document types" value={documentTypes} setValue={setDocumentTypes} />
+            <EditListField label="Teacher names" value={teacherNames} setValue={setTeacherNames} />
+            <EditListField label="Skills" value={skills} setValue={setSkills} />
+            <EditListField label="Collections" value={collections} setValue={setCollections} />
+            <EditListField label="Tags" value={tags} setValue={setTags} />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" onClick={save} className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white">Save changes</button>
+            <button type="button" onClick={() => setIsEditing(false)} className="rounded-lg border border-ink/10 px-4 py-2 text-sm font-semibold text-ink">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap gap-2">
+            <IconTextButton icon={Edit3} label="Edit" onClick={() => setIsEditing(true)} />
+            <IconTextButton icon={Trash2} label="Delete" onClick={() => onDelete(document)} danger />
+          </div>
+          {metadata.collections.length ? (
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Remove from collection</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {metadata.collections.map((collection) => (
+                  <button key={collection} type="button" onClick={() => onRemoveCollection(document.id, collection)} className="rounded-full border border-ink/10 bg-paper px-3 py-1 text-xs font-semibold text-graphite/75">
+                    {collection}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditListField({ label, value, setValue }: { label: string; value: string; setValue: (value: string) => void }) {
+  return (
+    <label className="block">
+      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</span>
+      <textarea value={value} onChange={(event) => setValue(event.target.value)} rows={2} className="mt-2 w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+    </label>
+  );
+}
+
+function IconTextButton({ icon: Icon, label, onClick, danger = false }: { icon: typeof Edit3; label: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
+        danger ? 'border-red-200 bg-red-50 text-red-700' : 'border-ink/10 bg-white text-ink'
+      }`}
+    >
+      <Icon size={14} />
+      {label}
+    </button>
   );
 }
 
@@ -294,6 +601,87 @@ function withDerivedCollections(state: ReturnType<typeof useResearchState>['stat
     ...state,
     collections: deriveCollections(state),
   };
+}
+
+function collectionIdFromName(name: string) {
+  return `collection-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+}
+
+function normalizeListInput(value: string) {
+  return value
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function makeMetadata(document: ResearchDocument, records: PerformanceRecord[], overrides: Partial<DocumentMetadata> = {}) {
+  const base = getDocumentMetadata(document, records);
+  return {
+    ...base,
+    ...overrides,
+    tags: overrides.tags ?? base.tags,
+  };
+}
+
+function removeCollectionFromDocument(document: ResearchDocument, collectionName: string, records: PerformanceRecord[]) {
+  const metadata = getDocumentMetadata(document, records);
+  const nextCollections = metadata.collections.filter((name) => name.toLowerCase() !== collectionName.toLowerCase());
+
+  return {
+    ...document,
+    metadata: {
+      ...metadata,
+      collections: nextCollections,
+    },
+    collectionIds: nextCollections.map(collectionIdFromName),
+  };
+}
+
+function applyDocumentEdit(state: ResearchState, documentId: string, patch: { title?: string; metadata?: Partial<DocumentMetadata> }) {
+  return withDerivedCollections({
+    ...state,
+    documents: state.documents.map((document) => {
+      if (document.id !== documentId) return document;
+      const nextDocument = {
+        ...document,
+        title: patch.title?.trim() || document.title,
+      };
+      const metadata = makeMetadata(nextDocument, state.performanceRecords, patch.metadata);
+      return {
+        ...nextDocument,
+        tags: metadata.tags.length ? metadata.tags : nextDocument.tags,
+        metadata,
+        collectionIds: metadata.collections.map(collectionIdFromName),
+      };
+    }),
+  });
+}
+
+function removeDocumentFromState(state: ResearchState, documentId: string) {
+  return withDerivedCollections({
+    ...state,
+    documents: state.documents.filter((document) => document.id !== documentId),
+    chunks: state.chunks.filter((chunk) => chunk.documentId !== documentId),
+    insights: state.insights.filter((insight) => insight.sourceId !== documentId),
+    performanceRecords: state.performanceRecords.map((record) => (record.sourceDocumentId === documentId ? { ...record, sourceDocumentId: undefined } : record)),
+  });
+}
+
+async function deleteRemoteDocumentIfNeeded(state: ResearchState, documentId: string, storageStatus: ReturnType<typeof useResearchState>['storageStatus']) {
+  if (storageStatus !== 'connected') return;
+  const chunkIds = state.chunks.filter((chunk) => chunk.documentId === documentId).map((chunk) => chunk.id);
+  const insightIds = state.insights.filter((insight) => insight.sourceId === documentId).map((insight) => insight.id);
+
+  await deleteSupabaseRows({
+    documents: [documentId],
+    document_chunks: chunkIds,
+    insights: insightIds,
+  });
+}
+
+async function deleteRemoteRowsIfNeeded(rows: Parameters<typeof deleteSupabaseRows>[0], storageStatus: ReturnType<typeof useResearchState>['storageStatus']) {
+  if (storageStatus !== 'connected') return;
+  await deleteSupabaseRows(rows);
 }
 
 function buildPerformanceSummary(records: PerformanceRecord[], advice: Omit<PerformanceSummary, 'id' | 'generatedAt'>): PerformanceSummary {
@@ -357,11 +745,13 @@ function PerformancePage({
   records,
   summaries,
   documents,
+  storageStatus,
   setState,
 }: {
   records: PerformanceRecord[];
   summaries: PerformanceSummary[];
   documents: ResearchDocument[];
+  storageStatus: ReturnType<typeof useResearchState>['storageStatus'];
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
   const [form, setForm] = useState({
@@ -385,6 +775,8 @@ function PerformancePage({
   const [statusMessage, setStatusMessage] = useState('Performance data is stored locally in this version.');
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
+  const [editingRecordId, setEditingRecordId] = useState('');
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   const subjectGroups = useMemo(() => getSubjectGroups(records), [records]);
   const subjectEntries = Object.entries(subjectGroups);
@@ -416,17 +808,35 @@ function PerformancePage({
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function handleManualSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function startEditingRecord(record: PerformanceRecord) {
+    setEditingRecordId(record.id);
+    setForm({
+      title: record.title,
+      subject: record.subject,
+      date: record.date,
+      academicYear: record.academicYear ?? '',
+      term: record.term ?? '',
+      assessmentType: record.assessmentType,
+      score: record.score?.toString() ?? '',
+      maxScore: record.maxScore?.toString() ?? '',
+      percentage: record.percentage?.toString() ?? '',
+      grade: record.grade ?? '',
+      rank: record.rank ?? '',
+      teacherComment: record.teacherComment ?? '',
+      strengths: record.strengths.join(', '),
+      weaknesses: record.weaknesses.join(', '),
+      actionPoints: record.actionPoints.join(', '),
+    });
+    setStatusMessage(`Editing ${record.title}. Save changes in the manual entry form.`);
+  }
+
+  function buildRecordFromForm(existing?: PerformanceRecord): PerformanceRecord | null {
     const subject = form.subject.trim();
+    if (!subject) return null;
 
-    if (!subject) {
-      setStatusMessage('Add a subject before saving a performance record.');
-      return;
-    }
-
-    const record: PerformanceRecord = {
-      id: `performance-${Date.now()}`,
+    return {
+      id: existing?.id ?? `performance-${Date.now()}`,
+      sourceDocumentId: existing?.sourceDocumentId,
       title: form.title.trim() || `${subject} ${form.assessmentType}`,
       date: form.date || new Date().toISOString().slice(0, 10),
       academicYear: form.academicYear.trim() || undefined,
@@ -442,15 +852,36 @@ function PerformancePage({
       strengths: splitList(form.strengths),
       weaknesses: splitList(form.weaknesses),
       actionPoints: splitList(form.actionPoints),
-      createdAt: new Date().toISOString(),
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
     };
+  }
+
+  function handleManualSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const subject = form.subject.trim();
+
+    if (!subject) {
+      setStatusMessage('Add a subject before saving a performance record.');
+      return;
+    }
+
+    const existing = records.find((record) => record.id === editingRecordId);
+    const record = buildRecordFromForm(existing);
+    if (!record) return;
 
     setState((current) =>
       withDerivedCollections({
         ...current,
-        performanceRecords: [record, ...current.performanceRecords],
+        performanceRecords: existing
+          ? current.performanceRecords.map((item) => (item.id === existing.id ? record : item))
+          : [record, ...current.performanceRecords],
+        documents: current.documents.map((document) => ({
+          ...document,
+          metadata: buildDocumentMetadata(document, existing ? current.performanceRecords.map((item) => (item.id === existing.id ? record : item)) : [record, ...current.performanceRecords]),
+        })),
       }),
     );
+    setEditingRecordId('');
     setForm((current) => ({
       ...current,
       title: '',
@@ -467,7 +898,27 @@ function PerformancePage({
       weaknesses: '',
       actionPoints: '',
     }));
-    setStatusMessage(`${record.title} was saved locally.`);
+    setStatusMessage(`${record.title} was ${existing ? 'updated' : 'saved'} locally.`);
+  }
+
+  async function deletePerformanceRecord(record: PerformanceRecord) {
+    try {
+      await deleteRemoteRowsIfNeeded({ performance_records: [record.id] }, storageStatus);
+      setState((current) => {
+        const performanceRecords = current.performanceRecords.filter((item) => item.id !== record.id);
+        return withDerivedCollections({
+          ...current,
+          performanceRecords,
+          documents: current.documents.map((document) => ({
+            ...document,
+            metadata: buildDocumentMetadata(document, performanceRecords),
+          })),
+        });
+      });
+      setStatusMessage(`${record.title} was deleted.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? `Performance record was not deleted: ${error.message}` : 'Performance record was not deleted because Supabase failed.');
+    }
   }
 
   async function handleAnalyseDocument() {
@@ -625,8 +1076,33 @@ function PerformancePage({
           </div>
           <button type="submit" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
             <FilePlus2 size={17} />
-            Save record
+            {editingRecordId ? 'Save changes' : 'Save record'}
           </button>
+          {editingRecordId ? (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingRecordId('');
+                setForm((current) => ({
+                  ...current,
+                  title: '',
+                  subject: '',
+                  score: '',
+                  maxScore: '',
+                  percentage: '',
+                  grade: '',
+                  rank: '',
+                  teacherComment: '',
+                  strengths: '',
+                  weaknesses: '',
+                  actionPoints: '',
+                }));
+              }}
+              className="ml-2 mt-4 rounded-xl border border-ink/10 px-4 py-3 text-sm font-semibold text-ink"
+            >
+              Cancel edit
+            </button>
+          ) : null}
         </form>
 
         <div className="space-y-6">
@@ -681,6 +1157,44 @@ function PerformancePage({
       </section>
 
       <section>
+        <SectionHeader eyebrow="Records" title="Edit saved performance data" />
+        <div className="grid gap-3">
+          {records.length ? (
+            records.map((record) => (
+              <article key={record.id} className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-ink">{record.title}</p>
+                    <p className="mt-1 text-sm text-graphite/70">
+                      {[record.subject, record.date, record.academicYear, record.term, formatResult(record)].filter(Boolean).join(' / ')}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <IconTextButton icon={Edit3} label="Edit" onClick={() => startEditingRecord(record)} />
+                    <IconTextButton
+                      icon={Trash2}
+                      label="Delete"
+                      danger
+                      onClick={() =>
+                        setConfirmAction({
+                          title: `Delete ${record.title}?`,
+                          body: 'This removes the performance record and updates derived collections, timeline, Tutor recommendations, and document metadata.',
+                          confirmLabel: 'Delete record',
+                          onConfirm: () => deletePerformanceRecord(record),
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              </article>
+            ))
+          ) : (
+            <EmptyState title="No editable records yet" copy="Saved or extracted performance records will appear here." />
+          )}
+        </div>
+      </section>
+
+      <section>
         <SectionHeader eyebrow="Subject breakdown" title="Patterns by subject" />
         <div className="grid gap-5 md:grid-cols-2">
           {latestBySubject.length ? (
@@ -719,6 +1233,7 @@ function PerformancePage({
           )}
         </div>
       </section>
+      <ConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
     </div>
   );
 }
@@ -1572,6 +2087,7 @@ function ResearchChat({
   performanceSummaries,
   tutorLessons,
   tutorAttempts,
+  storageStatus,
   setState,
 }: {
   chat: ChatMessage[];
@@ -1583,11 +2099,13 @@ function ResearchChat({
   performanceSummaries: PerformanceSummary[];
   tutorLessons: ReturnType<typeof useResearchState>['state']['tutorLessons'];
   tutorAttempts: ReturnType<typeof useResearchState>['state']['tutorAttempts'];
+  storageStatus: ReturnType<typeof useResearchState>['storageStatus'];
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const latestCitations = [...chat].reverse().find((message) => message.citations?.length)?.citations ?? [];
   const searchableDocuments = documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed');
@@ -1698,11 +2216,46 @@ function ResearchChat({
     }
   }
 
+  async function deleteMessage(message: ChatMessage) {
+    try {
+      await deleteRemoteRowsIfNeeded({ chat_messages: [message.id] }, storageStatus);
+      setState((current) => ({ ...current, chat: current.chat.filter((item) => item.id !== message.id) }));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? `Message was not deleted: ${error.message}` : 'Message was not deleted because Supabase failed.');
+    }
+  }
+
+  async function clearChatHistory() {
+    try {
+      await deleteRemoteRowsIfNeeded({ chat_messages: chat.map((message) => message.id) }, storageStatus);
+      setState((current) => ({ ...current, chat: [] }));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? `Chat history was not cleared: ${error.message}` : 'Chat history was not cleared because Supabase failed.');
+    }
+  }
+
   return (
     <div className="mx-auto grid min-h-[620px] max-w-7xl gap-5 sm:h-[calc(100vh-12rem)] sm:min-h-[480px] xl:grid-cols-[minmax(0,1fr)_340px]">
       <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-sm">
         <div className="shrink-0 border-b border-ink/8 p-5">
-          <SectionHeader eyebrow="Research chat" title="Ask with sources" copy="Answers are grounded in uploaded source chunks. Citations appear with each response when evidence is retrieved." />
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <SectionHeader eyebrow="Research chat" title="Ask with sources" copy="Answers are grounded in uploaded source chunks. Citations appear with each response when evidence is retrieved." />
+            {chat.length ? (
+              <IconTextButton
+                icon={Trash2}
+                label="Clear chat"
+                danger
+                onClick={() =>
+                  setConfirmAction({
+                    title: 'Clear chat history?',
+                    body: 'This deletes all chat messages in the current Research OS history. Documents, Tutor sessions, and performance records are kept.',
+                    confirmLabel: 'Clear chat',
+                    onConfirm: clearChatHistory,
+                  })
+                }
+              />
+            ) : null}
+          </div>
         </div>
         <div className="scrollbar-soft min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
           {chat.length ? (
@@ -1711,6 +2264,20 @@ function ResearchChat({
                 <div className={`rounded-2xl p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'border border-ink/8 bg-paper/70 text-ink'}`}>
                   <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setConfirmAction({
+                      title: 'Delete this chat message?',
+                      body: 'This removes one chat message from the conversation history. Other messages are kept.',
+                      confirmLabel: 'Delete message',
+                      onConfirm: () => deleteMessage(message),
+                    })
+                  }
+                  className="mt-2 text-xs font-semibold text-graphite/60 hover:text-red-700"
+                >
+                  Delete message
+                </button>
                 {message.citations ? (
                   <details className="mt-3 rounded-2xl border border-ink/8 bg-white p-3 xl:hidden">
                     <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
@@ -1797,6 +2364,7 @@ function ResearchChat({
           )}
         </div>
       </aside>
+      <ConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
     </div>
   );
 }

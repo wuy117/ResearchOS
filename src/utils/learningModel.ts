@@ -117,7 +117,7 @@ export function getDocumentMetadata(document: ResearchDocument, records: Perform
 
 export function deriveCollections(state: ResearchState): Collection[] {
   const existing = state.collections ?? [];
-  const byName = new Map(existing.map((collection) => [collection.name.toLowerCase(), collection]));
+  const byName = new Map(existing.filter((collection) => collection.source !== 'metadata').map((collection) => [collection.name.toLowerCase(), collection]));
   const now = new Date().toISOString();
 
   state.documents.forEach((document) => {

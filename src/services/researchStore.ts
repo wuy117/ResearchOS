@@ -16,7 +16,7 @@ import type {
   TutorSocraticTurn,
   Workspace,
 } from '../types/research';
-import { loadResearchState, saveResearchState } from '../utils/storage';
+import { clearResearchState, loadResearchState, saveResearchState } from '../utils/storage';
 
 export type StorageStatus = 'missing-env' | 'client-created' | 'connection-failed' | 'connected';
 type StoredRow<T> = {
@@ -179,6 +179,42 @@ async function upsertOptionalMany<T extends { id: string }>(table: string, items
   } catch (error) {
     if (import.meta.env.DEV) {
       console.debug(`${table} was not saved; optional table may be missing.`, error);
+    }
+  }
+}
+
+async function deleteDataByIds(table: string, ids: string[]) {
+  const client = getSupabaseClient();
+  if (!client || ids.length === 0) return;
+
+  const { error } = await client.from(table).delete().in('local_id', ids);
+  if (error) throw error;
+}
+
+async function deleteOptionalDataByIds(table: string, ids: string[]) {
+  try {
+    await deleteDataByIds(table, ids);
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.debug(`${table} rows were not deleted; optional table may be missing.`, error);
+    }
+  }
+}
+
+async function clearTable(table: string) {
+  const client = getSupabaseClient();
+  if (!client) return;
+
+  const { error } = await client.from(table).delete().neq('local_id', '__never__');
+  if (error) throw error;
+}
+
+async function clearOptionalTable(table: string) {
+  try {
+    await clearTable(table);
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.debug(`${table} was not cleared; optional table may be missing.`, error);
     }
   }
 }
@@ -390,4 +426,86 @@ export async function savePerformanceSummary(summary: PerformanceSummary) {
     });
     console.warn('Performance summary saved locally after Supabase failed.', error);
   }
+}
+
+export async function deleteSupabaseRows(rows: Partial<Record<
+  | 'workspaces'
+  | 'collections'
+  | 'documents'
+  | 'document_chunks'
+  | 'insights'
+  | 'chat_messages'
+  | 'performance_records'
+  | 'performance_summaries'
+  | 'tutor_lessons'
+  | 'tutor_attempts'
+  | 'tutor_socratic_turns'
+  | 'tutor_exam_sessions'
+  | 'tutor_memory',
+  string[]
+>>) {
+  if (!isSupabaseEnabled) return;
+
+  await Promise.all([
+    deleteDataByIds('workspaces', rows.workspaces ?? []),
+    deleteOptionalDataByIds('collections', rows.collections ?? []),
+    deleteDataByIds('documents', rows.documents ?? []),
+    deleteDataByIds('document_chunks', rows.document_chunks ?? []),
+    deleteDataByIds('insights', rows.insights ?? []),
+    deleteDataByIds('chat_messages', rows.chat_messages ?? []),
+    deleteDataByIds('performance_records', rows.performance_records ?? []),
+    deleteDataByIds('performance_summaries', rows.performance_summaries ?? []),
+    deleteOptionalDataByIds('tutor_lessons', rows.tutor_lessons ?? []),
+    deleteOptionalDataByIds('tutor_attempts', rows.tutor_attempts ?? []),
+    deleteOptionalDataByIds('tutor_socratic_turns', rows.tutor_socratic_turns ?? []),
+    deleteOptionalDataByIds('tutor_exam_sessions', rows.tutor_exam_sessions ?? []),
+    deleteOptionalDataByIds('tutor_memory', rows.tutor_memory ?? []),
+  ]);
+}
+
+export type SupabaseResetScope = 'documents' | 'performance' | 'tutor' | 'collections' | 'full';
+
+export async function clearSupabaseScope(scope: SupabaseResetScope) {
+  if (!isSupabaseEnabled) {
+    throw new Error('Supabase is not configured for this app instance.');
+  }
+
+  if (scope === 'documents' || scope === 'full') {
+    await Promise.all([
+      clearTable('document_chunks'),
+      clearTable('documents'),
+    ]);
+  }
+
+  if (scope === 'performance' || scope === 'full') {
+    await Promise.all([
+      clearTable('performance_records'),
+      clearTable('performance_summaries'),
+    ]);
+  }
+
+  if (scope === 'tutor' || scope === 'full') {
+    await Promise.all([
+      clearOptionalTable('tutor_lessons'),
+      clearOptionalTable('tutor_attempts'),
+      clearOptionalTable('tutor_socratic_turns'),
+      clearOptionalTable('tutor_exam_sessions'),
+      clearOptionalTable('tutor_memory'),
+    ]);
+  }
+
+  if (scope === 'collections' || scope === 'full') {
+    await clearOptionalTable('collections');
+  }
+
+  if (scope === 'full') {
+    await Promise.all([
+      clearTable('insights'),
+      clearTable('chat_messages'),
+    ]);
+  }
+}
+
+export function clearLocalStateOnly() {
+  clearResearchState();
 }
