@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, BrainCircuit, CalendarDays, Files, GraduationCap, LayoutDashboard, MessageSquareText, Plus, Search, Trash2, UploadCloud, Wrench } from 'lucide-react';
+import { AlertTriangle, BarChart3, BookOpen, CalendarDays, Files, GraduationCap, LayoutDashboard, MessageSquareText, Plus, Search, Trash2, UploadCloud, Wrench } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useState } from 'react';
 import { initialState } from '../data/initialState';
@@ -28,8 +28,6 @@ const secondaryTabs: Record<PillarId, Array<{ id: PageId; label: string; icon: t
   learn: [
     { id: 'chat', label: 'Chat', icon: MessageSquareText },
     { id: 'tutor', label: 'Tutor', icon: GraduationCap },
-    { id: 'study', label: 'Study Tools', icon: BrainCircuit },
-    { id: 'map', label: 'Map', icon: BrainCircuit },
   ],
   progress: [
     { id: 'performance', label: 'Performance', icon: BarChart3 },
@@ -40,7 +38,7 @@ const secondaryTabs: Record<PillarId, Array<{ id: PageId; label: string; icon: t
 const sectionDescriptions: Record<PillarId, string> = {
   home: 'Academic profile, recent activity, next best action, recent sources, and progress snapshot.',
   sources: 'Upload, library, collections, metadata editing, and source management.',
-  learn: 'Chat, Tutor, and study tools in one source-aware learning workspace.',
+  learn: 'Chat and Tutor in one source-aware learning workspace.',
   progress: 'Performance, timeline, trends, and teacher comments.',
 };
 
@@ -48,13 +46,8 @@ function getActivePillar(activePage: PageId) {
   return navItems.find((item) => item.pages.includes(activePage)) ?? navItems[0];
 }
 
-function shouldShowKnowledgeMap(state: ResearchState) {
-  const readySources = state.documents.filter((document) => document.status === 'Ready' || document.status === 'Indexed').length;
-  return readySources >= 2 || import.meta.env.DEV || new URLSearchParams(window.location.search).get('dev') === '1';
-}
-
-function getVisibleTabs(pillar: PillarId, state: ResearchState) {
-  return secondaryTabs[pillar].filter((tab) => tab.id !== 'map' || shouldShowKnowledgeMap(state));
+function getVisibleTabs(pillar: PillarId) {
+  return secondaryTabs[pillar];
 }
 
 type AppShellProps = {
@@ -93,7 +86,7 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
   }[storageStatus];
   const showDeveloperTools = import.meta.env.DEV || new URLSearchParams(window.location.search).get('dev') === '1';
   const activePillar = getActivePillar(activePage);
-  const visibleTabs = getVisibleTabs(activePillar.id, state);
+  const visibleTabs = getVisibleTabs(activePillar.id);
 
   function createWorkspace() {
     const name = workspaceName.trim();
@@ -155,6 +148,10 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
               );
             })}
           </nav>
+
+          <div className="mt-5">
+            <ResetResearchOS state={state} setState={setState} storageStatus={storageStatus} compact />
+          </div>
 
           <div className="mt-8">
             <div className="mb-3 flex items-center justify-between">
@@ -286,6 +283,9 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
                 })}
               </div>
             ) : null}
+            <div className="lg:hidden">
+              <ResetResearchOS state={state} setState={setState} storageStatus={storageStatus} />
+            </div>
           </header>
 
           <div className="scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6 xl:px-10 2xl:px-12">{children}</div>
@@ -301,6 +301,160 @@ type DeveloperConfirmAction = {
   confirmLabel: string;
   onConfirm: () => Promise<void> | void;
 };
+
+type ResetOption = {
+  scope: SupabaseResetScope;
+  label: string;
+  body: string;
+  confirmLabel: string;
+};
+
+const resetOptions: ResetOption[] = [
+  {
+    scope: 'local',
+    label: 'Clear local browser state',
+    body: 'This removes Research OS data saved in this browser. It does not delete Supabase data. The current screen stays visible until you refresh or continue working.',
+    confirmLabel: 'Clear local state',
+  },
+  {
+    scope: 'supabase',
+    label: 'Clear all Supabase app data',
+    body: 'This deletes Research OS rows from Supabase, including workspaces, documents, chunks, embeddings, insights, chat, Tutor data, Performance data, collections, and legacy study artifacts. Local browser data is kept unless you run a full reset.',
+    confirmLabel: 'Clear Supabase data',
+  },
+  {
+    scope: 'chat',
+    label: 'Clear chat history',
+    body: 'This deletes saved chat messages locally and in Supabase when connected. Documents, Tutor, and Progress are kept.',
+    confirmLabel: 'Clear chat',
+  },
+  {
+    scope: 'tutor',
+    label: 'Clear Tutor memory',
+    body: 'This deletes Tutor lessons, attempts, Socratic turns, exam sessions, topic confidence, and revision streak locally and in Supabase when connected.',
+    confirmLabel: 'Clear Tutor',
+  },
+  {
+    scope: 'performance',
+    label: 'Clear Performance data',
+    body: 'This deletes Performance records and AI performance summaries locally and in Supabase when connected. Documents are kept.',
+    confirmLabel: 'Clear Performance',
+  },
+  {
+    scope: 'documents',
+    label: 'Clear documents, chunks, and embeddings',
+    body: 'This deletes uploaded documents, extracted chunks, insight rows, and embedding status locally and in Supabase when connected. Performance records are kept but unlinked from sources.',
+    confirmLabel: 'Clear documents',
+  },
+  {
+    scope: 'full',
+    label: 'Full reset: everything',
+    body: 'This deletes all Research OS local browser state and, when Supabase is connected, all app rows in Supabase: workspaces, documents, chunks, embeddings, insights, chat, Tutor, Performance, collections, and legacy study artifacts. The app returns to the clean first-launch state.',
+    confirmLabel: 'Full reset',
+  },
+];
+
+function ResetResearchOS({
+  state,
+  setState,
+  storageStatus,
+  compact = false,
+}: {
+  state: ResearchState;
+  setState: Dispatch<SetStateAction<ResearchState>>;
+  storageStatus: AppStorageStatus;
+  compact?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [message, setMessage] = useState('');
+  const [confirmAction, setConfirmAction] = useState<DeveloperConfirmAction | null>(null);
+  const hasSupabase = storageStatus === 'connected';
+
+  async function runReset(scope: SupabaseResetScope) {
+    if (scope === 'local') {
+      clearLocalStateOnly();
+      setMessage('Local browser state was cleared. Remote data was not deleted.');
+      return;
+    }
+
+    if (scope === 'supabase') {
+      if (!hasSupabase) {
+        setMessage('Supabase is not connected, so no remote data was cleared.');
+        return;
+      }
+      await clearSupabaseScope('supabase');
+      setMessage('All Supabase app data was cleared. Local browser data was kept.');
+      return;
+    }
+
+    if (hasSupabase) {
+      await clearSupabaseScope(scope);
+    }
+
+    if (scope === 'full') {
+      clearLocalStateOnly();
+      setState(initialState);
+      setMessage(hasSupabase ? 'Full reset completed. Local browser state and Supabase app data were cleared.' : 'Full local reset completed. Supabase was not connected.');
+      return;
+    }
+
+    setState((current) => applyScopedStateClear(current, scope));
+    setMessage(`${getResetLabel(scope)} cleared${hasSupabase ? ' locally and in Supabase.' : ' locally. Supabase was not connected.'}`);
+  }
+
+  return (
+    <div className={`rounded-lg border border-red-200 bg-red-50/70 ${compact ? 'p-4' : 'p-3'}`}>
+      <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
+        <span>
+          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Reset Research OS</span>
+          <span className="mt-1 block text-sm font-semibold text-ink">Clear local, remote, or scoped data</span>
+        </span>
+        <AlertTriangle size={17} className="text-red-700" />
+      </button>
+      {isOpen ? (
+        <div className="mt-4 space-y-3">
+          {message ? <p className="rounded-lg bg-white px-3 py-2 text-xs leading-5 text-graphite/75">{message}</p> : null}
+          <div className="grid gap-2">
+            {resetOptions.map((option) => {
+              const disabled = option.scope === 'supabase' && !hasSupabase;
+              return (
+                <div key={option.scope}>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() =>
+                      setConfirmAction({
+                        title: option.label,
+                        body: option.body,
+                        confirmLabel: option.confirmLabel,
+                        onConfirm: () => runReset(option.scope),
+                      })
+                    }
+                    className={`inline-flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-semibold ${
+                      option.scope === 'full'
+                        ? 'border-red-700 bg-red-700 text-white disabled:border-ink/8 disabled:bg-paper disabled:text-graphite/45'
+                        : 'border-red-200 bg-white text-red-700 disabled:cursor-not-allowed disabled:border-ink/8 disabled:bg-paper disabled:text-graphite/45'
+                    }`}
+                  >
+                    <Trash2 size={14} />
+                    {option.label}
+                  </button>
+                  {disabled ? <p className="mt-1 text-xs leading-5 text-graphite/60">Supabase is not connected.</p> : null}
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-xs leading-5 text-graphite/65">Scoped clears preserve unrelated workflows such as Upload, semantic search fallback, Tutor, Progress, Timeline, and document editing.</p>
+        </div>
+      ) : null}
+      <DeveloperConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
+    </div>
+  );
+}
+
+function getResetLabel(scope: SupabaseResetScope) {
+  return resetOptions.find((option) => option.scope === scope)?.label ?? 'Data';
+}
 
 function DeveloperTools({
   state,
@@ -326,19 +480,6 @@ function DeveloperTools({
   function runLocalReset(label: string, updater: (current: ResearchState) => ResearchState) {
     setState((current) => updater(current));
     setMessage(`${label} completed locally.`);
-  }
-
-  async function runSupabaseReset(scope: SupabaseResetScope) {
-    try {
-      await clearSupabaseScope(scope);
-      setState((current) => applyScopedStateClear(current, scope));
-      setMessage(`${scope === 'full' ? 'Full Supabase reset' : `Supabase ${scope} reset`} completed.`);
-      setLastError('');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Supabase reset failed.';
-      setLastError(message);
-      setMessage(`Supabase reset did not run: ${message}`);
-    }
   }
 
   async function rerunEmbeddings(chunkIds: string[], label: string) {
@@ -385,52 +526,9 @@ function DeveloperTools({
             ]}
           />
 
-          <DeveloperSection title="Local reset tools">
-            <DeveloperDangerButton
-              label="Clear local browser data only"
-              onClick={() =>
-                setConfirmAction({
-                  title: 'Clear local browser data only?',
-                  body: 'This removes the Research OS localStorage item. Current in-memory data stays visible until a refresh.',
-                  confirmLabel: 'Clear local browser data',
-                  onConfirm: () => {
-                    clearLocalStateOnly();
-                    setMessage('Local browser data was cleared. Refresh to reload from available remote state or defaults.');
-                  },
-                })
-              }
-            />
-            <DeveloperDangerButton label="Clear chat history" onClick={() => confirmLocal('Clear chat history?', 'This deletes all local chat messages.', 'Clear chat', (current) => ({ ...current, chat: [] }))} />
-            <DeveloperDangerButton label="Clear documents and chunks" onClick={() => confirmLocal('Clear documents and chunks?', 'This deletes local documents, chunks, and document insights.', 'Clear documents', (current) => applyScopedStateClear(current, 'documents'))} />
-            <DeveloperDangerButton label="Clear performance data" onClick={() => confirmLocal('Clear performance data?', 'This deletes local performance records and summaries.', 'Clear performance', (current) => applyScopedStateClear(current, 'performance'))} />
-            <DeveloperDangerButton label="Clear tutor data" onClick={() => confirmLocal('Clear tutor data?', 'This deletes local Tutor sessions, attempts, and memory.', 'Clear tutor', (current) => applyScopedStateClear(current, 'tutor'))} />
-            <DeveloperDangerButton label="Clear collections/timeline metadata" onClick={() => confirmLocal('Clear collections and metadata?', 'This clears local collections and document metadata. Timeline remains derived from current data.', 'Clear metadata', (current) => applyScopedStateClear(current, 'collections'))} />
-            <DeveloperDangerButton label="Full local reset" onClick={() => confirmLocal('Full local reset?', 'This resets the current local app state to the first-launch defaults.', 'Reset local state', () => initialState)} />
-          </DeveloperSection>
-
-          <DeveloperSection title="Supabase reset tools">
-            {(['documents', 'performance', 'tutor', 'collections', 'full'] as SupabaseResetScope[]).map((scope) => (
-              <DeveloperDangerButton
-                key={scope}
-                label={scope === 'full' ? 'Full Supabase reset' : `Clear Supabase ${scope}${scope === 'documents' ? '/chunks' : ''}`}
-                disabled={storageStatus !== 'connected'}
-                reason={storageStatus === 'connected' ? undefined : 'Supabase is not connected.'}
-                onClick={() =>
-                  setConfirmAction({
-                    title: scope === 'full' ? 'Full Supabase reset?' : `Clear Supabase ${scope}?`,
-                    body: 'This deletes remote rows for the selected scope. It does not require authentication beyond the configured Supabase client.',
-                    confirmLabel: scope === 'full' ? 'Reset Supabase' : 'Clear Supabase data',
-                    onConfirm: () => runSupabaseReset(scope),
-                  })
-                }
-              />
-            ))}
-          </DeveloperSection>
-
-          <DeveloperSection title="Rebuild tools">
+          <DeveloperSection title="Developer rebuild tools">
             <DeveloperActionButton label="Rebuild local derived metadata" onClick={() => runLocalReset('Metadata rebuild', rebuildMetadata)} />
             <DeveloperActionButton label="Rebuild collections from documents" onClick={() => runLocalReset('Collections rebuild', (current) => ({ ...current, collections: deriveCollections(current) }))} />
-            <DeveloperActionButton label="Rebuild timeline from current data" onClick={() => setMessage('Timeline is derived live from current data; no stored timeline rows needed rebuilding.')} />
             <DeveloperActionButton
               label="Re-run embeddings for all chunks"
               disabled={!embeddingConfigured || state.chunks.length === 0}
@@ -455,18 +553,20 @@ function DeveloperTools({
       <DeveloperConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
     </div>
   );
-
-  function confirmLocal(title: string, body: string, confirmLabel: string, updater: (current: ResearchState) => ResearchState) {
-    setConfirmAction({
-      title,
-      body,
-      confirmLabel,
-      onConfirm: () => runLocalReset(confirmLabel, updater),
-    });
-  }
 }
 
 function applyScopedStateClear(state: ResearchState, scope: SupabaseResetScope): ResearchState {
+  if (scope === 'local' || scope === 'supabase') {
+    return state;
+  }
+
+  if (scope === 'chat') {
+    return {
+      ...state,
+      chat: [],
+    };
+  }
+
   if (scope === 'documents') {
     return {
       ...state,
@@ -556,23 +656,6 @@ function DeveloperSection({ title, children }: { title: string; children: React.
       <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{title}</p>
       <div className="space-y-2">{children}</div>
     </section>
-  );
-}
-
-function DeveloperDangerButton({ label, onClick, disabled = false, reason }: { label: string; onClick: () => void; disabled?: boolean; reason?: string }) {
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className="inline-flex w-full items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-left text-xs font-semibold text-red-700 disabled:cursor-not-allowed disabled:border-ink/8 disabled:bg-paper disabled:text-graphite/45"
-      >
-        <Trash2 size={14} />
-        {label}
-      </button>
-      {disabled && reason ? <p className="mt-1 text-xs leading-5 text-graphite/60">{reason}</p> : null}
-    </div>
   );
 }
 

@@ -463,28 +463,31 @@ export async function deleteSupabaseRows(rows: Partial<Record<
   ]);
 }
 
-export type SupabaseResetScope = 'documents' | 'performance' | 'tutor' | 'collections' | 'full';
+export type SupabaseResetScope = 'local' | 'supabase' | 'chat' | 'documents' | 'performance' | 'tutor' | 'collections' | 'full';
 
 export async function clearSupabaseScope(scope: SupabaseResetScope) {
   if (!isSupabaseEnabled) {
     throw new Error('Supabase is not configured for this app instance.');
   }
 
-  if (scope === 'documents' || scope === 'full') {
+  if (scope === 'local') return;
+
+  if (scope === 'documents' || scope === 'supabase' || scope === 'full') {
     await Promise.all([
+      clearTable('insights'),
       clearTable('document_chunks'),
       clearTable('documents'),
     ]);
   }
 
-  if (scope === 'performance' || scope === 'full') {
+  if (scope === 'performance' || scope === 'supabase' || scope === 'full') {
     await Promise.all([
       clearTable('performance_records'),
       clearTable('performance_summaries'),
     ]);
   }
 
-  if (scope === 'tutor' || scope === 'full') {
+  if (scope === 'tutor' || scope === 'supabase' || scope === 'full') {
     await Promise.all([
       clearOptionalTable('tutor_lessons'),
       clearOptionalTable('tutor_attempts'),
@@ -494,14 +497,18 @@ export async function clearSupabaseScope(scope: SupabaseResetScope) {
     ]);
   }
 
-  if (scope === 'collections' || scope === 'full') {
+  if (scope === 'collections' || scope === 'supabase' || scope === 'full') {
     await clearOptionalTable('collections');
   }
 
-  if (scope === 'full') {
+  if (scope === 'chat' || scope === 'supabase' || scope === 'full') {
+    await clearTable('chat_messages');
+  }
+
+  if (scope === 'supabase' || scope === 'full') {
     await Promise.all([
-      clearTable('insights'),
-      clearTable('chat_messages'),
+      clearOptionalTable('study_artifacts'),
+      clearTable('workspaces'),
     ]);
   }
 }
