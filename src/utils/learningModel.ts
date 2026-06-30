@@ -71,6 +71,10 @@ function inferTeacherNames(text: string) {
 
 function inferCollections(document: ResearchDocument, metadata: Omit<DocumentMetadata, 'collections' | 'tags'>) {
   return unique([
+    metadata.documentCategory,
+    metadata.term,
+    metadata.academicYear,
+    metadata.linkedAssessmentName,
     ...metadata.academicYears,
     ...metadata.terms.map((term) => `${term} ${metadata.academicYears[0] ?? ''}`),
     ...metadata.documentTypes,
@@ -93,12 +97,18 @@ export function buildDocumentMetadata(document: ResearchDocument, performanceRec
   const skills = unique(linkedRecords.flatMap((record) => [...record.strengths, ...record.weaknesses, ...record.actionPoints])).slice(0, 12);
   const performanceRecordNames = linkedRecords.map((record) => record.title);
   const baseMetadata = {
+    sourceDate: document.metadata?.sourceDate,
+    academicYear: document.metadata?.academicYear,
+    term: document.metadata?.term,
+    linkedAssessmentName: document.metadata?.linkedAssessmentName,
+    documentCategory: document.metadata?.documentCategory,
+    ignoreInstrumentalMusic: document.metadata?.ignoreInstrumentalMusic ?? false,
     subjects,
     topics,
-    academicYears,
-    terms,
-    assessments,
-    documentTypes,
+    academicYears: unique([document.metadata?.academicYear, ...academicYears]),
+    terms: unique([document.metadata?.term, ...terms]),
+    assessments: unique([document.metadata?.linkedAssessmentName, ...assessments]),
+    documentTypes: unique([document.metadata?.documentCategory, ...documentTypes]),
     teacherNames,
     skills,
     performanceRecords: performanceRecordNames,

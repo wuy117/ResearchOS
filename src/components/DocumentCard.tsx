@@ -41,10 +41,15 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
       {metadata ? (
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
           <MetadataBlock label="Subjects" items={metadata.subjects} />
-          <MetadataBlock label="Collections" items={metadata.collections} />
-          <MetadataBlock label="Document type" items={metadata.documentTypes} />
+          <MetadataBlock label="Context" items={[metadata.academicYear, metadata.term, metadata.sourceDate].filter((item): item is string => Boolean(item))} />
+          <MetadataBlock label="Category" items={[metadata.documentCategory, metadata.linkedAssessmentName].filter((item): item is string => Boolean(item))} />
           <MetadataBlock label="Teachers" items={metadata.teacherNames} />
         </div>
+      ) : null}
+      {metadata?.ignoreInstrumentalMusic ? (
+        <p className="mt-3 rounded-lg bg-paper/75 px-3 py-2 text-xs font-semibold text-graphite/70">
+          Instrumental/music lesson content is ignored for academic performance analysis.
+        </p>
       ) : null}
       {document.status === 'Failed' && document.extractionError && document.extractionError !== document.summary ? <p className="mt-3 text-sm font-semibold text-red-700">{document.extractionError}</p> : null}
       {document.status !== 'Failed' ? (

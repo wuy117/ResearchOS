@@ -21,7 +21,7 @@ type ResearchChatDocument = {
   pageStart?: number;
   pageEnd?: number;
   matchedTerms?: string[];
-  metadata?: Record<string, string[]>;
+  metadata?: Record<string, string | boolean | string[] | undefined>;
   performanceContext?: string[];
   tutorContext?: string[];
 };
@@ -95,8 +95,12 @@ function buildDocumentContext(documents: ResearchChatDocument[]) {
       const matchedTerms = document.matchedTerms?.length ? document.matchedTerms.join(', ') : 'No matched terms supplied';
       const metadata = document.metadata
         ? Object.entries(document.metadata)
-            .filter(([, values]) => Array.isArray(values) && values.length > 0)
-            .map(([key, values]) => `${key}: ${values.join(', ')}`)
+            .map(([key, values]) => {
+              if (Array.isArray(values)) return values.length > 0 ? `${key}: ${values.join(', ')}` : '';
+              if (typeof values === 'boolean') return `${key}: ${values ? 'yes' : 'no'}`;
+              return values ? `${key}: ${values}` : '';
+            })
+            .filter(Boolean)
             .join('; ')
         : '';
       const performanceContext = document.performanceContext?.length ? document.performanceContext.join(' | ') : 'No performance context supplied';

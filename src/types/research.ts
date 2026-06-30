@@ -1,5 +1,8 @@
 export type PageId = 'dashboard' | 'library' | 'performance' | 'timeline' | 'tutor' | 'upload' | 'chat' | 'study' | 'map';
 
+export type AcademicTerm = 'Michaelmas' | 'Lent' | 'Summer' | 'Other';
+export type DocumentCategory = 'Report' | 'Exam result' | 'Mark sheet' | 'Notes' | 'Past paper' | 'Mark scheme' | 'Essay' | 'Other';
+
 export type Workspace = {
   id: string;
   name: string;
@@ -31,6 +34,12 @@ export type ResearchDocument = {
 };
 
 export type DocumentMetadata = {
+  sourceDate?: string;
+  academicYear?: string;
+  term?: AcademicTerm | string;
+  linkedAssessmentName?: string;
+  documentCategory?: DocumentCategory | string;
+  ignoreInstrumentalMusic?: boolean;
   subjects: string[];
   topics: string[];
   academicYears: string[];
@@ -112,6 +121,7 @@ export type MapEdge = {
 };
 
 export type AssessmentType = 'exam' | 'report' | 'coursework' | 'music' | 'mock' | 'other';
+export type PerformanceDomain = 'academic' | 'music' | 'performance';
 
 export type PerformanceRecord = {
   id: string;
@@ -122,6 +132,8 @@ export type PerformanceRecord = {
   academicYear?: string;
   subject: string;
   assessmentType: AssessmentType;
+  domain?: PerformanceDomain;
+  excludeFromAcademicAnalysis?: boolean;
   score?: number;
   maxScore?: number;
   percentage?: number;

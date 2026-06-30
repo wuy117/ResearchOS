@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, BrainCircuit, CalendarDays, Files, GraduationCap, LayoutDashboard, Map, MessageSquareText, Plus, Search, Trash2, UploadCloud, Wrench } from 'lucide-react';
+import { BarChart3, BookOpen, BrainCircuit, CalendarDays, Files, GraduationCap, LayoutDashboard, MessageSquareText, Plus, Search, Trash2, UploadCloud, Wrench } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useState } from 'react';
 import { initialState } from '../data/initialState';
@@ -10,17 +10,52 @@ import { embedChunks } from '../utils/api';
 import { buildDocumentMetadata, deriveCollections } from '../utils/learningModel';
 import { getResearchStorageStats } from '../utils/storage';
 
-const navItems: Array<{ id: PageId; label: string; icon: typeof LayoutDashboard }> = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'library', label: 'Library', icon: Files },
-  { id: 'performance', label: 'Performance', icon: BarChart3 },
-  { id: 'timeline', label: 'Timeline', icon: CalendarDays },
-  { id: 'tutor', label: 'Tutor', icon: GraduationCap },
-  { id: 'upload', label: 'Upload', icon: UploadCloud },
-  { id: 'chat', label: 'AI Chat', icon: MessageSquareText },
-  { id: 'study', label: 'Study Tools', icon: BrainCircuit },
-  { id: 'map', label: 'Knowledge Map', icon: Map },
+type PillarId = 'home' | 'sources' | 'learn' | 'progress';
+
+const navItems: Array<{ id: PillarId; label: string; target: PageId; pages: PageId[]; icon: typeof LayoutDashboard }> = [
+  { id: 'home', label: 'Home', target: 'dashboard', pages: ['dashboard'], icon: LayoutDashboard },
+  { id: 'sources', label: 'Sources', target: 'upload', pages: ['upload', 'library'], icon: Files },
+  { id: 'learn', label: 'Learn', target: 'chat', pages: ['chat', 'tutor', 'study', 'map'], icon: GraduationCap },
+  { id: 'progress', label: 'Progress', target: 'performance', pages: ['performance', 'timeline'], icon: BarChart3 },
 ];
+
+const secondaryTabs: Record<PillarId, Array<{ id: PageId; label: string; icon: typeof LayoutDashboard }>> = {
+  home: [{ id: 'dashboard', label: 'Overview', icon: LayoutDashboard }],
+  sources: [
+    { id: 'upload', label: 'Upload', icon: UploadCloud },
+    { id: 'library', label: 'Library', icon: Files },
+  ],
+  learn: [
+    { id: 'chat', label: 'Chat', icon: MessageSquareText },
+    { id: 'tutor', label: 'Tutor', icon: GraduationCap },
+    { id: 'study', label: 'Study Tools', icon: BrainCircuit },
+    { id: 'map', label: 'Map', icon: BrainCircuit },
+  ],
+  progress: [
+    { id: 'performance', label: 'Performance', icon: BarChart3 },
+    { id: 'timeline', label: 'Timeline', icon: CalendarDays },
+  ],
+};
+
+const sectionDescriptions: Record<PillarId, string> = {
+  home: 'Academic profile, recent activity, next best action, recent sources, and progress snapshot.',
+  sources: 'Upload, library, collections, metadata editing, and source management.',
+  learn: 'Chat, Tutor, and study tools in one source-aware learning workspace.',
+  progress: 'Performance, timeline, trends, and teacher comments.',
+};
+
+function getActivePillar(activePage: PageId) {
+  return navItems.find((item) => item.pages.includes(activePage)) ?? navItems[0];
+}
+
+function shouldShowKnowledgeMap(state: ResearchState) {
+  const readySources = state.documents.filter((document) => document.status === 'Ready' || document.status === 'Indexed').length;
+  return readySources >= 2 || import.meta.env.DEV || new URLSearchParams(window.location.search).get('dev') === '1';
+}
+
+function getVisibleTabs(pillar: PillarId, state: ResearchState) {
+  return secondaryTabs[pillar].filter((tab) => tab.id !== 'map' || shouldShowKnowledgeMap(state));
+}
 
 type AppShellProps = {
   state: ResearchState;
@@ -57,6 +92,8 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
     connected: 'bg-moss',
   }[storageStatus];
   const showDeveloperTools = import.meta.env.DEV || new URLSearchParams(window.location.search).get('dev') === '1';
+  const activePillar = getActivePillar(activePage);
+  const visibleTabs = getVisibleTabs(activePillar.id, state);
 
   function createWorkspace() {
     const name = workspaceName.trim();
@@ -102,12 +139,12 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const active = activePage === item.id;
+              const active = activePillar.id === item.id;
               return (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setActivePage(item.id)}
+                  onClick={() => setActivePage(item.target)}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${
                     active ? 'bg-paper text-ink shadow-sm ring-1 ring-ink/8' : 'text-graphite hover:bg-paper/70 hover:text-ink'
                   }`}
@@ -192,6 +229,7 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Active workspace</p>
                 <h1 className="mt-1 font-serif text-3xl font-semibold text-ink sm:text-4xl">{activeWorkspace?.name}</h1>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/68">{sectionDescriptions[activePillar.id]}</p>
               </div>
               <button
                 type="button"
@@ -216,9 +254,9 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setActivePage(item.id)}
+                    onClick={() => setActivePage(item.target)}
                     className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
-                      activePage === item.id ? 'bg-paper text-ink ring-1 ring-ink/8' : 'bg-white/70 text-graphite'
+                      activePillar.id === item.id ? 'bg-paper text-ink ring-1 ring-ink/8' : 'bg-white/70 text-graphite'
                     }`}
                   >
                     <Icon size={15} />
@@ -227,6 +265,27 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
                 );
               })}
             </div>
+            {visibleTabs.length > 1 ? (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {visibleTabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const active = activePage === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActivePage(tab.id)}
+                      className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
+                        active ? 'bg-ink text-white shadow-sm' : 'border border-ink/8 bg-white text-graphite hover:text-ink'
+                      }`}
+                    >
+                      <Icon size={15} />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </header>
 
           <div className="scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6 xl:px-10 2xl:px-12">{children}</div>

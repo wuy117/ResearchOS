@@ -1,3 +1,5 @@
+export type RequestMetadataValue = string | boolean | string[] | undefined;
+
 export type ResearchChatRequestDocument = {
   title: string;
   summary: string;
@@ -7,7 +9,7 @@ export type ResearchChatRequestDocument = {
   pageStart?: number;
   pageEnd?: number;
   matchedTerms?: string[];
-  metadata?: Record<string, string[]>;
+  metadata?: Record<string, RequestMetadataValue>;
   performanceContext?: string[];
   tutorContext?: string[];
 };

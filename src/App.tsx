@@ -27,7 +27,7 @@ import { TutorPage } from './components/TutorPage';
 import { useResearchState } from './hooks/useResearchState';
 import { isSupabaseEnabled } from './lib/supabase';
 import { deleteSupabaseRows, saveChunks, saveDocument } from './services/researchStore';
-import type { AssessmentType, ChatMessage, Collection, DocumentChunk, DocumentMetadata, MapEdge, MapNode, PageId, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState } from './types/research';
+import type { AcademicTerm, AssessmentType, ChatMessage, Collection, DocumentCategory, DocumentChunk, DocumentMetadata, MapEdge, MapNode, PageId, PerformanceDomain, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState } from './types/research';
 import { analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
@@ -92,20 +92,21 @@ function Dashboard({
   const newestDocuments = [...documents].slice(0, 3);
   const collections = deriveCollections(state);
   const timeline = buildTimelineEvents(state).slice(0, 5);
+  const academicPerformanceRecords = getAcademicPerformanceRecords(state.performanceRecords);
   const subjects = [
     ...new Set([
       ...documents.flatMap((document) => getDocumentMetadata(document, state.performanceRecords).subjects),
-      ...state.performanceRecords.map((record) => record.subject),
+      ...academicPerformanceRecords.map((record) => record.subject),
     ]),
   ].slice(0, 8);
-  const percentages = state.performanceRecords
+  const percentages = academicPerformanceRecords
     .map((record) => getRecordPercentage(record))
     .filter((percentage): percentage is number => typeof percentage === 'number');
   const latestAverage = percentages.length ? Math.round(percentages.reduce((total, value) => total + value, 0) / percentages.length) : undefined;
   const activeLesson = state.tutorLessons.find((lesson) => lesson.status === 'in_progress') ?? state.tutorLessons[0];
   const weakTopics = [
     ...new Set(
-      state.performanceRecords
+      academicPerformanceRecords
         .flatMap((record) => [...record.weaknesses, ...record.actionPoints])
         .map((item) => item.trim())
         .filter(Boolean),
@@ -131,7 +132,7 @@ function Dashboard({
           </h2>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/72">
             {hasReadySources
-              ? `${readyCount} ready source${readyCount === 1 ? '' : 's'} now feed Library, Chat, Tutor, Performance, Collections, Timeline, and the Knowledge Map.`
+              ? `${readyCount} ready source${readyCount === 1 ? '' : 's'} now feed Sources, Learn, Progress, Collections, and Timeline.`
               : hasDocuments
                 ? 'Some uploads still need readable text or recovery before the rest of Research OS can react.'
                 : 'Start with a workspace that matches your real life: Biology, History, French, Music, Programming, personal research, or anything else you are studying.'}
@@ -204,9 +205,9 @@ function Dashboard({
         <div>
           <SectionHeader eyebrow="Performance" title="Progress overview" />
           <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
-            {state.performanceRecords.length ? (
+            {academicPerformanceRecords.length ? (
               <div className="space-y-4">
-                <TrendChart records={state.performanceRecords} />
+                <TrendChart records={academicPerformanceRecords} />
                 {weakTopics.length ? <TagList label="Priority themes" items={weakTopics} /> : null}
               </div>
             ) : (
@@ -290,7 +291,7 @@ function Library({
       <SectionHeader
         eyebrow="Document library"
         title="Sources, metadata, and collections"
-        copy="Documents are sources. Metadata and virtual collections let the same upload enrich Chat, Tutor, Performance, Timeline, and the Knowledge Map without duplication."
+        copy="Documents are sources. Metadata and virtual collections let the same upload enrich Chat, Tutor, study tools, Performance, and Timeline without duplication."
       />
       {message ? <StatusNote message={message} /> : null}
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -460,6 +461,12 @@ function ManagedDocumentCard({
   const metadata = getDocumentMetadata(document, records);
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(document.title);
+  const [sourceDate, setSourceDate] = useState(metadata.sourceDate ?? document.addedAt ?? '');
+  const [academicYear, setAcademicYear] = useState(metadata.academicYear ?? metadata.academicYears[0] ?? '');
+  const [term, setTerm] = useState(metadata.term ?? metadata.terms[0] ?? 'Other');
+  const [linkedAssessmentName, setLinkedAssessmentName] = useState(metadata.linkedAssessmentName ?? metadata.assessments[0] ?? '');
+  const [documentCategory, setDocumentCategory] = useState(metadata.documentCategory ?? metadata.documentTypes[0] ?? 'Other');
+  const [ignoreInstrumentalMusic, setIgnoreInstrumentalMusic] = useState(metadata.ignoreInstrumentalMusic ?? false);
   const [subjects, setSubjects] = useState(metadata.subjects.join(', '));
   const [topics, setTopics] = useState(metadata.topics.join(', '));
   const [academicYears, setAcademicYears] = useState(metadata.academicYears.join(', '));
@@ -472,6 +479,12 @@ function ManagedDocumentCard({
 
   function save() {
     const nextMetadata: Partial<DocumentMetadata> = {
+      sourceDate: sourceDate.trim() || undefined,
+      academicYear: academicYear.trim() || undefined,
+      term: term.trim() || undefined,
+      linkedAssessmentName: linkedAssessmentName.trim() || undefined,
+      documentCategory: documentCategory.trim() || undefined,
+      ignoreInstrumentalMusic,
       subjects: normalizeListInput(subjects),
       topics: normalizeListInput(topics),
       academicYears: normalizeListInput(academicYears),
@@ -494,6 +507,15 @@ function ManagedDocumentCard({
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Edit source metadata</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Document title" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4 md:col-span-2" />
+            <input type="date" value={sourceDate} onChange={(event) => setSourceDate(event.target.value)} className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} placeholder="Academic year" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <select value={term} onChange={(event) => setTerm(event.target.value)} className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">
+              {[...academicTerms, term].filter((value, index, values) => value && values.indexOf(value) === index).map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+            <select value={documentCategory} onChange={(event) => setDocumentCategory(event.target.value)} className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">
+              {[...documentCategories, documentCategory].filter((value, index, values) => value && values.indexOf(value) === index).map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+            <input value={linkedAssessmentName} onChange={(event) => setLinkedAssessmentName(event.target.value)} placeholder="Linked assessment/report" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4 md:col-span-2" />
             <EditListField label="Subjects" value={subjects} setValue={setSubjects} />
             <EditListField label="Topics" value={topics} setValue={setTopics} />
             <EditListField label="Academic years" value={academicYears} setValue={setAcademicYears} />
@@ -503,6 +525,10 @@ function ManagedDocumentCard({
             <EditListField label="Skills" value={skills} setValue={setSkills} />
             <EditListField label="Collections" value={collections} setValue={setCollections} />
             <EditListField label="Tags" value={tags} setValue={setTags} />
+            <label className="flex gap-3 rounded-lg border border-ink/8 bg-paper/70 p-3 text-sm leading-6 text-graphite/75 md:col-span-2">
+              <input type="checkbox" checked={ignoreInstrumentalMusic} onChange={(event) => setIgnoreInstrumentalMusic(event.target.checked)} className="mt-1 size-4 shrink-0 accent-ink" />
+              <span>Ignore instrumental/music lesson content for academic performance analysis.</span>
+            </label>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <button type="button" onClick={save} className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white">Save changes</button>
@@ -558,6 +584,38 @@ function IconTextButton({ icon: Icon, label, onClick, danger = false }: { icon: 
 }
 
 const assessmentTypes: AssessmentType[] = ['exam', 'report', 'coursework', 'music', 'mock', 'other'];
+const academicTerms: AcademicTerm[] = ['Michaelmas', 'Lent', 'Summer', 'Other'];
+const documentCategories: DocumentCategory[] = ['Report', 'Exam result', 'Mark sheet', 'Notes', 'Past paper', 'Mark scheme', 'Essay', 'Other'];
+const defaultSubjectOptions = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'English', 'History', 'Geography', 'French', 'Spanish', 'Latin', 'Music'];
+
+type UploadMetadataDraft = {
+  sourceDate: string;
+  academicYear: string;
+  term: AcademicTerm;
+  linkedAssessmentName: string;
+  documentCategory: DocumentCategory;
+  subjectsIncluded: string[];
+  customSubjects: string;
+  ignoreInstrumentalMusic: boolean;
+};
+
+function getUploadSubjects(draft: UploadMetadataDraft) {
+  return [...draft.subjectsIncluded, ...normalizeListInput(draft.customSubjects)];
+}
+
+function buildUploadMetadata(draft: UploadMetadataDraft): Partial<DocumentMetadata> {
+  const subjects = getUploadSubjects(draft);
+
+  return {
+    sourceDate: draft.sourceDate || undefined,
+    academicYear: draft.academicYear.trim() || undefined,
+    term: draft.term,
+    linkedAssessmentName: draft.linkedAssessmentName.trim() || undefined,
+    documentCategory: draft.documentCategory,
+    subjects,
+    ignoreInstrumentalMusic: draft.ignoreInstrumentalMusic,
+  };
+}
 
 function splitList(value: string) {
   return value
@@ -578,6 +636,23 @@ function getRecordPercentage(record: PerformanceRecord) {
     return Math.round((record.score / record.maxScore) * 100);
   }
   return undefined;
+}
+
+function isMusicOrPerformanceSubject(subject: string) {
+  return /\b(music|instrument|instrumental|piano|violin|cello|flute|clarinet|saxophone|trumpet|guitar|drum|singing|vocal|orchestra|choir|abrsm|trinity)\b/i.test(subject);
+}
+
+function getPerformanceDomain(subject: string, assessmentType?: AssessmentType): PerformanceDomain {
+  if (assessmentType === 'music' || isMusicOrPerformanceSubject(subject)) return 'music';
+  return 'academic';
+}
+
+function isAcademicPerformanceRecord(record: PerformanceRecord) {
+  return !record.excludeFromAcademicAnalysis && (record.domain ?? getPerformanceDomain(record.subject, record.assessmentType)) === 'academic';
+}
+
+function getAcademicPerformanceRecords(records: PerformanceRecord[]) {
+  return records.filter(isAcademicPerformanceRecord);
 }
 
 function getSubjectGroups(records: PerformanceRecord[]) {
@@ -649,6 +724,7 @@ function applyDocumentEdit(state: ResearchState, documentId: string, patch: { ti
       const metadata = makeMetadata(nextDocument, state.performanceRecords, patch.metadata);
       return {
         ...nextDocument,
+        addedAt: metadata.sourceDate ?? nextDocument.addedAt,
         tags: metadata.tags.length ? metadata.tags : nextDocument.tags,
         metadata,
         collectionIds: metadata.collections.map(collectionIdFromName),
@@ -706,7 +782,7 @@ function normalizeAssessmentType(value: unknown): AssessmentType {
   return typeof value === 'string' && assessmentTypes.includes(value as AssessmentType) ? (value as AssessmentType) : 'other';
 }
 
-function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocumentId: string, fallbackTitle: string): PerformanceRecord | null {
+function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocumentId: string, fallbackTitle: string, sourceMetadata?: DocumentMetadata): PerformanceRecord | null {
   const subject = typeof record.subject === 'string' ? record.subject.trim() : '';
   if (!subject) return null;
 
@@ -719,15 +795,20 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
         ? Math.round((score / maxScore) * 100)
         : undefined;
 
+  const assessmentType = normalizeAssessmentType(record.assessmentType);
+  const domain = getPerformanceDomain(subject, assessmentType);
+
   return {
     id: `performance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     title: typeof record.title === 'string' && record.title.trim() ? record.title.trim() : fallbackTitle,
     sourceDocumentId,
-    date: typeof record.date === 'string' && record.date.trim() ? record.date.trim() : new Date().toISOString().slice(0, 10),
-    term: typeof record.term === 'string' && record.term.trim() ? record.term.trim() : undefined,
-    academicYear: typeof record.academicYear === 'string' && record.academicYear.trim() ? record.academicYear.trim() : undefined,
+    date: typeof record.date === 'string' && record.date.trim() ? record.date.trim() : sourceMetadata?.sourceDate || new Date().toISOString().slice(0, 10),
+    term: typeof record.term === 'string' && record.term.trim() ? record.term.trim() : sourceMetadata?.term,
+    academicYear: typeof record.academicYear === 'string' && record.academicYear.trim() ? record.academicYear.trim() : sourceMetadata?.academicYear,
     subject,
-    assessmentType: normalizeAssessmentType(record.assessmentType),
+    assessmentType,
+    domain,
+    excludeFromAcademicAnalysis: sourceMetadata?.ignoreInstrumentalMusic && domain !== 'academic',
     score,
     maxScore,
     percentage,
@@ -778,7 +859,9 @@ function PerformancePage({
   const [editingRecordId, setEditingRecordId] = useState('');
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
-  const subjectGroups = useMemo(() => getSubjectGroups(records), [records]);
+  const academicRecords = useMemo(() => getAcademicPerformanceRecords(records), [records]);
+  const nonAcademicRecords = useMemo(() => records.filter((record) => !isAcademicPerformanceRecord(record)), [records]);
+  const subjectGroups = useMemo(() => getSubjectGroups(academicRecords), [academicRecords]);
   const subjectEntries = Object.entries(subjectGroups);
   const latestBySubject = subjectEntries.map(([subject, subjectRecords]) => ({
     subject,
@@ -843,6 +926,8 @@ function PerformancePage({
       term: form.term.trim() || undefined,
       subject,
       assessmentType: form.assessmentType,
+      domain: getPerformanceDomain(subject, form.assessmentType),
+      excludeFromAcademicAnalysis: getPerformanceDomain(subject, form.assessmentType) !== 'academic',
       score: parseOptionalNumber(form.score),
       maxScore: parseOptionalNumber(form.maxScore),
       percentage: computedPercentage,
@@ -932,10 +1017,22 @@ function PerformancePage({
     setStatusMessage(`Analysing ${document.title} for academic performance records...`);
 
     try {
+      const metadata = getDocumentMetadata(document, records);
+
+      if (metadata.ignoreInstrumentalMusic && metadata.documentCategory === 'Other' && metadata.subjects.every(isMusicOrPerformanceSubject)) {
+        setStatusMessage(`${document.title} is stored as source material, but its instrumental/music content is ignored for academic performance trends.`);
+        return;
+      }
+
       const response = await analysePerformanceDocument({ title: document.title, text: document.extractedText });
       const newRecords = response.records
-        .map((record) => createRecordFromAnalysis(record, document.id, document.title))
-        .filter((record): record is PerformanceRecord => Boolean(record));
+        .map((record) => createRecordFromAnalysis(record, document.id, document.title, metadata))
+        .filter((record): record is PerformanceRecord => Boolean(record))
+        .map((record) =>
+          metadata.ignoreInstrumentalMusic && (record.domain !== 'academic' || isMusicOrPerformanceSubject(record.subject))
+            ? { ...record, domain: record.domain ?? 'music', excludeFromAcademicAnalysis: true }
+            : record,
+        );
 
       if (newRecords.length === 0) {
         setStatusMessage(response.message || 'No reliable performance records were found in that document.');
@@ -968,8 +1065,8 @@ function PerformancePage({
   }
 
   async function handleGenerateAdvice() {
-    if (records.length === 0) {
-      setStatusMessage('Add at least one performance record before generating advice.');
+    if (academicRecords.length === 0) {
+      setStatusMessage('Add at least one academic performance record before generating advice.');
       return;
     }
 
@@ -977,8 +1074,8 @@ function PerformancePage({
     setStatusMessage('Generating academic coaching advice from saved records...');
 
     try {
-      const advice = await generatePerformanceAdvice(records);
-      const summary = buildPerformanceSummary(records, advice);
+      const advice = await generatePerformanceAdvice(academicRecords);
+      const summary = buildPerformanceSummary(academicRecords, advice);
       setState((current) => ({
         ...current,
         performanceSummaries: [summary, ...current.performanceSummaries],
@@ -994,7 +1091,7 @@ function PerformancePage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <SectionHeader eyebrow="Performance" title="Performance" copy="Add marks manually or analyse uploaded reports that contain readable academic results." />
+      <SectionHeader eyebrow="Performance" title="Performance" copy="Academic trends use academic records only. Music and instrumental data can stay in Sources without changing the progress picture." />
 
       <div className="rounded-2xl border border-ink/8 bg-white p-4 shadow-sm">
         <p className="text-sm leading-7 text-graphite/74">{statusMessage}</p>
@@ -1011,7 +1108,7 @@ function PerformancePage({
         <MetricCard label="Subjects tracked" value={subjectEntries.length.toLocaleString()} />
         <MetricCard label="Latest average" value={latestAverage !== undefined ? `${latestAverage}%` : '-'} />
         <MetricCard label="Strongest subject" value={strongestSubject ?? '-'} />
-        <MetricCard label="Priority area" value={weakestSubject ?? '-'} />
+        <MetricCard label="Ignored music/performance" value={nonAcademicRecords.length.toLocaleString()} />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
@@ -1040,8 +1137,8 @@ function PerformancePage({
         </div>
 
         <div className="grid gap-6">
-          <TrendChart records={records} />
-          <AssessmentBreakdown records={records} />
+          <TrendChart records={academicRecords} />
+          <AssessmentBreakdown records={academicRecords} />
         </div>
       </section>
 
@@ -1136,7 +1233,7 @@ function PerformancePage({
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">AI advice</p>
                 <h3 className="mt-2 font-serif text-3xl font-semibold text-ink">Academic coaching summary</h3>
               </div>
-              <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || records.length === 0} className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+              <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || academicRecords.length === 0} className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
                 {isGeneratingAdvice ? 'Generating...' : 'Generate'}
               </button>
             </div>
@@ -1164,7 +1261,12 @@ function PerformancePage({
               <article key={record.id} className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p className="font-semibold text-ink">{record.title}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-ink">{record.title}</p>
+                      {!isAcademicPerformanceRecord(record) ? (
+                        <span className="rounded-full bg-paper px-2.5 py-1 text-xs font-semibold text-graphite/70">Ignored in academic trends</span>
+                      ) : null}
+                    </div>
                     <p className="mt-1 text-sm text-graphite/70">
                       {[record.subject, record.date, record.academicYear, record.term, formatResult(record)].filter(Boolean).join(' / ')}
                     </p>
@@ -1190,6 +1292,26 @@ function PerformancePage({
             ))
           ) : (
             <EmptyState title="No editable records yet" copy="Saved or extracted performance records will appear here." />
+          )}
+        </div>
+      </section>
+
+      <section>
+        <SectionHeader eyebrow="Teacher comments" title="Recent comments" />
+        <div className="grid gap-3 md:grid-cols-2">
+          {records.filter((record) => record.teacherComment).length ? (
+            records
+              .filter((record) => record.teacherComment)
+              .slice(0, 8)
+              .map((record) => (
+                <article key={`comment-${record.id}`} className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{[record.subject, record.term, record.academicYear].filter(Boolean).join(' / ')}</p>
+                  <p className="mt-3 text-sm leading-7 text-graphite/76">{record.teacherComment}</p>
+                  {!isAcademicPerformanceRecord(record) ? <p className="mt-3 text-xs font-semibold text-graphite/55">Stored separately from academic trend analysis.</p> : null}
+                </article>
+              ))
+          ) : (
+            <EmptyState title="No teacher comments yet" copy="Comments extracted from reports or entered manually will appear here." />
           )}
         </div>
       </section>
@@ -1442,6 +1564,16 @@ function Upload({
   const [isReading, setIsReading] = useState(false);
   const [failedUpload, setFailedUpload] = useState<{ file: File; documentId: string; title: string; cleanName: string; type: 'PDF' | 'DOCX' } | null>(null);
   const [note, setNote] = useState('TXT, PDF, and DOCX files are extracted locally and chunked into searchable research context.');
+  const [metadataDraft, setMetadataDraft] = useState<UploadMetadataDraft>({
+    sourceDate: new Date().toISOString().slice(0, 10),
+    academicYear: '',
+    term: 'Michaelmas',
+    linkedAssessmentName: '',
+    documentCategory: 'Notes',
+    subjectsIncluded: [],
+    customSubjects: '',
+    ignoreInstrumentalMusic: false,
+  });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const recentUploads = stateDocuments.filter((document) => document.status !== 'Indexed' || document.type === 'TXT' || document.type === 'PDF' || document.type === 'DOCX').slice(0, 4);
 
@@ -1461,12 +1593,31 @@ function Upload({
   }
 
   function enrichDocument(document: ResearchDocument) {
-    const metadata = buildDocumentMetadata(document, performanceRecords);
-    return {
+    const uploadMetadata = buildUploadMetadata(metadataDraft);
+    const taggedDocument = {
       ...document,
+      tags: [...new Set([...document.tags, ...(uploadMetadata.subjects ?? []), uploadMetadata.documentCategory ?? ''].filter(Boolean))],
+    };
+    const metadata = makeMetadata(taggedDocument, performanceRecords, uploadMetadata);
+    return {
+      ...taggedDocument,
+      addedAt: uploadMetadata.sourceDate ?? document.addedAt,
       metadata,
       collectionIds: metadata.collections.map((collection) => `collection-${collection.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`),
     };
+  }
+
+  function updateUploadMetadata<K extends keyof UploadMetadataDraft>(field: K, value: UploadMetadataDraft[K]) {
+    setMetadataDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function toggleUploadSubject(subject: string) {
+    setMetadataDraft((current) => ({
+      ...current,
+      subjectsIncluded: current.subjectsIncluded.includes(subject)
+        ? current.subjectsIncluded.filter((item) => item !== subject)
+        : [...current.subjectsIncluded, subject],
+    }));
   }
 
   async function queueEmbeddings(document: ResearchDocument, chunks: DocumentChunk[], readyMessage: string) {
@@ -1478,7 +1629,7 @@ function Upload({
 
       setState((current) => ({
         ...current,
-        documents: current.documents.map((item) => (item.id === document.id ? notEmbeddedDocument : item)),
+        documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...notEmbeddedDocument, metadata: item.metadata ?? notEmbeddedDocument.metadata } : item)),
       }));
       setNote(`${readyMessage} Keyword search is ready now. Semantic search will start after Supabase connects.`);
       return;
@@ -1497,7 +1648,7 @@ function Upload({
 
     setState((current) => ({
       ...current,
-      documents: current.documents.map((item) => (item.id === document.id ? embeddingDocument : item)),
+      documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...embeddingDocument, metadata: item.metadata ?? embeddingDocument.metadata } : item)),
       chunks: [...pendingChunks, ...current.chunks.filter((chunk) => chunk.documentId !== document.id)],
     }));
     setNote(`${readyMessage} Embedding chunks for semantic search...`);
@@ -1524,7 +1675,7 @@ function Upload({
 
       setState((current) => ({
         ...current,
-        documents: current.documents.map((item) => (item.id === document.id ? finalDocument : item)),
+        documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...finalDocument, metadata: item.metadata ?? finalDocument.metadata } : item)),
         chunks: current.chunks.map((chunk) => finalChunks.find((item) => item.id === chunk.id) ?? chunk),
       }));
       await saveDocument(finalDocument);
@@ -1550,12 +1701,59 @@ function Upload({
       logUploadError('Embedding failed after document upload; keeping keyword search available.', error);
       setState((current) => ({
         ...current,
-        documents: current.documents.map((item) => (item.id === document.id ? keywordOnlyDocument : item)),
+        documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...keywordOnlyDocument, metadata: item.metadata ?? keywordOnlyDocument.metadata } : item)),
         chunks: current.chunks.map((chunk) => failedEmbeddingChunks.find((item) => item.id === chunk.id) ?? chunk),
       }));
       await saveDocument(keywordOnlyDocument);
       await saveChunks(failedEmbeddingChunks);
       setNote(`${readyMessage} Keyword search is ready; semantic embeddings failed but upload is saved.`);
+    }
+  }
+
+  async function analyseUploadedPerformanceIfRelevant(document: ResearchDocument) {
+    const metadata = getDocumentMetadata(document, performanceRecords);
+    const category = metadata.documentCategory ?? '';
+    const canAffectProgress = ['Report', 'Exam result', 'Mark sheet'].includes(category);
+
+    if (!document.extractedText?.trim() || !canAffectProgress) return 0;
+
+    if (metadata.ignoreInstrumentalMusic && metadata.subjects.length > 0 && metadata.subjects.every(isMusicOrPerformanceSubject)) {
+      return 0;
+    }
+
+    try {
+      const response = await analysePerformanceDocument({ title: document.title, text: document.extractedText });
+      const newRecords = response.records
+        .map((record) => createRecordFromAnalysis(record, document.id, document.title, metadata))
+        .filter((record): record is PerformanceRecord => Boolean(record))
+        .map((record) =>
+          metadata.ignoreInstrumentalMusic && (record.domain !== 'academic' || isMusicOrPerformanceSubject(record.subject))
+            ? { ...record, domain: record.domain ?? 'music', excludeFromAcademicAnalysis: true }
+            : record,
+        );
+
+      if (newRecords.length === 0) return 0;
+
+      setState((current) => {
+        const performanceRecords = [...newRecords, ...current.performanceRecords];
+        return withDerivedCollections({
+          ...current,
+          performanceRecords,
+          documents: current.documents.map((item) =>
+            item.id === document.id
+              ? {
+                  ...item,
+                  metadata: buildDocumentMetadata(item, performanceRecords),
+                }
+              : item,
+          ),
+        });
+      });
+
+      return newRecords.filter(isAcademicPerformanceRecord).length;
+    } catch (error) {
+      logUploadError('Automatic performance analysis was skipped after upload.', error);
+      return 0;
     }
   }
 
@@ -1639,19 +1837,20 @@ function Upload({
         documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
       }));
-      const readyMessage = `${cleanName} is ready with ${extracted.pages.length.toLocaleString()} pages, ${extracted.wordCount.toLocaleString()} words, and ${chunks.length} chunks.`;
+      const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument);
+      const readyMessage = `${cleanName} is ready with ${extracted.pages.length.toLocaleString()} pages, ${extracted.wordCount.toLocaleString()} words, and ${chunks.length} chunks.${performanceCount ? ` ${performanceCount} academic performance record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
       setNote(readyMessage);
       resetUploadFields();
       await queueEmbeddings(readyDocument, chunks, readyMessage);
     } catch (error) {
       const message = error instanceof Error ? error.message : `Research OS could not extract text from ${cleanName}. Please try another PDF.`;
-      const failedDocument: ResearchDocument = {
+      const failedDocument: ResearchDocument = enrichDocument({
         ...processingDocument,
         status: 'Failed',
         tags: ['pdf upload', 'failed'],
         summary: message,
         extractionError: message,
-      };
+      });
 
       logUploadError(`PDF upload failed for ${cleanName}.`, error);
       setState((current) => ({
@@ -1744,19 +1943,20 @@ function Upload({
         documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
       }));
-      const readyMessage = `${cleanName} is ready with ${extracted.wordCount.toLocaleString()} words and ${chunks.length} chunks.`;
+      const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument);
+      const readyMessage = `${cleanName} is ready with ${extracted.wordCount.toLocaleString()} words and ${chunks.length} chunks.${performanceCount ? ` ${performanceCount} academic performance record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
       setNote(readyMessage);
       resetUploadFields();
       await queueEmbeddings(readyDocument, chunks, readyMessage);
     } catch (error) {
       const message = error instanceof Error ? error.message : `Research OS could not extract text from ${cleanName}. Please try another DOCX.`;
-      const failedDocument: ResearchDocument = {
+      const failedDocument: ResearchDocument = enrichDocument({
         ...processingDocument,
         status: 'Failed',
         tags: ['docx upload', 'failed'],
         summary: message,
         extractionError: message,
-      };
+      });
 
       logUploadError(`DOCX upload failed for ${cleanName}.`, error);
       setState((current) => ({
@@ -1823,12 +2023,13 @@ function Upload({
           documents: [newDocument, ...current.documents],
           chunks: [...chunks, ...current.chunks],
         }));
-        const readyMessage = `${cleanName} was read locally, saved with ${wordCount.toLocaleString()} words, and split into ${chunks.length} chunks.`;
+        const performanceCount = await analyseUploadedPerformanceIfRelevant(newDocument);
+        const readyMessage = `${cleanName} was read locally, saved with ${wordCount.toLocaleString()} words, and split into ${chunks.length} chunks.${performanceCount ? ` ${performanceCount} academic performance record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
         setNote(readyMessage);
         await queueEmbeddings(newDocument, chunks, readyMessage);
       } catch (error) {
         const message = error instanceof Error ? error.message : `Research OS could not read ${cleanName}. Please try a plain UTF-8 text file.`;
-        const failedDocument: ResearchDocument = {
+        const failedDocument: ResearchDocument = enrichDocument({
           id: documentId,
           title,
           type: 'TXT',
@@ -1840,7 +2041,7 @@ function Upload({
           insightCount: 0,
           summary: message,
           extractionError: message,
-        };
+        });
 
         logUploadError(`TXT upload failed for ${cleanName}.`, error);
         setState((current) => ({
@@ -1875,27 +2076,68 @@ function Upload({
       <section>
         <SectionHeader
           eyebrow="Upload"
-          title="Add research material"
-          copy="Choose a TXT, PDF, or DOCX file. Research OS extracts readable text, creates chunks for keyword search, then adds semantic embeddings when Supabase is connected."
+          title="Add source with context"
+          copy="Give the document academic context first, then Research OS extracts readable text, saves metadata, updates Sources and Timeline, and makes it available to Learn."
         />
-        <div className="rounded-2xl border border-dashed border-ink/16 bg-white p-5 shadow-sm">
-          <div className="grid min-h-[340px] place-items-center rounded-2xl bg-paper/65 px-5 py-10 text-center">
-            <div>
-              <div className="mx-auto grid size-16 place-items-center rounded-2xl border border-ink/8 bg-white text-ink shadow-sm">
-                <UploadCloud size={28} />
+        <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Date</span>
+                  <input type="date" value={metadataDraft.sourceDate} onChange={(event) => updateUploadMetadata('sourceDate', event.target.value)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Academic year</span>
+                  <input value={metadataDraft.academicYear} onChange={(event) => updateUploadMetadata('academicYear', event.target.value)} placeholder="2026-2027" className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Term</span>
+                  <select value={metadataDraft.term} onChange={(event) => updateUploadMetadata('term', event.target.value as AcademicTerm)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">
+                    {academicTerms.map((term) => <option key={term} value={term}>{term}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Document category</span>
+                  <select value={metadataDraft.documentCategory} onChange={(event) => updateUploadMetadata('documentCategory', event.target.value as DocumentCategory)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">
+                    {documentCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                  </select>
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Linked assessment or report</span>
+                  <input value={metadataDraft.linkedAssessmentName} onChange={(event) => updateUploadMetadata('linkedAssessmentName', event.target.value)} placeholder="Michaelmas Report, Summer Exams, Biology Mock" className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+                </label>
               </div>
-              <h3 className="mt-5 font-serif text-3xl font-semibold text-ink">Place a source on the desk</h3>
-              <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-graphite/72">
-                Upload first, then ask Chat or Tutor questions against the extracted source chunks. Scanned PDFs may need OCR before they can be searched.
-              </p>
-              <div className="mx-auto mt-7 flex max-w-xl flex-col gap-3 sm:flex-row">
-                <input
-                  value={fileName}
-                  onChange={(event) => setFileName(event.target.value)}
-                  placeholder="optional-display-name.pdf"
-                  className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4"
-                />
-                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-graphite shadow-sm transition hover:text-ink">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Subjects included</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {defaultSubjectOptions.map((subject) => (
+                    <button key={subject} type="button" onClick={() => toggleUploadSubject(subject)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${metadataDraft.subjectsIncluded.includes(subject) ? 'border-ink bg-ink text-white' : 'border-ink/10 bg-paper text-graphite/75'}`}>
+                      {subject}
+                    </button>
+                  ))}
+                </div>
+                <textarea value={metadataDraft.customSubjects} onChange={(event) => updateUploadMetadata('customSubjects', event.target.value)} rows={2} placeholder="Other subjects, separated by commas" className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+              </div>
+              <label className="flex gap-3 rounded-lg border border-ink/8 bg-paper/70 p-3 text-sm leading-6 text-graphite/75">
+                <input type="checkbox" checked={metadataDraft.ignoreInstrumentalMusic} onChange={(event) => updateUploadMetadata('ignoreInstrumentalMusic', event.target.checked)} className="mt-1 size-4 shrink-0 accent-ink" />
+                <span>Ignore instrumental/music lesson content for academic performance analysis. The source is still stored and searchable.</span>
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-dashed border-ink/14 bg-paper/55 p-5">
+              <div className="flex items-start gap-4">
+                <div className="grid size-11 shrink-0 place-items-center rounded-lg border border-ink/8 bg-white text-ink shadow-sm">
+                  <UploadCloud size={22} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-ink">Source file</h3>
+                  <p className="mt-2 text-sm leading-7 text-graphite/72">TXT, PDF, and DOCX files are extracted locally. Scanned PDFs may need OCR first.</p>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3">
+                <input value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="optional-display-name.pdf" className="min-w-0 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4" />
+                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-graphite shadow-sm transition hover:text-ink">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -1909,12 +2151,7 @@ function Upload({
                   />
                   Choose File
                 </label>
-                <button
-                  type="button"
-                  onClick={handleUpload}
-                  disabled={isReading}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
-                >
+                <button type="button" onClick={handleUpload} disabled={isReading} className="inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55">
                   <FilePlus2 size={18} />
                   {isReading
                     ? 'Processing...'
@@ -1931,7 +2168,7 @@ function Upload({
             </div>
           </div>
         </div>
-        <div className="mt-4 rounded-2xl border border-ink/8 bg-white p-4 shadow-sm">
+        <div className="mt-4 rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{isReading ? 'Processing' : 'Latest result'}</p>
           <p className="mt-2 text-sm leading-7 text-graphite/74">{note}</p>
         </div>
