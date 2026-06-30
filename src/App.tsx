@@ -1,6 +1,5 @@
 import {
   ArrowRight,
-  BarChart3,
   BrainCircuit,
   CalendarDays,
   CheckCircle2,
@@ -10,12 +9,17 @@ import {
   FilePlus2,
   FolderKanban,
   LibraryBig,
+  Lightbulb,
+  LineChart,
   Network,
+  MessageSquareText,
+  Music2,
   Trash2,
   Send,
+  SlidersHorizontal,
   Sparkles,
   Tags,
-  TrendingUp,
+  Target,
   UploadCloud,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -27,7 +31,7 @@ import { TutorPage } from './components/TutorPage';
 import { useResearchState } from './hooks/useResearchState';
 import { isSupabaseEnabled } from './lib/supabase';
 import { deleteSupabaseRows, saveChunks, saveDocument } from './services/researchStore';
-import type { AcademicTerm, AssessmentType, ChatMessage, Collection, DocumentCategory, DocumentChunk, DocumentMetadata, MapEdge, MapNode, PageId, PerformanceDomain, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState } from './types/research';
+import type { AcademicTerm, AssessmentType, ChatMessage, Collection, DocumentCategory, DocumentChunk, DocumentMetadata, MapEdge, MapNode, PageId, PerformanceDomain, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState, TutorAttempt, TutorLesson, TutorMemory } from './types/research';
 import { analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
@@ -48,7 +52,7 @@ function App() {
   const page = {
     dashboard: <Dashboard state={state} documents={workspaceDocuments} setActivePage={setActivePage} />,
     library: <Library state={state} documents={workspaceDocuments} chunks={state.chunks} storageStatus={storageStatus} setState={setState} />,
-    performance: <PerformancePage records={state.performanceRecords} summaries={state.performanceSummaries} documents={state.documents} storageStatus={storageStatus} setState={setState} />,
+    performance: <PerformancePage records={state.performanceRecords} summaries={state.performanceSummaries} documents={state.documents} tutorLessons={state.tutorLessons} tutorAttempts={state.tutorAttempts} tutorMemory={state.tutorMemory} storageStatus={storageStatus} setState={setState} />,
     timeline: <TimelinePage events={buildTimelineEvents(state)} />,
     tutor: (
       <TutorPage
@@ -826,12 +830,18 @@ function PerformancePage({
   records,
   summaries,
   documents,
+  tutorLessons,
+  tutorAttempts,
+  tutorMemory,
   storageStatus,
   setState,
 }: {
   records: PerformanceRecord[];
   summaries: PerformanceSummary[];
   documents: ResearchDocument[];
+  tutorLessons: TutorLesson[];
+  tutorAttempts: TutorAttempt[];
+  tutorMemory: TutorMemory;
   storageStatus: ReturnType<typeof useResearchState>['storageStatus'];
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
@@ -858,24 +868,37 @@ function PerformancePage({
   const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
   const [editingRecordId, setEditingRecordId] = useState('');
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState('All Subjects');
+  const [selectedPeriod, setSelectedPeriod] = useState<ProgressPeriod>('This Academic Year');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [selectedBreakdown, setSelectedBreakdown] = useState<PerformanceBreakdown>('Overall');
+  const [selectedTimelineRecordId, setSelectedTimelineRecordId] = useState('');
+  const [showMovingAverage, setShowMovingAverage] = useState(true);
+  const [showTeacherConfidence, setShowTeacherConfidence] = useState(true);
+  const [showAiConfidence, setShowAiConfidence] = useState(true);
 
   const academicRecords = useMemo(() => getAcademicPerformanceRecords(records), [records]);
-  const nonAcademicRecords = useMemo(() => records.filter((record) => !isAcademicPerformanceRecord(record)), [records]);
-  const subjectGroups = useMemo(() => getSubjectGroups(academicRecords), [academicRecords]);
-  const subjectEntries = Object.entries(subjectGroups);
-  const latestBySubject = subjectEntries.map(([subject, subjectRecords]) => ({
-    subject,
-    record: subjectRecords[subjectRecords.length - 1],
-    previous: subjectRecords[subjectRecords.length - 2],
-  }));
-  const latestPercentages = latestBySubject
-    .map((item) => ({ subject: item.subject, percentage: getRecordPercentage(item.record) }))
-    .filter((item): item is { subject: string; percentage: number } => typeof item.percentage === 'number');
-  const latestAverage = latestPercentages.length
-    ? Math.round(latestPercentages.reduce((total, item) => total + item.percentage, 0) / latestPercentages.length)
-    : undefined;
-  const strongestSubject = [...latestPercentages].sort((a, b) => b.percentage - a.percentage)[0]?.subject;
-  const weakestSubject = [...latestPercentages].sort((a, b) => a.percentage - b.percentage)[0]?.subject;
+  const musicRecords = useMemo(() => records.filter((record) => (record.domain ?? getPerformanceDomain(record.subject, record.assessmentType)) === 'music' || isMusicOrPerformanceSubject(record.subject)), [records]);
+  const academicSubjects = useMemo(() => Object.keys(getSubjectGroups(academicRecords)), [academicRecords]);
+  const musicSubjects = useMemo(() => Object.keys(getSubjectGroups(musicRecords)), [musicRecords]);
+  const subjectOptions = useMemo(() => ['All Subjects', ...academicSubjects, ...musicSubjects.filter((subject) => !academicSubjects.includes(subject))], [academicSubjects, musicSubjects]);
+  const availableRecords = selectedSubject === 'Music' || musicSubjects.includes(selectedSubject) ? musicRecords : academicRecords;
+  const filteredRecords = useMemo(
+    () => filterProgressRecords(availableRecords, selectedSubject, selectedPeriod, customStart, customEnd),
+    [availableRecords, customEnd, customStart, selectedPeriod, selectedSubject],
+  );
+  const breakdownRecords = useMemo(() => filterBreakdownRecords(filteredRecords, selectedBreakdown), [filteredRecords, selectedBreakdown]);
+  const sortedRecords = useMemo(() => [...filteredRecords].sort((a, b) => a.date.localeCompare(b.date)), [filteredRecords]);
+  const selectedTimelineRecord = sortedRecords.find((record) => record.id === selectedTimelineRecordId) ?? sortedRecords[sortedRecords.length - 1];
+  const learningSummary = useMemo(() => buildLearningSummary(filteredRecords, selectedSubject, summaries[0]), [filteredRecords, selectedSubject, summaries]);
+  const teacherInsights = useMemo(() => buildTeacherInsights(filteredRecords), [filteredRecords]);
+  const strengths = useMemo(() => buildEvidenceItems(filteredRecords, 'strengths'), [filteredRecords]);
+  const needsImprovement = useMemo(() => buildEvidenceItems(filteredRecords, 'weaknesses'), [filteredRecords]);
+  const recommendations = useMemo(
+    () => buildProgressRecommendations(filteredRecords, tutorLessons, tutorAttempts, tutorMemory, documents, selectedSubject),
+    [documents, filteredRecords, selectedSubject, tutorAttempts, tutorLessons, tutorMemory],
+  );
   const latestSummary = summaries[0];
   const analysableDocuments = documents.filter((document) => document.extractedText?.trim() && (document.status === 'Ready' || document.status === 'Indexed'));
   const computedPercentage = (() => {
@@ -1065,17 +1088,18 @@ function PerformancePage({
   }
 
   async function handleGenerateAdvice() {
-    if (academicRecords.length === 0) {
+    const adviceRecords = filteredRecords.filter(isAcademicPerformanceRecord);
+    if (adviceRecords.length === 0) {
       setStatusMessage('Add at least one academic performance record before generating advice.');
       return;
     }
 
     setIsGeneratingAdvice(true);
-    setStatusMessage('Generating academic coaching advice from saved records...');
+    setStatusMessage(`Generating academic coaching advice for ${selectedSubject} / ${selectedPeriod}...`);
 
     try {
-      const advice = await generatePerformanceAdvice(academicRecords);
-      const summary = buildPerformanceSummary(academicRecords, advice);
+      const advice = await generatePerformanceAdvice(adviceRecords);
+      const summary = buildPerformanceSummary(adviceRecords, advice);
       setState((current) => ({
         ...current,
         performanceSummaries: [summary, ...current.performanceSummaries],
@@ -1090,11 +1114,43 @@ function PerformancePage({
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
-      <SectionHeader eyebrow="Performance" title="Performance" copy="Academic trends use academic records only. Music and instrumental data can stay in Sources without changing the progress picture." />
+    <div className="mx-auto max-w-7xl space-y-9">
+      <SectionHeader eyebrow="Progress" title="Learning over time" copy="A narrative dashboard for improvement, teacher feedback, performance movement, and next actions." />
 
-      <div className="rounded-2xl border border-ink/8 bg-white p-4 shadow-sm">
-        <p className="text-sm leading-7 text-graphite/74">{statusMessage}</p>
+      <div className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
+          <label className="text-sm font-semibold text-ink">
+            Subject
+            <select value={selectedSubject} onChange={(event) => setSelectedSubject(event.target.value)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm font-normal outline-none ring-ink/10 focus:ring-4">
+              {subjectOptions.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))}
+              {!subjectOptions.includes('Music') ? <option value="Music">Music</option> : null}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-ink">
+            Time period
+            <select value={selectedPeriod} onChange={(event) => setSelectedPeriod(event.target.value as ProgressPeriod)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm font-normal outline-none ring-ink/10 focus:ring-4">
+              {progressPeriods.map((period) => (
+                <option key={period} value={period}>
+                  {period}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || filteredRecords.filter(isAcademicPerformanceRecord).length === 0} className="self-end rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+            {isGeneratingAdvice ? 'Generating...' : 'Refresh AI summary'}
+          </button>
+        </div>
+        {selectedPeriod === 'Custom Range' ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+          </div>
+        ) : null}
+        <p className="mt-3 text-sm leading-7 text-graphite/74">{statusMessage}</p>
       </div>
 
       {records.length === 0 ? (
@@ -1104,46 +1160,120 @@ function PerformancePage({
         />
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Subjects tracked" value={subjectEntries.length.toLocaleString()} />
-        <MetricCard label="Latest average" value={latestAverage !== undefined ? `${latestAverage}%` : '-'} />
-        <MetricCard label="Strongest subject" value={strongestSubject ?? '-'} />
-        <MetricCard label="Ignored music/performance" value={nonAcademicRecords.length.toLocaleString()} />
+      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+          <Sparkles size={15} />
+          Learning summary
+        </div>
+        <div className="mt-5 grid gap-6 xl:grid-cols-[1fr_260px]">
+          <div>
+            <p className="text-sm font-semibold text-graphite/62">{selectedSubject}</p>
+            <h3 className="mt-2 font-serif text-3xl font-semibold leading-tight text-ink">{learningSummary.headline}</h3>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/76">{learningSummary.body}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+            <InsightBadge label="Confidence" value={learningSummary.confidence} />
+            <InsightBadge label="Direction" value={learningSummary.direction} />
+          </div>
+        </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_380px]">
+        <div className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
-            <BarChart3 size={15} />
-            Latest performance by subject
+            <CalendarDays size={15} />
+            Progress timeline
           </div>
-          <div className="mt-5 space-y-4">
-            {latestPercentages.length ? (
-              latestPercentages.map((item) => (
-                <div key={item.subject}>
-                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                    <span className="font-semibold text-ink">{item.subject}</span>
-                    <span className="text-graphite/70">{item.percentage}%</span>
-                  </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-paper">
-                    <div className="h-full rounded-full bg-moss" style={{ width: `${Math.min(100, Math.max(0, item.percentage))}%` }} />
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="rounded-xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Scores or percentages will appear here after they are added.</p>
-            )}
-          </div>
+          <ProgressTimeline records={sortedRecords} selectedId={selectedTimelineRecord?.id} onSelect={setSelectedTimelineRecordId} />
         </div>
 
-        <div className="grid gap-6">
-          <TrendChart records={academicRecords} />
-          <AssessmentBreakdown records={academicRecords} />
+        <div className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Selected point</p>
+          {selectedTimelineRecord ? <TimelineDetail record={selectedTimelineRecord} documents={documents} /> : <p className="mt-4 text-sm leading-7 text-graphite/70">Choose a timeline point to inspect the evidence behind it.</p>}
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <form onSubmit={handleManualSubmit} className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+          <MessageSquareText size={15} />
+          Teacher insights
+        </div>
+        <div className="mt-5 grid gap-5 lg:grid-cols-4">
+          <InsightColumn title="Repeated strengths" items={teacherInsights.strengths} />
+          <InsightColumn title="Repeated weaknesses" items={teacherInsights.weaknesses} />
+          <InsightColumn title="New improvements" items={teacherInsights.improvements} />
+          <InsightColumn title="Patterns over reports" items={teacherInsights.patterns} />
+        </div>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-2">
+        <EvidencePanel title="Strengths" icon={CheckCircle2} items={strengths} empty="No repeated strength has enough evidence yet." />
+        <EvidencePanel title="Needs improvement" icon={Target} items={needsImprovement} empty="No repeated improvement theme has enough evidence yet." />
+      </section>
+
+      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+            <SlidersHorizontal size={15} />
+            Performance breakdown
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {performanceBreakdowns.map((breakdown) => (
+              <button key={breakdown} type="button" onClick={() => setSelectedBreakdown(breakdown)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${selectedBreakdown === breakdown ? 'bg-ink text-white' : 'border border-ink/10 bg-white text-graphite/75'}`}>
+                {breakdown}
+              </button>
+            ))}
+          </div>
+        </div>
+        <AssessmentBreakdown records={breakdownRecords} mode={selectedBreakdown} />
+      </section>
+
+      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+            <LineChart size={15} />
+            Trend analysis
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs font-semibold text-graphite/70">
+            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showTeacherConfidence} onChange={(event) => setShowTeacherConfidence(event.target.checked)} /> Teacher confidence</label>
+            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showAiConfidence} onChange={(event) => setShowAiConfidence(event.target.checked)} /> AI confidence</label>
+            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showMovingAverage} onChange={(event) => setShowMovingAverage(event.target.checked)} /> Moving average</label>
+          </div>
+        </div>
+        <TrendChart records={sortedRecords} showTeacherConfidence={showTeacherConfidence} showAiConfidence={showAiConfidence} showMovingAverage={showMovingAverage} />
+      </section>
+
+      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+          <Lightbulb size={15} />
+          Recommendations
+        </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          {recommendations.map((recommendation, index) => (
+            <article key={recommendation.title} className="rounded-lg border border-ink/8 bg-paper/60 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Action {index + 1}</p>
+              <h3 className="mt-2 text-lg font-semibold text-ink">{recommendation.title}</h3>
+              <p className="mt-3 text-sm leading-7 text-graphite/72">{recommendation.reason}</p>
+              <p className="mt-3 text-xs font-semibold text-graphite/55">{recommendation.evidence}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+          <Music2 size={15} />
+          Music and instrumental progress
+        </div>
+        <p className="mt-3 text-sm leading-7 text-graphite/72">
+          Academic Progress ignores records marked excludeFromAcademicAnalysis. Select Music or a music subject above to view instrumental records without mixing them into academic trends.
+        </p>
+      </section>
+
+      <details className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+        <summary className="cursor-pointer text-sm font-semibold text-ink">Manage performance data</summary>
+        <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+          <form onSubmit={handleManualSubmit} className="rounded-lg border border-ink/8 bg-paper/50 p-5">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
             <ClipboardList size={15} />
             Manual entry
@@ -1200,10 +1330,10 @@ function PerformancePage({
               Cancel edit
             </button>
           ) : null}
-        </form>
+          </form>
 
         <div className="space-y-6">
-          <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+          <div className="rounded-lg border border-ink/8 bg-paper/50 p-5">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
               <Sparkles size={15} />
               Analyse uploaded report
@@ -1227,7 +1357,7 @@ function PerformancePage({
             ) : null}
           </div>
 
-          <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+          <div className="rounded-lg border border-ink/8 bg-paper/50 p-5">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">AI advice</p>
@@ -1251,11 +1381,9 @@ function PerformancePage({
             )}
           </div>
         </div>
-      </section>
+        </div>
 
-      <section>
-        <SectionHeader eyebrow="Records" title="Edit saved performance data" />
-        <div className="grid gap-3">
+        <div className="mt-8 grid gap-3">
           {records.length ? (
             records.map((record) => (
               <article key={record.id} className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
@@ -1294,67 +1422,7 @@ function PerformancePage({
             <EmptyState title="No editable records yet" copy="Saved or extracted performance records will appear here." />
           )}
         </div>
-      </section>
-
-      <section>
-        <SectionHeader eyebrow="Teacher comments" title="Recent comments" />
-        <div className="grid gap-3 md:grid-cols-2">
-          {records.filter((record) => record.teacherComment).length ? (
-            records
-              .filter((record) => record.teacherComment)
-              .slice(0, 8)
-              .map((record) => (
-                <article key={`comment-${record.id}`} className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{[record.subject, record.term, record.academicYear].filter(Boolean).join(' / ')}</p>
-                  <p className="mt-3 text-sm leading-7 text-graphite/76">{record.teacherComment}</p>
-                  {!isAcademicPerformanceRecord(record) ? <p className="mt-3 text-xs font-semibold text-graphite/55">Stored separately from academic trend analysis.</p> : null}
-                </article>
-              ))
-          ) : (
-            <EmptyState title="No teacher comments yet" copy="Comments extracted from reports or entered manually will appear here." />
-          )}
-        </div>
-      </section>
-
-      <section>
-        <SectionHeader eyebrow="Subject breakdown" title="Patterns by subject" />
-        <div className="grid gap-5 md:grid-cols-2">
-          {latestBySubject.length ? (
-            latestBySubject.map(({ subject, record, previous }) => {
-              const currentPercentage = getRecordPercentage(record);
-              const previousPercentage = previous ? getRecordPercentage(previous) : undefined;
-              const trend =
-                currentPercentage !== undefined && previousPercentage !== undefined
-                  ? currentPercentage > previousPercentage
-                    ? 'Improving'
-                    : currentPercentage < previousPercentage
-                      ? 'Needs attention'
-                      : 'Stable'
-                  : 'More data needed';
-
-              return (
-                <article key={subject} className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{trend}</p>
-                      <h3 className="mt-2 font-serif text-3xl font-semibold text-ink">{subject}</h3>
-                    </div>
-                    <span className="rounded-full bg-paper px-3 py-1 text-sm font-semibold text-graphite">{formatResult(record)}</span>
-                  </div>
-                  {record.teacherComment ? <p className="mt-4 line-clamp-3 text-sm leading-7 text-graphite/74">{record.teacherComment}</p> : null}
-                  <div className="mt-5 grid gap-3">
-                    <TagList label="Strengths" items={record.strengths} />
-                    <TagList label="Weaknesses" items={record.weaknesses} />
-                    <TagList label="Action points" items={record.actionPoints} />
-                  </div>
-                </article>
-              );
-            })
-          ) : (
-            <EmptyState title="No subject patterns yet" copy="Performance records will appear here grouped by subject." />
-          )}
-        </div>
-      </section>
+      </details>
       <ConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
     </div>
   );
@@ -1369,58 +1437,395 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TrendChart({ records }: { records: PerformanceRecord[] }) {
+type ProgressPeriod = 'This Term' | 'This Academic Year' | 'Last Academic Year' | 'All Time' | 'Custom Range';
+type PerformanceBreakdown = 'Reports' | 'Mocks' | 'Exams' | 'Coursework' | 'Homework' | 'Overall';
+
+const progressPeriods: ProgressPeriod[] = ['This Term', 'This Academic Year', 'Last Academic Year', 'All Time', 'Custom Range'];
+const performanceBreakdowns: PerformanceBreakdown[] = ['Reports', 'Mocks', 'Exams', 'Coursework', 'Homework', 'Overall'];
+
+function parseDateValue(date: string) {
+  const time = new Date(date).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function getCurrentAcademicYear(date = new Date()) {
+  const year = date.getFullYear();
+  return date.getMonth() >= 8 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+}
+
+function getPreviousAcademicYear(date = new Date()) {
+  const currentStart = Number(getCurrentAcademicYear(date).slice(0, 4));
+  return `${currentStart - 1}-${currentStart}`;
+}
+
+function getCurrentTermName(date = new Date()) {
+  const month = date.getMonth();
+  if (month >= 8 || month <= 0) return 'Michaelmas';
+  if (month <= 3) return 'Lent';
+  return 'Summer';
+}
+
+function filterProgressRecords(records: PerformanceRecord[], subject: string, period: ProgressPeriod, customStart: string, customEnd: string) {
+  const subjectFiltered = records.filter((record) => subject === 'All Subjects' || record.subject === subject || (subject === 'Music' && isMusicOrPerformanceSubject(record.subject)));
+  const currentAcademicYear = getCurrentAcademicYear();
+  const previousAcademicYear = getPreviousAcademicYear();
+  const currentTerm = getCurrentTermName().toLowerCase();
+  const startTime = customStart ? parseDateValue(customStart) : undefined;
+  const endTime = customEnd ? parseDateValue(customEnd) : undefined;
+
+  return subjectFiltered.filter((record) => {
+    if (period === 'All Time') return true;
+    if (period === 'This Academic Year') return record.academicYear === currentAcademicYear || getCurrentAcademicYear(new Date(record.date)) === currentAcademicYear;
+    if (period === 'Last Academic Year') return record.academicYear === previousAcademicYear || getCurrentAcademicYear(new Date(record.date)) === previousAcademicYear;
+    if (period === 'This Term') return record.term?.toLowerCase() === currentTerm;
+    if (period === 'Custom Range') {
+      const time = parseDateValue(record.date);
+      return (!startTime || time >= startTime) && (!endTime || time <= endTime);
+    }
+    return true;
+  });
+}
+
+function filterBreakdownRecords(records: PerformanceRecord[], breakdown: PerformanceBreakdown) {
+  if (breakdown === 'Overall') return records;
+  const matchers: Record<Exclude<PerformanceBreakdown, 'Overall'>, (record: PerformanceRecord) => boolean> = {
+    Reports: (record) => record.assessmentType === 'report',
+    Mocks: (record) => record.assessmentType === 'mock',
+    Exams: (record) => record.assessmentType === 'exam',
+    Coursework: (record) => record.assessmentType === 'coursework',
+    Homework: (record) => /\b(homework|prep|assignment)\b/i.test(record.title),
+  };
+  return records.filter(matchers[breakdown]);
+}
+
+function getTrendDelta(records: PerformanceRecord[]) {
+  const points = records.map(getRecordPercentage).filter((value): value is number => typeof value === 'number');
+  if (points.length < 2) return undefined;
+  return points[points.length - 1] - points[0];
+}
+
+function normalizeEvidenceTerm(value: string) {
+  return value.trim().replace(/\s+/g, ' ').replace(/[.]+$/, '');
+}
+
+function topEvidenceTerms(records: PerformanceRecord[], field: 'strengths' | 'weaknesses' | 'actionPoints') {
+  const byTerm = new Map<string, { term: string; records: PerformanceRecord[] }>();
+  records.forEach((record) => {
+    record[field].forEach((raw) => {
+      const term = normalizeEvidenceTerm(raw);
+      if (!term) return;
+      const key = term.toLowerCase();
+      const existing = byTerm.get(key) ?? { term, records: [] };
+      existing.records.push(record);
+      byTerm.set(key, existing);
+    });
+  });
+  return [...byTerm.values()].sort((a, b) => b.records.length - a.records.length || a.term.localeCompare(b.term));
+}
+
+function buildLearningSummary(records: PerformanceRecord[], subject: string, latestSummary?: PerformanceSummary) {
+  const delta = getTrendDelta(records);
+  const comments = records.filter((record) => record.teacherComment).length;
+  const strengths = topEvidenceTerms(records, 'strengths').slice(0, 2).map((item) => item.term);
+  const weaknesses = topEvidenceTerms(records, 'weaknesses').slice(0, 2).map((item) => item.term);
+  const direction = delta === undefined ? 'More evidence needed' : delta > 4 ? 'Upward' : delta < -4 ? 'Downward' : 'Stable';
+  const confidence = records.length >= 4 && comments >= 2 ? 'High' : records.length >= 2 ? 'Medium' : 'Low';
+  const headline =
+    delta === undefined
+      ? 'Not enough dated results yet to describe a reliable direction.'
+      : delta > 4
+        ? `Improving by ${Math.round(delta)} percentage points across the selected period.`
+        : delta < -4
+          ? `Results have fallen by ${Math.abs(Math.round(delta))} percentage points and need attention.`
+          : 'Progress looks broadly steady across the selected period.';
+  const body =
+    latestSummary?.overallCommentary && subject === 'All Subjects'
+      ? latestSummary.overallCommentary
+      : [
+          strengths.length ? `Teachers and records repeatedly point to ${strengths.join(' and ')} as strengths.` : 'There is not yet a strong repeated-strength pattern.',
+          weaknesses.length ? `The main lost-mark themes appear to be ${weaknesses.join(' and ')}.` : 'Weakness patterns are still thin, so the system is cautious.',
+          comments ? `${comments} teacher comment${comments === 1 ? '' : 's'} support this summary.` : 'Add report comments to make this more teacher-led.',
+        ].join(' ');
+
+  return { headline, body, confidence, direction };
+}
+
+function buildTeacherInsights(records: PerformanceRecord[]) {
+  const strengths = topEvidenceTerms(records, 'strengths').slice(0, 4).map((item) => `${item.term} (${item.records.length} report${item.records.length === 1 ? '' : 's'})`);
+  const weaknesses = topEvidenceTerms(records, 'weaknesses').slice(0, 4).map((item) => `${item.term} (${item.records.length} record${item.records.length === 1 ? '' : 's'})`);
+  const actionPoints = topEvidenceTerms(records, 'actionPoints').slice(0, 4).map((item) => `${item.term} is repeatedly recommended`);
+  const delta = getTrendDelta(records);
+  const patterns = [
+    delta !== undefined ? (delta > 4 ? 'Marks and comments suggest improvement is converting into results.' : delta < -4 ? 'Results are moving down despite the available feedback; revisit the repeated weaknesses.' : 'Results are stable, so improvement depends on resolving repeated feedback themes.') : undefined,
+    records.filter((record) => record.teacherComment).length > 1 ? 'Teacher comments are available across multiple records, so repeated phrasing has more weight.' : undefined,
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    strengths: strengths.length ? strengths : ['No repeated teacher strength has emerged yet.'],
+    weaknesses: weaknesses.length ? weaknesses : ['No repeated teacher weakness has emerged yet.'],
+    improvements: actionPoints.length ? actionPoints : ['More action-point history is needed before naming improvements.'],
+    patterns: patterns.length ? patterns : ['Add more dated reports to reveal patterns across time.'],
+  };
+}
+
+function buildEvidenceItems(records: PerformanceRecord[], field: 'strengths' | 'weaknesses') {
+  return topEvidenceTerms(records, field).slice(0, 5).map((item) => ({
+    title: item.term,
+    reason: `${item.records.length} record${item.records.length === 1 ? '' : 's'} mention this theme, including ${item.records.slice(0, 2).map((record) => record.title).join(' and ')}.`,
+    references: item.records.slice(0, 3).map((record) => [record.title, record.term, record.academicYear].filter(Boolean).join(' / ')),
+  }));
+}
+
+function buildProgressRecommendations(records: PerformanceRecord[], tutorLessons: TutorLesson[], tutorAttempts: TutorAttempt[], tutorMemory: TutorMemory, documents: ResearchDocument[], subject: string) {
+  const weaknesses = topEvidenceTerms(records, 'weaknesses');
+  const actions = topEvidenceTerms(records, 'actionPoints');
+  const lowest = [...records]
+    .map((record) => ({ record, percentage: getRecordPercentage(record) }))
+    .filter((item): item is { record: PerformanceRecord; percentage: number } => typeof item.percentage === 'number')
+    .sort((a, b) => a.percentage - b.percentage)[0];
+  const relevantTutorTopics = tutorMemory.topicsStudied.filter((topic) => subject === 'All Subjects' || topic.topic.toLowerCase().includes(subject.toLowerCase()) || subject.toLowerCase().includes(topic.topic.toLowerCase()));
+  const hasTutorPractice = tutorLessons.length + tutorAttempts.length > 0 || relevantTutorTopics.length > 0;
+  const sourceCount = documents.filter((document) => {
+    const metadata = getDocumentMetadata(document, records);
+    return subject === 'All Subjects' || metadata.subjects.includes(subject) || document.title.toLowerCase().includes(subject.toLowerCase());
+  }).length;
+  const firstWeakness = weaknesses[0]?.term ?? actions[0]?.term ?? lowest?.record.subject ?? 'the weakest recurring topic';
+  const secondWeakness = weaknesses[1]?.term ?? actions[1]?.term ?? 'long-form explanation';
+  const reviewTopic = lowest?.record.subject ?? (subject === 'All Subjects' ? records[0]?.subject : subject) ?? 'the selected subject';
+
+  return [
+    {
+      title: `Practise ${firstWeakness}`,
+      reason: 'This is the clearest repeated improvement theme in the selected evidence. Use short drills first, then one marked question.',
+      evidence: weaknesses[0] ? `Seen in ${weaknesses[0].records.length} record${weaknesses[0].records.length === 1 ? '' : 's'}.` : 'Based on the available action points and marks.',
+    },
+    {
+      title: `Turn feedback on ${secondWeakness} into a checklist`,
+      reason: 'Before the next assessment, convert teacher wording into a three-step answer checklist and apply it to two past answers.',
+      evidence: actions[0] ? `Grounded in action point: ${actions[0].term}.` : hasTutorPractice ? 'Grounded in performance plus Tutor history.' : 'Grounded in teacher comments and saved records.',
+    },
+    {
+      title: `Review ${reviewTopic} before the next assessment`,
+      reason: lowest ? `${lowest.record.title} is the lowest marked result in this view, so it deserves a targeted review session.` : 'The selected view needs more marks, so start with a source-backed review session.',
+      evidence: `${sourceCount} uploaded source${sourceCount === 1 ? '' : 's'} and ${tutorAttempts.length} Tutor attempt${tutorAttempts.length === 1 ? '' : 's'} are available as context.`,
+    },
+  ];
+}
+
+function InsightBadge({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-ink/8 bg-paper/70 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-ink">{value}</p>
+    </div>
+  );
+}
+
+function ProgressTimeline({ records, selectedId, onSelect }: { records: PerformanceRecord[]; selectedId?: string; onSelect: (id: string) => void }) {
+  const points = records.map((record) => ({ record, percentage: getRecordPercentage(record) }));
+
+  return points.length ? (
+    <div className="mt-6">
+      <div className="mb-3 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
+        <span>Assessment date</span>
+        <span>Percentage / grade</span>
+      </div>
+      <div className="relative space-y-4 border-l border-ink/12 pl-5">
+        {points.map(({ record, percentage }) => (
+          <button key={record.id} type="button" onClick={() => onSelect(record.id)} className={`block w-full rounded-lg border p-4 text-left transition ${selectedId === record.id ? 'border-ink/30 bg-paper' : 'border-ink/8 bg-white hover:border-ink/18'}`}>
+            <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full bg-moss ring-4 ring-white" />
+            <span className="flex flex-wrap items-start justify-between gap-3">
+              <span>
+                <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{record.date || 'Undated'} / {record.assessmentType}</span>
+                <span className="mt-1 block font-semibold text-ink">{record.title}</span>
+                {record.teacherComment ? <span className="mt-2 block line-clamp-2 text-sm leading-6 text-graphite/70">{record.teacherComment}</span> : null}
+              </span>
+              <span className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-ink shadow-sm">{[percentage !== undefined ? `${percentage}%` : undefined, record.grade].filter(Boolean).join(' / ') || 'No mark'}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  ) : (
+    <p className="mt-5 rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">No records match this subject and time period yet.</p>
+  );
+}
+
+function TimelineDetail({ record, documents }: { record: PerformanceRecord; documents: ResearchDocument[] }) {
+  const source = documents.find((document) => document.id === record.sourceDocumentId);
+  return (
+    <div className="mt-4 space-y-4">
+      <div>
+        <h3 className="text-xl font-semibold text-ink">{record.title}</h3>
+        <p className="mt-1 text-sm text-graphite/70">{[record.date, record.subject, record.academicYear, record.term].filter(Boolean).join(' / ')}</p>
+      </div>
+      <p className="rounded-lg bg-paper/70 p-3 text-sm font-semibold text-ink">{formatResult(record)}</p>
+      {record.teacherComment ? <p className="text-sm leading-7 text-graphite/74">{record.teacherComment}</p> : null}
+      <TagList label="Strengths" items={record.strengths} />
+      <TagList label="Needs work" items={record.weaknesses} />
+      {source ? <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Source: {source.title}</p> : null}
+    </div>
+  );
+}
+
+function InsightColumn({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-ink">{title}</h3>
+      <ul className="mt-3 space-y-2 text-sm leading-6 text-graphite/72">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function EvidencePanel({ title, icon: Icon, items, empty }: { title: string; icon: typeof CheckCircle2; items: Array<{ title: string; reason: string; references: string[] }>; empty: string }) {
+  return (
+    <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+        <Icon size={15} />
+        {title}
+      </div>
+      <div className="mt-5 space-y-4">
+        {items.length ? (
+          items.map((item) => (
+            <article key={item.title} className="rounded-lg border border-ink/8 bg-paper/55 p-4">
+              <h3 className="font-semibold text-ink">{item.title}</h3>
+              <p className="mt-2 text-sm leading-7 text-graphite/72">{item.reason}</p>
+              <p className="mt-2 text-xs font-semibold text-graphite/55">{item.references.join(' / ')}</p>
+            </article>
+          ))
+        ) : (
+          <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">{empty}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function TrendChart({
+  records,
+  showTeacherConfidence,
+  showAiConfidence,
+  showMovingAverage,
+}: {
+  records: PerformanceRecord[];
+  showTeacherConfidence?: boolean;
+  showAiConfidence?: boolean;
+  showMovingAverage?: boolean;
+}) {
   const points = [...records]
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map((record) => ({ date: record.date, percentage: getRecordPercentage(record) }))
-    .filter((point): point is { date: string; percentage: number } => typeof point.percentage === 'number');
-  const width = 320;
-  const height = 130;
-  const polyline = points
+    .map((record) => ({ record, date: record.date, percentage: getRecordPercentage(record) }))
+    .filter((point): point is { record: PerformanceRecord; date: string; percentage: number } => typeof point.percentage === 'number');
+  const width = 760;
+  const height = 260;
+  const pad = { top: 20, right: 24, bottom: 54, left: 54 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const xFor = (index: number) => pad.left + (points.length === 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth);
+  const yFor = (percentage: number) => pad.top + plotHeight - (Math.min(100, Math.max(0, percentage)) / 100) * plotHeight;
+  const line = points.map((point, index) => `${xFor(index)},${yFor(point.percentage)}`).join(' ');
+  const movingAverage = points
     .map((point, index) => {
-      const x = points.length === 1 ? width / 2 : (index / (points.length - 1)) * width;
-      const y = height - (Math.min(100, Math.max(0, point.percentage)) / 100) * height;
-      return `${x},${y}`;
+      const window = points.slice(Math.max(0, index - 2), index + 1);
+      const average = Math.round(window.reduce((total, item) => total + item.percentage, 0) / window.length);
+      return `${xFor(index)},${yFor(average)}`;
     })
     .join(' ');
+  const changes = points.slice(1).map((point, index) => ({ from: points[index], to: point, delta: point.percentage - points[index].percentage }));
+  const largestImprovement = [...changes].sort((a, b) => b.delta - a.delta)[0];
+  const largestDecline = [...changes].sort((a, b) => a.delta - b.delta)[0];
 
   return (
-    <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
-        <TrendingUp size={15} />
-        Trend over time
-      </div>
+    <div className="mt-5">
       {points.length > 1 ? (
-        <svg className="mt-5 h-36 w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
-          <polyline points={polyline} fill="none" stroke="rgb(111 123 92)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <>
+          <svg className="h-[320px] w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Progression over time by assessment date and percentage">
+            {[0, 25, 50, 75, 100].map((tick) => (
+              <g key={tick}>
+                <line x1={pad.left} x2={width - pad.right} y1={yFor(tick)} y2={yFor(tick)} stroke="rgba(31,41,51,0.08)" />
+                <text x={pad.left - 10} y={yFor(tick) + 4} textAnchor="end" className="fill-graphite text-[11px]">{tick}%</text>
+              </g>
+            ))}
+            <line x1={pad.left} x2={pad.left} y1={pad.top} y2={height - pad.bottom} stroke="rgba(31,41,51,0.25)" />
+            <line x1={pad.left} x2={width - pad.right} y1={height - pad.bottom} y2={height - pad.bottom} stroke="rgba(31,41,51,0.25)" />
+            <text x={18} y={pad.top + plotHeight / 2} transform={`rotate(-90 18 ${pad.top + plotHeight / 2})`} className="fill-graphite text-[12px] font-semibold">Percentage</text>
+            <text x={pad.left + plotWidth / 2} y={height - 10} textAnchor="middle" className="fill-graphite text-[12px] font-semibold">Assessment date</text>
+            {showTeacherConfidence ? points.map((point, index) => (point.record.teacherComment ? <circle key={`teacher-${point.record.id}`} cx={xFor(index)} cy={yFor(point.percentage)} r="12" fill="rgba(183,142,74,0.18)" /> : null)) : null}
+            {showAiConfidence ? points.map((point, index) => (point.record.strengths.length + point.record.weaknesses.length + point.record.actionPoints.length > 1 ? <circle key={`ai-${point.record.id}`} cx={xFor(index)} cy={yFor(point.percentage)} r="7" fill="rgba(111,123,92,0.22)" /> : null)) : null}
+            <polyline points={line} fill="none" stroke="rgb(31 41 51)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            {showMovingAverage ? <polyline points={movingAverage} fill="none" stroke="rgb(111 123 92)" strokeWidth="3" strokeDasharray="8 6" strokeLinecap="round" strokeLinejoin="round" /> : null}
+            {points.map((point, index) => (
+              <g key={point.record.id}>
+                <circle cx={xFor(index)} cy={yFor(point.percentage)} r="5" fill="rgb(31 41 51)" />
+                <text x={xFor(index)} y={height - pad.bottom + 20} textAnchor="middle" className="fill-graphite text-[10px]">{formatShortDate(point.date)}</text>
+              </g>
+            ))}
+          </svg>
+          <div className="grid gap-3 md:grid-cols-2">
+            <TrendCallout label="Largest improvement" change={largestImprovement} />
+            <TrendCallout label="Largest decline" change={largestDecline} />
+          </div>
+        </>
       ) : (
-        <p className="mt-5 rounded-xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Add at least two marked records to see a trend.</p>
+        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Add at least two marked records in this subject and period to see a dated trend.</p>
       )}
     </div>
   );
 }
 
-function AssessmentBreakdown({ records }: { records: PerformanceRecord[] }) {
-  const counts = assessmentTypes.map((type) => ({
-    type,
-    count: records.filter((record) => record.assessmentType === type).length,
-  }));
-  const maxCount = Math.max(1, ...counts.map((item) => item.count));
+function formatShortDate(date: string) {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return date || 'Undated';
+  return parsed.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+}
+
+function TrendCallout({ label, change }: { label: string; change?: { from: { record: PerformanceRecord; percentage: number }; to: { record: PerformanceRecord; percentage: number }; delta: number } }) {
+  if (!change) {
+    return <p className="rounded-lg bg-paper/70 p-3 text-sm text-graphite/70">{label}: more data needed.</p>;
+  }
 
   return (
-    <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Assessment type breakdown</p>
-      <div className="mt-5 space-y-3">
-        {counts.map((item) => (
-          <div key={item.type} className="flex items-center gap-3 text-sm">
-            <span className="w-24 font-semibold capitalize text-ink">{item.type}</span>
-            <div className="h-3 min-w-0 flex-1 overflow-hidden rounded-full bg-paper">
-              <div className="h-full rounded-full bg-brass" style={{ width: `${(item.count / maxCount) * 100}%` }} />
+    <div className="rounded-lg bg-paper/70 p-3 text-sm">
+      <p className="font-semibold text-ink">{label}: {change.delta > 0 ? '+' : ''}{Math.round(change.delta)} points</p>
+      <p className="mt-1 text-graphite/70">{change.from.record.title} to {change.to.record.title}</p>
+    </div>
+  );
+}
+
+function AssessmentBreakdown({ records, mode = 'Overall' }: { records: PerformanceRecord[]; mode?: PerformanceBreakdown }) {
+  const points = [...records]
+    .map((record) => ({ record, percentage: getRecordPercentage(record) }))
+    .filter((point): point is { record: PerformanceRecord; percentage: number } => typeof point.percentage === 'number')
+    .sort((a, b) => a.record.date.localeCompare(b.record.date));
+  const average = points.length ? Math.round(points.reduce((total, point) => total + point.percentage, 0) / points.length) : undefined;
+
+  return (
+    <div className="mt-5 grid gap-5 xl:grid-cols-[320px_1fr]">
+      <div className="rounded-lg bg-paper/70 p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{mode}</p>
+        <p className="mt-2 text-3xl font-semibold text-ink">{average !== undefined ? `${average}%` : '-'}</p>
+        <p className="mt-2 text-sm leading-6 text-graphite/70">{points.length} marked record{points.length === 1 ? '' : 's'} in this breakdown.</p>
+      </div>
+      <div className="space-y-3">
+        {points.length ? (
+          points.map(({ record, percentage }) => (
+            <div key={record.id}>
+              <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                <span className="truncate font-semibold text-ink">{record.title}</span>
+                <span className="shrink-0 text-graphite/70">{percentage}%</span>
+              </div>
+              <div className="h-3 overflow-hidden rounded-full bg-paper">
+                <div className="h-full rounded-full bg-moss" style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }} />
+              </div>
             </div>
-            <span className="w-8 text-right text-graphite/70">{item.count}</span>
-          </div>
-        ))}
+          ))
+        ) : (
+          <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">No records match this breakdown yet.</p>
+        )}
       </div>
     </div>
   );
