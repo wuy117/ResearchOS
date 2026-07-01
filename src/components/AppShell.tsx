@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, BookOpen, CalendarDays, Download, Files, GraduationCap, LayoutDashboard, LogOut, MessageSquareText, Plus, Search, Trash2, UploadCloud, UserCircle, Wrench } from 'lucide-react';
+import { AlertTriangle, BarChart3, BookOpen, CalendarDays, Download, Files, GraduationCap, LayoutDashboard, LogOut, MessageSquareText, Plus, Trash2, UploadCloud, UserCircle, Wrench } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useState } from 'react';
 import type { User } from '@supabase/supabase-js';
@@ -37,10 +37,10 @@ const secondaryTabs: Record<PillarId, Array<{ id: PageId; label: string; icon: t
 };
 
 const sectionDescriptions: Record<PillarId, string> = {
-  home: 'Academic profile, recent activity, next best action, recent sources, and progress snapshot.',
-  sources: 'Upload, library, collections, metadata editing, and source management.',
-  learn: 'Chat and Tutor in one source-aware learning workspace.',
-  progress: 'Performance, timeline, trends, and teacher comments.',
+  home: 'Recent changes, current focus, and the next useful step.',
+  sources: 'A quiet place for documents, context, and collections.',
+  learn: 'Source-aware chat and Tutor modes in one workspace.',
+  progress: 'Trends, teacher evidence, and recommendations over time.',
 };
 
 function getActivePillar(activePage: PageId) {
@@ -132,21 +132,14 @@ export function AppShell({
   return (
     <div className="min-h-screen text-ink">
       <div className="flex min-h-screen overflow-hidden bg-ivory">
-        <aside className="hidden w-72 shrink-0 flex-col border-r border-ink/8 bg-white/85 p-5 lg:flex">
-          <div className="mb-8 flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-xl border border-ink/8 bg-paper text-ink">
-              <BookOpen size={21} />
+        <aside className="hidden w-64 shrink-0 flex-col border-r border-ink/6 bg-[#fbfaf7] p-5 lg:flex">
+          <div className="mb-9 flex items-center gap-3">
+            <div className="grid size-9 place-items-center rounded-lg bg-paper text-ink">
+              <BookOpen size={19} />
             </div>
             <div>
               <p className="text-sm font-semibold text-ink">Research OS</p>
-              <p className="text-xs text-graphite/65">Personal knowledge desk</p>
-            </div>
-          </div>
-
-          <div className="mb-6 rounded-lg border border-ink/8 bg-paper/70 px-3 py-2.5">
-            <div className="flex items-center gap-2 text-sm text-graphite/70">
-              <Search size={16} />
-              <span>One upload updates the whole system</span>
+              <p className="text-xs text-graphite/58">Learning workspace</p>
             </div>
           </div>
 
@@ -159,8 +152,8 @@ export function AppShell({
                   key={item.id}
                   type="button"
                   onClick={() => setActivePage(item.target)}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${
-                    active ? 'bg-paper text-ink shadow-sm ring-1 ring-ink/8' : 'text-graphite hover:bg-paper/70 hover:text-ink'
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium ${
+                    active ? 'bg-paper text-ink' : 'text-graphite/76 hover:bg-paper/70 hover:text-ink'
                   }`}
                 >
                   <Icon size={17} className={active ? 'text-ink' : 'text-graphite/70'} />
@@ -219,7 +212,7 @@ export function AppShell({
           </div>
 
           <div className="mt-auto space-y-3">
-            <div className="rounded-lg border border-ink/8 bg-paper/75 p-4">
+            <div className="rounded-lg bg-paper/65 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Storage</p>
               <div className="mt-3 flex items-center gap-2">
                 <span className={`size-2 rounded-full ${storageDotClass}`} />
@@ -228,7 +221,7 @@ export function AppShell({
               <p className="mt-2 text-xs leading-5 text-graphite/68">{storageDescription}</p>
             </div>
 
-            <div className="rounded-lg border border-ink/8 bg-paper/75 p-4">
+            <div className="rounded-lg bg-paper/65 p-4">
               <p className="text-sm font-semibold text-ink">Desk focus</p>
               <p className="mt-2 text-sm leading-6 text-graphite/72">
                 {activeWorkspace?.description ?? 'Choose a workspace to focus your desk.'}
@@ -253,17 +246,17 @@ export function AppShell({
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <header className="flex flex-col gap-4 border-b border-ink/8 bg-white/70 px-4 py-4 sm:px-6 xl:px-8">
+          <header className="flex flex-col gap-4 border-b border-ink/6 bg-[#fbfaf7]/92 px-4 py-4 sm:px-6 xl:px-8">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Active workspace</p>
-                <h1 className="mt-1 font-serif text-3xl font-semibold text-ink sm:text-4xl">{activeWorkspace?.name}</h1>
+                <h1 className="mt-1 font-serif text-3xl font-semibold leading-tight text-ink sm:text-4xl">{activeWorkspace?.name}</h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/68">{sectionDescriptions[activePillar.id]}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setActivePage('upload')}
-                className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-graphite"
+                className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite"
               >
                 <UploadCloud size={18} />
                 Add Source
@@ -305,7 +298,7 @@ export function AppShell({
                       type="button"
                       onClick={() => setActivePage(tab.id)}
                       className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
-                        active ? 'bg-ink text-white shadow-sm' : 'border border-ink/8 bg-white text-graphite hover:text-ink'
+                        active ? 'bg-ink text-white shadow-sm' : 'bg-transparent text-graphite hover:bg-paper hover:text-ink'
                       }`}
                     >
                       <Icon size={15} />
@@ -320,7 +313,7 @@ export function AppShell({
             </div>
           </header>
 
-          <div className="scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6 xl:px-10 2xl:px-12">{children}</div>
+          <div className="scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-7 sm:px-6 xl:px-10 2xl:px-12">{children}</div>
         </main>
       </div>
     </div>
@@ -619,13 +612,13 @@ function ResetResearchOS({
   }
 
   return (
-    <div className={`rounded-lg border border-red-200 bg-red-50/70 ${compact ? 'p-4' : 'p-3'}`}>
+    <div className={`rounded-lg bg-paper/60 ${compact ? 'p-4' : 'p-3'}`}>
       <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
         <span>
-          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Reset Research OS</span>
-          <span className="mt-1 block text-sm font-semibold text-ink">Clear local, remote, or scoped data</span>
+          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Maintenance</span>
+          <span className="mt-1 block text-sm font-semibold text-ink">Reset or clear data</span>
         </span>
-        <AlertTriangle size={17} className="text-red-700" />
+        <AlertTriangle size={17} className="text-graphite/55" />
       </button>
       {isOpen ? (
         <div className="mt-4 space-y-3">

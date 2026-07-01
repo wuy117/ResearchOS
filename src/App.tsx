@@ -271,10 +271,10 @@ function Dashboard({
 
   return (
     <div className="space-y-7">
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_420px]">
-        <div className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Academic profile</p>
-          <h2 className="mt-4 max-w-3xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-5xl">
+      <section className="grid gap-8 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+        <div className="py-3 sm:py-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Academic profile</p>
+          <h2 className="mt-4 max-w-3xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-6xl">
             {hasReadySources ? 'Your learning system is connected.' : 'Create your own learning operating system.'}
           </h2>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/72">
@@ -294,11 +294,11 @@ function Dashboard({
             </button>
           </div>
         </div>
-        <div className="rounded-lg border border-ink/8 bg-paper/80 p-5 shadow-sm">
+        <div className="rounded-lg bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">What should I do next?</p>
           <h3 className="mt-3 text-xl font-semibold text-ink">{nextAction.label}</h3>
           <p className="mt-3 text-sm leading-7 text-graphite/72">{nextAction.detail}</p>
-          <div className="mt-6 grid grid-cols-2 gap-3">
+          <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-ink/6 pt-5">
             <MetricCard label="Subjects" value={subjects.length.toLocaleString()} />
             <MetricCard label="Collections" value={collections.length.toLocaleString()} />
             <MetricCard label="Sources" value={documents.length.toLocaleString()} />
@@ -307,10 +307,10 @@ function Dashboard({
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1fr_1fr_1fr]">
+      <section className="grid gap-8 xl:grid-cols-[1fr_1fr_1fr]">
         <div>
           <SectionHeader eyebrow="Subjects" title="What am I studying?" />
-          <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
+          <div className="rounded-lg bg-white p-5 shadow-sm">
             {subjects.length ? <ChipCloud items={subjects} /> : <p className="text-sm leading-7 text-graphite/70">Create a workspace or upload a source; subjects will be inferred gradually from metadata and performance records.</p>}
           </div>
         </div>
@@ -318,7 +318,7 @@ function Dashboard({
           <SectionHeader eyebrow="Collections" title="Virtual source sets" />
           <div className="space-y-3">
             {collections.slice(0, 4).map((collection) => (
-              <button key={collection.id} type="button" onClick={() => setActivePage('library')} className="flex w-full items-center justify-between gap-3 rounded-lg border border-ink/8 bg-white p-4 text-left shadow-sm transition hover:border-ink/14">
+              <button key={collection.id} type="button" onClick={() => setActivePage('library')} className="flex w-full items-center justify-between gap-3 rounded-lg bg-white p-4 text-left shadow-sm hover:bg-paper/60">
                 <span>
                   <span className="block font-semibold text-ink">{collection.name}</span>
                   <span className="mt-1 block text-sm text-graphite/68">{getCollectionDocumentCount(collection, documents, state.performanceRecords)} source links</span>
@@ -351,7 +351,7 @@ function Dashboard({
 
         <div>
           <SectionHeader eyebrow="Performance" title="Progress overview" />
-          <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
+          <div className="rounded-lg bg-white p-5 shadow-sm">
             {academicPerformanceRecords.length ? (
               <div className="space-y-4">
                 <TrendChart records={academicPerformanceRecords} />
@@ -533,7 +533,7 @@ function ConfirmModal({ action, onClose }: { action: ConfirmAction | null; onClo
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div className="w-full max-w-lg rounded-xl border border-ink/10 bg-white p-5 shadow-soft">
+      <div className="w-full max-w-lg rounded-lg border border-ink/10 bg-white p-5 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Confirm destructive action</p>
         <h2 className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
         <p className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
@@ -1385,10 +1385,10 @@ function PerformancePage({
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-9">
+    <div className="mx-auto max-w-7xl space-y-10">
       <SectionHeader eyebrow="Progress" title="Learning over time" copy="A narrative dashboard for improvement, teacher feedback, performance movement, and next actions." />
 
-      <div className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
+      <div className="rounded-lg bg-white p-4 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
           <label className="text-sm font-semibold text-ink">
             Subject
@@ -1431,11 +1431,8 @@ function PerformancePage({
         />
       ) : null}
 
-      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
-          <Sparkles size={15} />
-          Learning summary
-        </div>
+      <section className="rounded-lg bg-white p-7 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Learning summary</p>
         <div className="mt-5 grid gap-6 xl:grid-cols-[1fr_260px]">
           <div>
             <p className="text-sm font-semibold text-graphite/62">{selectedSubject}</p>
@@ -1451,25 +1448,19 @@ function PerformancePage({
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_380px]">
-        <div className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
-            <CalendarDays size={15} />
-            Progress timeline
-          </div>
+        <div className="rounded-lg bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Progress timeline</p>
           <ProgressTimeline records={sortedRecords} selectedId={selectedTimelineRecord?.id} onSelect={setSelectedTimelineRecordId} />
         </div>
 
-        <div className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+        <div className="rounded-lg bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Selected point</p>
           {selectedTimelineRecord ? <TimelineDetail record={selectedTimelineRecord} documents={documents} /> : <p className="mt-4 text-sm leading-7 text-graphite/70">Choose a timeline point to inspect the evidence behind it.</p>}
         </div>
       </section>
 
-      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
-          <MessageSquareText size={15} />
-          Teacher insights
-        </div>
+      <section className="rounded-lg bg-white p-6 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Teacher insights</p>
         <div className="mt-5 grid gap-5 lg:grid-cols-4">
           <InsightColumn title="Repeated strengths" items={teacherInsights.strengths} />
           <InsightColumn title="Repeated weaknesses" items={teacherInsights.weaknesses} />
@@ -1483,7 +1474,7 @@ function PerformancePage({
         <EvidencePanel title="Needs improvement" icon={Target} items={needsImprovement} empty="No repeated improvement theme has enough evidence yet." />
       </section>
 
-      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+      <section className="rounded-lg bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
             <SlidersHorizontal size={15} />
@@ -1505,7 +1496,7 @@ function PerformancePage({
         </div>
       </section>
 
-      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+      <section className="rounded-lg bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
             <LineChart size={15} />
@@ -1521,7 +1512,7 @@ function PerformancePage({
         <SubjectDistributionChart documents={documents} records={filteredRecords} selectedSubject={selectedSubject} />
       </section>
 
-      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+      <section className="rounded-lg bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
           <Lightbulb size={15} />
           Recommendations
@@ -1538,7 +1529,7 @@ function PerformancePage({
         </div>
       </section>
 
-      <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+      <section className="rounded-lg bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
           <Music2 size={15} />
           Music and instrumental progress
@@ -1548,7 +1539,7 @@ function PerformancePage({
         </p>
       </section>
 
-      <details className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+      <details className="rounded-lg bg-white p-6 shadow-sm">
         <summary className="cursor-pointer text-sm font-semibold text-ink">Manage performance data</summary>
         <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <form onSubmit={handleManualSubmit} className="rounded-lg border border-ink/8 bg-paper/50 p-5">
@@ -1557,29 +1548,29 @@ function PerformancePage({
             Manual entry
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <input value={form.title} onChange={(event) => updateForm('title', event.target.value)} placeholder="Assessment title" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.subject} onChange={(event) => updateForm('subject', event.target.value)} placeholder="Subject" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input type="date" value={form.date} onChange={(event) => updateForm('date', event.target.value)} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <select value={form.assessmentType} onChange={(event) => updateForm('assessmentType', event.target.value)} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
+            <input value={form.title} onChange={(event) => updateForm('title', event.target.value)} placeholder="Assessment title" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.subject} onChange={(event) => updateForm('subject', event.target.value)} placeholder="Subject" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input type="date" value={form.date} onChange={(event) => updateForm('date', event.target.value)} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <select value={form.assessmentType} onChange={(event) => updateForm('assessmentType', event.target.value)} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
               {assessmentTypes.map((type) => (
                 <option key={type} value={type}>
                   {type}
                 </option>
               ))}
             </select>
-            <input value={form.academicYear} onChange={(event) => updateForm('academicYear', event.target.value)} placeholder="Academic year, e.g. 2025-2026" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.term} onChange={(event) => updateForm('term', event.target.value)} placeholder="Term, e.g. Summer" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.score} onChange={(event) => updateForm('score', event.target.value)} placeholder="Score" inputMode="decimal" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.maxScore} onChange={(event) => updateForm('maxScore', event.target.value)} placeholder="Max score" inputMode="decimal" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.percentage} onChange={(event) => updateForm('percentage', event.target.value)} placeholder={computedPercentage !== undefined ? `${computedPercentage}% calculated` : 'Percentage'} inputMode="decimal" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.grade} onChange={(event) => updateForm('grade', event.target.value)} placeholder="Grade" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.rank} onChange={(event) => updateForm('rank', event.target.value)} placeholder="Rank or set" className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
-            <textarea value={form.teacherComment} onChange={(event) => updateForm('teacherComment', event.target.value)} placeholder="Teacher comment" rows={3} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
-            <textarea value={form.strengths} onChange={(event) => updateForm('strengths', event.target.value)} placeholder="Strengths, separated by commas or new lines" rows={2} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <textarea value={form.weaknesses} onChange={(event) => updateForm('weaknesses', event.target.value)} placeholder="Weaknesses, separated by commas or new lines" rows={2} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <textarea value={form.actionPoints} onChange={(event) => updateForm('actionPoints', event.target.value)} placeholder="Action points" rows={2} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
+            <input value={form.academicYear} onChange={(event) => updateForm('academicYear', event.target.value)} placeholder="Academic year, e.g. 2025-2026" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.term} onChange={(event) => updateForm('term', event.target.value)} placeholder="Term, e.g. Summer" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.score} onChange={(event) => updateForm('score', event.target.value)} placeholder="Score" inputMode="decimal" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.maxScore} onChange={(event) => updateForm('maxScore', event.target.value)} placeholder="Max score" inputMode="decimal" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.percentage} onChange={(event) => updateForm('percentage', event.target.value)} placeholder={computedPercentage !== undefined ? `${computedPercentage}% calculated` : 'Percentage'} inputMode="decimal" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.grade} onChange={(event) => updateForm('grade', event.target.value)} placeholder="Grade" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.rank} onChange={(event) => updateForm('rank', event.target.value)} placeholder="Rank or set" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
+            <textarea value={form.teacherComment} onChange={(event) => updateForm('teacherComment', event.target.value)} placeholder="Teacher comment" rows={3} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
+            <textarea value={form.strengths} onChange={(event) => updateForm('strengths', event.target.value)} placeholder="Strengths, separated by commas or new lines" rows={2} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <textarea value={form.weaknesses} onChange={(event) => updateForm('weaknesses', event.target.value)} placeholder="Weaknesses, separated by commas or new lines" rows={2} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <textarea value={form.actionPoints} onChange={(event) => updateForm('actionPoints', event.target.value)} placeholder="Action points" rows={2} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
           </div>
-          <button type="submit" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+          <button type="submit" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
             <FilePlus2 size={17} />
             {editingRecordId ? 'Save changes' : 'Save record'}
           </button>
@@ -1603,7 +1594,7 @@ function PerformancePage({
                   actionPoints: '',
                 }));
               }}
-              className="ml-2 mt-4 rounded-xl border border-ink/10 px-4 py-3 text-sm font-semibold text-ink"
+              className="ml-2 mt-4 rounded-lg border border-ink/10 px-4 py-3 text-sm font-semibold text-ink"
             >
               Cancel edit
             </button>
@@ -1618,7 +1609,7 @@ function PerformancePage({
             </div>
             <p className="mt-3 text-sm leading-7 text-graphite/72">Select an uploaded report with extracted text. Research OS will ask the model for structured academic records and will not invent missing marks.</p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
+              <select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
                 <option value="">Choose uploaded document</option>
                 {analysableDocuments.map((document) => (
                   <option key={document.id} value={document.id}>
@@ -1626,12 +1617,12 @@ function PerformancePage({
                   </option>
                 ))}
               </select>
-              <button type="button" onClick={handleAnalyseDocument} disabled={isAnalysing || analysableDocuments.length === 0} className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+              <button type="button" onClick={handleAnalyseDocument} disabled={isAnalysing || analysableDocuments.length === 0} className="rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
                 {isAnalysing ? 'Analysing...' : 'Analyse'}
               </button>
             </div>
             {analysableDocuments.length === 0 ? (
-              <p className="mt-3 rounded-xl bg-paper/70 p-3 text-sm leading-6 text-graphite/70">Upload a TXT, PDF, or DOCX report first. Documents without readable text cannot be analysed.</p>
+              <p className="mt-3 rounded-lg bg-paper/70 p-3 text-sm leading-6 text-graphite/70">Upload a TXT, PDF, or DOCX report first. Documents without readable text cannot be analysed.</p>
             ) : null}
           </div>
 
@@ -1641,7 +1632,7 @@ function PerformancePage({
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">AI advice</p>
                 <h3 className="mt-2 font-serif text-3xl font-semibold text-ink">Academic coaching summary</h3>
               </div>
-              <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || academicRecords.length === 0} className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+              <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || academicRecords.length === 0} className="rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
                 {isGeneratingAdvice ? 'Generating...' : 'Generate'}
               </button>
             </div>
@@ -1653,7 +1644,7 @@ function PerformancePage({
                 <TagList label="Recommended actions" items={latestSummary.recommendedActions} />
               </div>
             ) : (
-              <p className="mt-5 rounded-xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
+              <p className="mt-5 rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
                 Add at least one performance record before generating advice. With limited data, the summary will include a confidence caveat.
               </p>
             )}
@@ -1708,9 +1699,9 @@ function PerformancePage({
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{label}</p>
-      <p className="mt-3 truncate text-3xl font-semibold text-ink">{value}</p>
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/50">{label}</p>
+      <p className="mt-2 truncate text-2xl font-semibold text-ink">{value}</p>
     </div>
   );
 }
@@ -1855,6 +1846,27 @@ function buildEvidenceItems(records: PerformanceRecord[], field: 'strengths' | '
 }
 
 function buildProgressRecommendations(records: PerformanceRecord[], tutorLessons: TutorLesson[], tutorAttempts: TutorAttempt[], tutorMemory: TutorMemory, documents: ResearchDocument[], subject: string) {
+  if (records.length === 0) {
+    const readableSources = documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed').length;
+    return [
+      {
+        title: 'Upload a marked report',
+        reason: 'Progress becomes useful once Research OS has at least one report, exam result, or mark sheet with teacher evidence.',
+        evidence: `${readableSources} readable source${readableSources === 1 ? '' : 's'} available for analysis.`,
+      },
+      {
+        title: 'Add the first assessment record',
+        reason: 'A single dated result starts the timeline; two or more dated results turn it into a trend.',
+        evidence: 'No academic performance records match the current view yet.',
+      },
+      {
+        title: 'Capture teacher comments',
+        reason: 'Teacher wording makes the recommendations more specific than marks alone.',
+        evidence: 'Strengths, weaknesses, and action points will appear after a report or manual record is saved.',
+      },
+    ];
+  }
+
   const weaknesses = topEvidenceTerms(records, 'weaknesses');
   const actions = topEvidenceTerms(records, 'actionPoints');
   const lowest = [...records]
@@ -2316,11 +2328,11 @@ function TimelinePage({ events }: { events: TimelineEvent[] }) {
 
 function EmptyState({ title, copy, action, onClick }: { title: string; copy: string; action?: string; onClick?: () => void }) {
   return (
-    <div className="rounded-2xl border border-dashed border-ink/14 bg-white/70 p-8 text-center">
+    <div className="rounded-lg border border-dashed border-ink/12 bg-white/55 p-8 text-center">
       <p className="font-serif text-2xl font-semibold text-ink">{title}</p>
       <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-graphite/70">{copy}</p>
       {action && onClick ? (
-        <button type="button" onClick={onClick} className="mt-5 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+        <button type="button" onClick={onClick} className="mt-5 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
           {action}
         </button>
       ) : null}
@@ -2888,14 +2900,14 @@ function Upload({
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-7 xl:grid-cols-[1.35fr_0.65fr]">
+    <div className="mx-auto grid max-w-6xl gap-9 xl:grid-cols-[1.35fr_0.65fr]">
       <section>
         <SectionHeader
           eyebrow="Upload"
           title="Add source with context"
           copy="Give the document academic context first, then Research OS extracts readable text, saves metadata, updates Sources and Timeline, and makes it available to Learn."
         />
-        <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
+        <div className="rounded-lg bg-white p-5 shadow-sm">
           <div className="grid gap-5 lg:grid-cols-2">
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -2941,9 +2953,9 @@ function Upload({
               </label>
             </div>
 
-            <div className="rounded-lg border border-dashed border-ink/14 bg-paper/55 p-5">
+            <div className="rounded-lg border border-dashed border-ink/12 bg-paper/45 p-5">
               <div className="flex items-start gap-4">
-                <div className="grid size-11 shrink-0 place-items-center rounded-lg border border-ink/8 bg-white text-ink shadow-sm">
+                <div className="grid size-11 shrink-0 place-items-center rounded-lg bg-white text-ink shadow-sm">
                   <UploadCloud size={22} />
                 </div>
                 <div>
@@ -2984,7 +2996,7 @@ function Upload({
             </div>
           </div>
         </div>
-        <div className="mt-4 rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
+        <div className="mt-4 rounded-lg bg-paper/60 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{isReading ? 'Processing' : 'Latest result'}</p>
           <p className="mt-2 text-sm leading-7 text-graphite/74">{note}</p>
         </div>
@@ -2995,7 +3007,7 @@ function Upload({
         <div className="space-y-4">
           {recentUploads.length ? (
             recentUploads.map((document) => (
-            <div key={document.id} className="rounded-2xl border border-ink/8 bg-white p-4 shadow-sm">
+            <div key={document.id} className="rounded-lg bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold text-ink">{document.title}</p>
@@ -3024,7 +3036,7 @@ function Upload({
                           : processDocxUpload(failedUpload)
                       }
                       disabled={isReading}
-                      className="mt-3 rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
+                      className="mt-3 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
                     >
                       Retry extraction
                     </button>
@@ -3291,7 +3303,7 @@ function ResearchChat({
 
   return (
     <div className="mx-auto grid min-h-[620px] max-w-7xl gap-5 sm:h-[calc(100vh-12rem)] sm:min-h-[480px] xl:grid-cols-[minmax(0,1fr)_340px]">
-      <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-sm">
+      <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-ink/8 bg-white shadow-sm">
         <div className="shrink-0 border-b border-ink/8 p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <SectionHeader eyebrow="Research chat" title="Ask with sources" copy="Answers are grounded in uploaded source chunks. Citations appear with each response when evidence is retrieved." />
@@ -3316,7 +3328,7 @@ function ResearchChat({
           {chat.length ? (
             chat.map((message) => (
               <div key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[70ch]' : 'mr-auto max-w-[78ch]'}>
-                <div className={`rounded-2xl p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'border border-ink/8 bg-paper/70 text-ink'}`}>
+                <div className={`rounded-lg p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'border border-ink/8 bg-paper/70 text-ink'}`}>
                   <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
                 </div>
                 <button
@@ -3334,7 +3346,7 @@ function ResearchChat({
                   Delete message
                 </button>
                 {message.citations ? (
-                  <details className="mt-3 rounded-2xl border border-ink/8 bg-white p-3 xl:hidden">
+                  <details className="mt-3 rounded-lg border border-ink/8 bg-white p-3 xl:hidden">
                     <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
                       {message.citations.length} sources
                     </summary>
@@ -3355,7 +3367,7 @@ function ResearchChat({
           )}
           {isLoading ? (
             <div className="mr-auto max-w-[820px]">
-              <div className="rounded-2xl border border-ink/8 bg-paper/70 p-5 text-ink">
+              <div className="rounded-lg border border-ink/8 bg-paper/70 p-5 text-ink">
                 <div className="flex items-center gap-3 text-sm font-semibold text-graphite/72">
                   <span className="size-2 animate-pulse rounded-full bg-brass" />
                   <span className="size-2 animate-pulse rounded-full bg-brass [animation-delay:120ms]" />
@@ -3369,7 +3381,7 @@ function ResearchChat({
         </div>
         <div className="shrink-0 border-t border-ink/8 bg-white p-4">
           {errorMessage ? (
-            <div className="mb-3 rounded-xl border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
+            <div className="mb-3 rounded-lg border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
               Research chat could not answer right now. {errorMessage}
             </div>
           ) : null}
@@ -3382,7 +3394,7 @@ function ResearchChat({
               }}
               disabled={isLoading || searchableDocuments.length === 0}
               placeholder={searchableDocuments.length ? 'Ask about claims, contradictions, methods, or gaps...' : 'Upload a readable source before asking...'}
-              className="min-w-0 flex-1 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4 disabled:cursor-not-allowed disabled:bg-paper"
+              className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4 disabled:cursor-not-allowed disabled:bg-paper"
             />
             <button
               type="button"
@@ -3390,7 +3402,7 @@ function ResearchChat({
               title="Send research question"
               onClick={sendMessage}
               disabled={isLoading || searchableDocuments.length === 0}
-              className="grid size-12 place-items-center rounded-xl bg-ink text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
+              className="grid size-12 place-items-center rounded-lg bg-ink text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
             >
               <Send size={18} />
             </button>
@@ -3398,7 +3410,7 @@ function ResearchChat({
         </div>
       </section>
 
-      <aside className="hidden min-h-0 overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-sm xl:flex xl:flex-col">
+      <aside className="hidden min-h-0 overflow-hidden rounded-lg border border-ink/8 bg-white shadow-sm xl:flex xl:flex-col">
         <div className="shrink-0 border-b border-ink/8 p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Sources</p>
           <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">Latest citations</h3>
@@ -3408,12 +3420,12 @@ function ResearchChat({
             latestCitations.length ? (
             latestCitations.map((citation) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} />)
             ) : (
-            <p className="rounded-2xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
+            <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
               Source cards will appear here after the assistant answers with citations.
             </p>
             )
           ) : (
-            <p className="rounded-2xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
+            <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
               Upload documents to give research chat source material for grounded answers.
             </p>
           )}
@@ -3451,11 +3463,11 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
                 key={tool.label}
                 type="button"
                 onClick={() => setActiveTool(tool.label)}
-                className={`flex w-full items-start gap-4 rounded-2xl border p-5 text-left transition ${
+                className={`flex w-full items-start gap-4 rounded-lg border p-5 text-left transition ${
                   activeTool === tool.label ? 'border-ink/14 bg-paper text-ink shadow-sm' : 'border-ink/8 bg-white text-ink shadow-sm hover:border-ink/14'
                 }`}
               >
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-ink/8 bg-white text-graphite">
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-ink/8 bg-white text-graphite">
                   <Icon size={20} />
                 </span>
                 <span>
@@ -3476,7 +3488,7 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
             );
           })}
         </div>
-        <div className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm">
+        <div className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workflow preview</p>
           <h3 className="mt-3 font-serif text-4xl font-semibold text-ink">{activeTool}</h3>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
@@ -3487,7 +3499,7 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
           <div className="mt-7 space-y-3">
             {sourceDocuments.length ? (
               sourceDocuments.slice(0, 4).map((document) => (
-                <div key={document.id} className="rounded-xl border border-ink/8 bg-paper/65 p-4">
+                <div key={document.id} className="rounded-lg border border-ink/8 bg-paper/65 p-4">
                   <p className="font-semibold text-ink">{document.title}</p>
                   <p className="mt-2 line-clamp-2 text-sm leading-7 text-graphite/72">{document.summary}</p>
                 </div>
@@ -3546,7 +3558,7 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
         <EmptyState title="No knowledge map yet" copy="Upload documents with readable text and Research OS will use their topics to start a workspace map." />
       ) : (
       <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
-        <div className="relative min-h-[460px] overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-sm sm:min-h-[560px]">
+        <div className="relative min-h-[460px] overflow-hidden rounded-lg border border-ink/8 bg-white shadow-sm sm:min-h-[560px]">
           <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             {mapEdges.map((edge) => {
               const from = nodeById[edge.from];
@@ -3555,7 +3567,7 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
               return <line key={`${edge.from}-${edge.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="rgba(68,81,94,0.18)" strokeWidth="0.28" />;
             })}
           </svg>
-          <div className="absolute left-5 top-5 z-10 rounded-xl border border-ink/8 bg-paper/80 px-4 py-3 text-ink">
+          <div className="absolute left-5 top-5 z-10 rounded-lg border border-ink/8 bg-paper/80 px-4 py-3 text-ink">
             <div className="flex items-center gap-2">
               <Network size={18} />
               <span className="text-sm font-semibold">
@@ -3583,7 +3595,7 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
             </button>
           ))}
         </div>
-        <aside className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+        <aside className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
             <Tags size={14} />
             Selected node

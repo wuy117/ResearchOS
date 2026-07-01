@@ -633,11 +633,11 @@ export function TutorPage({
         copy="Lessons, active recall, Socratic questioning, and exam practice grounded in retrieved source chunks."
       />
 
-      <div className="rounded-2xl border border-ink/8 bg-white p-4 shadow-sm">
+      <div className="rounded-lg bg-paper/65 p-4">
         <p className="text-sm leading-7 text-graphite/74">{isLoading ? 'Working with retrieved context...' : status}</p>
       </div>
 
-      <section className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+      <section className="rounded-lg bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Tutor data</p>
@@ -714,12 +714,12 @@ export function TutorPage({
             value={topic}
             onChange={(event) => setTopic(event.target.value)}
             placeholder={suggestedTopic || 'Topic to study'}
-            className="min-w-0 rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4"
+            className="min-w-0 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4"
           />
           <select
             value={difficulty}
             onChange={(event) => setDifficulty(normalizeDifficulty(event.target.value))}
-            className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4"
+            className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4"
           >
             <option>Foundation</option>
             <option>Core</option>
@@ -727,25 +727,25 @@ export function TutorPage({
           </select>
         </div>
         <div className="grid grid-cols-3 gap-2">
-          <button type="button" onClick={() => startLesson()} disabled={isLoading} className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+          <button type="button" onClick={() => startLesson()} disabled={isLoading} className="rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
             Lesson
           </button>
-          <button type="button" onClick={() => askSocratic()} disabled={isLoading} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm disabled:cursor-not-allowed disabled:text-graphite/45">
+          <button type="button" onClick={() => askSocratic()} disabled={isLoading} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm disabled:cursor-not-allowed disabled:text-graphite/45">
             Socratic
           </button>
-          <button type="button" onClick={() => generateExam()} disabled={isLoading} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm disabled:cursor-not-allowed disabled:text-graphite/45">
+          <button type="button" onClick={() => generateExam()} disabled={isLoading} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm disabled:cursor-not-allowed disabled:text-graphite/45">
             Exam
           </button>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 border-b border-ink/6 pb-2">
         {(['home', 'lesson', 'socratic', 'exam'] as TutorView[]).map((item) => (
           <button
             key={item}
             type="button"
             onClick={() => setView(item)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold capitalize transition ${view === item ? 'bg-ink text-white' : 'bg-white text-graphite ring-1 ring-ink/8'}`}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold capitalize ${view === item ? 'bg-ink text-white' : 'text-graphite hover:bg-paper hover:text-ink'}`}
           >
             {item}
           </button>
@@ -865,7 +865,7 @@ function TutorConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div className="w-full max-w-lg rounded-xl border border-ink/10 bg-white p-5 shadow-soft">
+      <div className="w-full max-w-lg rounded-lg border border-ink/10 bg-white p-5 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Confirm destructive action</p>
         <h2 className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
         <p className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
@@ -912,12 +912,9 @@ function TutorHome({
   return (
     <div className="space-y-7">
       <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
-            <GraduationCap size={15} />
-            Continue learning
-          </div>
-          <h3 className="mt-4 font-serif text-4xl font-semibold text-ink">{activeLesson?.topic ?? suggestedTopic ?? 'Build a lesson from your sources'}</h3>
+        <div className="py-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Continue learning</p>
+          <h3 className="mt-4 font-serif text-4xl font-semibold text-ink">{activeLesson?.topic || suggestedTopic || 'Build a lesson from your sources'}</h3>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
             {activeLesson
               ? activeLesson.objective
@@ -929,7 +926,7 @@ function TutorHome({
             type="button"
             onClick={onContinue}
             disabled={!activeLesson && !hasReadableSources}
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55"
           >
             {activeLesson ? 'Continue previous lesson' : hasReadableSources ? 'Start suggested lesson' : 'Upload sources first'}
             <ArrowRight size={17} />
@@ -945,7 +942,7 @@ function TutorHome({
       <section className="grid gap-6 lg:grid-cols-3">
         <TopicPanel title="Recommended topics" icon={Sparkles} topics={recommendedTopics} onStartTopic={onStartTopic} emptyCopy="Upload readable documents to create source-grounded recommendations." />
         <TopicPanel title="Weak topics from Performance" icon={Lightbulb} topics={weakTopics} onStartTopic={onStartTopic} emptyCopy={hasReadableSources ? 'Performance weaknesses will appear here.' : 'Upload readable source material before turning performance weaknesses into lessons.'} />
-        <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+        <div className="rounded-lg bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
             <RotateCcw size={15} />
             Recently studied
@@ -953,7 +950,7 @@ function TutorHome({
           <div className="mt-5 space-y-3">
             {recentTopics.length ? (
               recentTopics.map((topic) => (
-                <button key={topic.topic} type="button" onClick={() => onStartTopic(topic.topic)} className="w-full rounded-xl border border-ink/8 bg-paper/65 p-4 text-left transition hover:border-ink/14">
+                <button key={topic.topic} type="button" onClick={() => onStartTopic(topic.topic)} className="w-full rounded-lg bg-paper/65 p-4 text-left hover:bg-paper">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-semibold text-ink">{topic.topic}</p>
                     <span className="text-sm font-semibold text-graphite/70">{topic.confidence}%</span>
@@ -964,7 +961,7 @@ function TutorHome({
                 </button>
               ))
             ) : (
-              <p className="rounded-xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Recent progress appears after the first recall attempt.</p>
+              <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Recent progress appears after the first recall attempt.</p>
             )}
           </div>
           {latestAttempt ? <p className="mt-4 text-sm leading-7 text-graphite/70">Recent progress: {latestAttempt.feedback}</p> : null}
@@ -976,7 +973,7 @@ function TutorHome({
 
 function TutorMetric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+    <div className="rounded-lg bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
         <Icon size={15} />
         {label}
@@ -1000,7 +997,7 @@ function TopicPanel({
   onStartTopic: (topic: string) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+    <div className="rounded-lg bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
         <Icon size={15} />
         {title}
@@ -1008,13 +1005,13 @@ function TopicPanel({
       <div className="mt-5 space-y-2">
         {topics.length ? (
           topics.map((topic) => (
-            <button key={topic} type="button" onClick={() => onStartTopic(topic)} className="flex w-full items-center justify-between gap-3 rounded-xl bg-paper/70 px-4 py-3 text-left text-sm font-semibold text-ink transition hover:bg-paper">
+            <button key={topic} type="button" onClick={() => onStartTopic(topic)} className="flex w-full items-center justify-between gap-3 rounded-lg bg-paper/70 px-4 py-3 text-left text-sm font-semibold text-ink transition hover:bg-paper">
               <span>{topic}</span>
               <ArrowRight size={16} />
             </button>
           ))
         ) : (
-          <p className="rounded-xl bg-paper/70 p-4 text-sm leading-7 text-graphite/70">{emptyCopy}</p>
+          <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">{emptyCopy}</p>
         )}
       </div>
     </div>
@@ -1043,26 +1040,26 @@ function LessonView({
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
       <section className="space-y-6">
-        <div className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm">
+        <div className="rounded-lg bg-white p-6 shadow-sm">
           <div className="grid gap-4 sm:grid-cols-3">
             <TutorMetric icon={Target} label="Objective" value={lesson.objective} />
             <TutorMetric icon={BookMarked} label="Duration" value={lesson.estimatedDuration} />
             <TutorMetric icon={GraduationCap} label="Difficulty" value={lesson.difficulty} />
           </div>
-          <div className="mt-6 border-t border-ink/8 pt-6">
+          <div className="mt-6 border-t border-ink/6 pt-6">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Explanation</p>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-8 text-graphite/78">{lesson.explanation}</p>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm">
+        <div className="rounded-lg bg-white p-6 shadow-sm">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
             <ClipboardCheck size={15} />
             Active recall checkpoints
           </div>
           <div className="mt-5 space-y-5">
             {lesson.checkpointQuestions.map((question) => (
-              <div key={question.id} className="rounded-2xl border border-ink/8 bg-paper/60 p-4">
+              <div key={question.id} className="rounded-lg bg-paper/55 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <p className="font-semibold leading-7 text-ink">{question.prompt}</p>
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-graphite/70">{question.difficulty}</span>
@@ -1072,18 +1069,18 @@ function LessonView({
                   onChange={(event) => onAnswerChange(question.id, event.target.value)}
                   rows={3}
                   placeholder="Attempt from memory before revealing the answer."
-                  className="mt-4 w-full rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4"
+                  className="mt-4 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4"
                 />
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => onRecord(lesson, question.id, checkpointAnswers[question.id] ?? '')} className="rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm">
+                  <button type="button" onClick={() => onRecord(lesson, question.id, checkpointAnswers[question.id] ?? '')} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm">
                     Record attempt
                   </button>
-                  <button type="button" onClick={() => onReveal(question.id)} className="rounded-xl border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm">
+                  <button type="button" onClick={() => onReveal(question.id)} className="rounded-lg border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm">
                     Reveal answer
                   </button>
                 </div>
                 {revealedAnswers[question.id] ? (
-                  <div className="mt-4 rounded-xl border border-moss/20 bg-white p-4">
+                  <div className="mt-4 rounded-lg border border-moss/20 bg-white p-4">
                     <p className="text-sm font-semibold text-ink">{question.answer}</p>
                     <p className="mt-2 text-sm leading-7 text-graphite/72">{question.explanation}</p>
                   </div>
@@ -1093,14 +1090,14 @@ function LessonView({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm">
+        <div className="rounded-lg bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Recap</p>
           <p className="mt-3 text-sm leading-8 text-graphite/78">{lesson.recap}</p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <button type="button" onClick={() => onComplete(lesson)} className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+            <button type="button" onClick={() => onComplete(lesson)} className="rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
               Mark lesson complete
             </button>
-            <button type="button" onClick={() => onNext(lesson.nextRecommendation)} className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm">
+            <button type="button" onClick={() => onNext(lesson.nextRecommendation)} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm">
               Study next recommendation
             </button>
           </div>
@@ -1108,7 +1105,7 @@ function LessonView({
       </section>
 
       <aside className="space-y-4">
-        <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-sm">
+        <div className="rounded-lg bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Next recommendation</p>
           <p className="mt-3 text-sm leading-7 text-graphite/74">{lesson.nextRecommendation}</p>
         </div>
@@ -1137,21 +1134,21 @@ function SocraticView({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <section className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm">
+      <section className="rounded-lg bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
           <MessageCircleQuestion size={15} />
           One question at a time
         </div>
-        {turn.feedback ? <p className="mt-5 rounded-xl bg-paper/70 p-4 text-sm leading-7 text-graphite/74">{turn.feedback}</p> : null}
+        {turn.feedback ? <p className="mt-5 rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/74">{turn.feedback}</p> : null}
         <h3 className="mt-5 font-serif text-3xl font-semibold leading-tight text-ink">{turn.question}</h3>
         <textarea
           value={answer}
           onChange={(event) => setAnswer(event.target.value)}
           rows={6}
           placeholder="Answer before requesting the next follow-up."
-          className="mt-6 w-full rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4"
+          className="mt-6 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4"
         />
-        <button type="button" onClick={onNext} disabled={disabled} className="mt-4 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+        <button type="button" onClick={onNext} disabled={disabled} className="mt-4 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
           Submit and adapt
         </button>
       </section>
@@ -1185,7 +1182,7 @@ function ExamView({
           const marked = feedback[question.id];
 
           return (
-            <article key={question.id} className="rounded-2xl border border-ink/8 bg-white p-6 shadow-sm">
+            <article key={question.id} className="rounded-lg bg-white p-6 shadow-sm">
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
                 <span>Question {index + 1}</span>
                 <span>/</span>
@@ -1194,7 +1191,7 @@ function ExamView({
                 <span>{question.marks} marks</span>
               </div>
               <h3 className="mt-4 text-lg font-semibold leading-7 text-ink">{question.prompt}</h3>
-              <details className="mt-4 rounded-xl bg-paper/70 p-4">
+              <details className="mt-4 rounded-lg bg-paper/70 p-4">
                 <summary className="cursor-pointer text-sm font-semibold text-ink">View mark scheme</summary>
                 <p className="mt-3 text-sm leading-7 text-graphite/74">{question.markScheme}</p>
               </details>
@@ -1203,13 +1200,13 @@ function ExamView({
                 onChange={(event) => onAnswerChange(question.id, event.target.value)}
                 rows={5}
                 placeholder="Write an exam-style answer."
-                className="mt-4 w-full rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4"
+                className="mt-4 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4"
               />
-              <button type="button" onClick={() => onMark(exam, question)} disabled={disabled} className="mt-3 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+              <button type="button" onClick={() => onMark(exam, question)} disabled={disabled} className="mt-3 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
                 Mark answer
               </button>
               {marked ? (
-                <div className="mt-5 rounded-2xl border border-moss/20 bg-paper/60 p-5">
+                <div className="mt-5 rounded-lg border border-moss/20 bg-paper/60 p-5">
                   <p className="text-lg font-semibold text-ink">
                     {marked.score}/{marked.maxScore}
                   </p>
@@ -1240,7 +1237,7 @@ function ExamView({
 
 function EmptyPanel({ title, copy }: { title: string; copy: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-ink/14 bg-white/70 p-8 text-center">
+    <div className="rounded-lg border border-dashed border-ink/14 bg-white/70 p-8 text-center">
       <p className="font-serif text-2xl font-semibold text-ink">{title}</p>
       <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-graphite/70">{copy}</p>
     </div>

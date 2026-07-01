@@ -5,8 +5,8 @@
 @tailwind utilities;
 
 :root {
-  color: #1f2933;
-  background: #f7f5f0;
+  color: #202832;
+  background: #f8f7f3;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -20,13 +20,46 @@
 body {
   min-width: 320px;
   margin: 0;
-  background: #f3f1eb;
+  background: #f8f7f3;
 }
 
 button,
 input,
 textarea {
   font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea,
+summary {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 2px solid rgba(31, 41, 51, 0.62);
+  outline-offset: 3px;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+::selection {
+  background: rgba(88, 111, 95, 0.2);
 }
 
 .desk-grid {
@@ -45,4 +78,15 @@ textarea {
   border: 3px solid transparent;
   border-radius: 999px;
   background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
