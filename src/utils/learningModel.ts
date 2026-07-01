@@ -11,6 +11,7 @@ import type {
 export type TimelineEvent = {
   id: string;
   date: string;
+  sortKey: string;
   academicYear: string;
   term: string;
   type: 'Upload' | 'Performance' | 'Tutor' | 'Study' | 'Knowledge';
@@ -20,8 +21,8 @@ export type TimelineEvent = {
 };
 
 const termPatterns: Array<[RegExp, string]> = [
-  [/\b(autumn|fall|michaelmas)\b/i, 'Autumn'],
-  [/\b(spring|lent)\b/i, 'Spring'],
+  [/\b(autumn|fall|michaelmas)\b/i, 'Michaelmas'],
+  [/\b(spring|lent)\b/i, 'Lent'],
   [/\b(summer|trinity)\b/i, 'Summer'],
   [/\b(term\s*[123])\b/i, '$1'],
 ];
@@ -181,48 +182,132 @@ export function getCollectionDocumentCount(collection: Collection, documents: Re
   return documents.filter((document) => getDocumentMetadata(document, records).collections.some((item) => item.toLowerCase() === name)).length;
 }
 
+function parseDateValue(date: string) {
+  const value = date.trim();
+  const isoMatch = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    return Date.UTC(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+  }
+
+  const ukMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (ukMatch) {
+    const year = Number(ukMatch[3].length === 2 ? `20${ukMatch[3]}` : ukMatch[3]);
+    return Date.UTC(year, Number(ukMatch[2]) - 1, Number(ukMatch[1]));
+  }
+
+  const parsed = new Date(date).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function hasExactDate(date?: string) {
+  return Boolean(date?.trim() && parseDateValue(date) > 0);
+}
+
+function formatDateLabel(date: string) {
+  const time = parseDateValue(date);
+  if (!time) return date || 'Undated';
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(time));
+}
+
 function getAcademicYearFromDate(date: string) {
-  const parsed = new Date(date);
+  const time = parseDateValue(date);
+  if (!time) return 'Undated';
+  const parsed = new Date(time);
   if (Number.isNaN(parsed.getTime())) return 'Undated';
   const year = parsed.getFullYear();
   return parsed.getMonth() >= 8 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
 }
 
 function getTermFromDate(date: string) {
-  const month = new Date(date).getMonth();
+  const time = parseDateValue(date);
+  if (!time) return 'Unsorted';
+  const month = new Date(time).getMonth();
   if (Number.isNaN(month)) return 'Unsorted';
-  if (month >= 8 || month <= 0) return 'Autumn';
-  if (month <= 3) return 'Spring';
+  if (month >= 8 || month <= 0) return 'Michaelmas';
+  if (month <= 3) return 'Lent';
   return 'Summer';
+}
+
+function getAcademicYearSortValue(academicYear?: string) {
+  const match = academicYear?.match(/\b(20\d{2})\b/);
+  return match ? Number(match[1]) : 0;
+}
+
+function getTermSortValue(term?: string) {
+  const normalized = term?.toLowerCase() ?? '';
+  if (normalized.includes('michaelmas') || normalized.includes('autumn')) return 1;
+  if (normalized.includes('lent') || normalized.includes('spring')) return 2;
+  if (normalized.includes('summer') || normalized.includes('trinity')) return 3;
+  return 4;
+}
+
+function normalizeSortText(value?: string) {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function getAcademicSortKey({ exactDate, academicYear, term, assessmentName, fallbackTime }: { exactDate?: string; academicYear?: string; term?: string; assessmentName?: string; fallbackTime?: string }) {
+  if (hasExactDate(exactDate)) {
+    const exactTime = parseDateValue(exactDate ?? '');
+    return [
+      String(getAcademicYearSortValue(getAcademicYearFromDate(exactDate ?? ''))).padStart(4, '0'),
+      String(getTermSortValue(getTermFromDate(exactDate ?? ''))).padStart(2, '0'),
+      '0',
+      String(exactTime).padStart(16, '0'),
+    ].join('|');
+  }
+
+  return [
+    String(getAcademicYearSortValue(academicYear)).padStart(4, '0'),
+    String(getTermSortValue(term)).padStart(2, '0'),
+    '1',
+    normalizeSortText(assessmentName),
+    fallbackTime ?? '',
+  ].join('|');
+}
+
+function getAcademicTimeLabel({ exactDate, academicYear, term, assessmentName }: { exactDate?: string; academicYear?: string; term?: string; assessmentName?: string }) {
+  if (hasExactDate(exactDate)) return formatDateLabel(exactDate ?? '');
+  const label = [assessmentName || term, academicYear].filter(Boolean).join('\n');
+  return label || 'Undated';
 }
 
 export function buildTimelineEvents(state: ResearchState): TimelineEvent[] {
   const documentEvents = state.documents.map((document) => {
     const metadata = getDocumentMetadata(document, state.performanceRecords);
+    const academicYear = metadata.academicYear ?? metadata.academicYears[0] ?? getAcademicYearFromDate(document.addedAt);
+    const term = metadata.term ?? metadata.terms[0] ?? getTermFromDate(document.addedAt);
+    const assessmentName = metadata.linkedAssessmentName ?? metadata.assessments[0] ?? document.title;
     return {
       id: `timeline-document-${document.id}`,
-      date: document.addedAt,
-      academicYear: metadata.academicYears[0] ?? getAcademicYearFromDate(document.addedAt),
-      term: metadata.terms[0] ?? getTermFromDate(document.addedAt),
+      date: getAcademicTimeLabel({ exactDate: metadata.sourceDate, academicYear, term, assessmentName }),
+      sortKey: getAcademicSortKey({ exactDate: metadata.sourceDate, academicYear, term, assessmentName, fallbackTime: document.addedAt }),
+      academicYear,
+      term,
       type: 'Upload' as const,
       title: document.title,
       detail: `${document.status} source${metadata.collections.length ? ` in ${metadata.collections.slice(0, 3).join(', ')}` : ''}`,
       subjects: metadata.subjects,
     };
   });
-  const performanceEvents = state.performanceRecords.map((record) => ({
-    id: `timeline-performance-${record.id}`,
-    date: record.date,
-    academicYear: record.academicYear ?? getAcademicYearFromDate(record.date),
-    term: record.term ?? getTermFromDate(record.date),
-    type: 'Performance' as const,
-    title: record.title,
-    detail: [record.subject, record.grade, record.percentage !== undefined ? `${record.percentage}%` : undefined].filter(Boolean).join(' / '),
-    subjects: [record.subject],
-  }));
+  const performanceEvents = state.performanceRecords.map((record) => {
+    const academicYear = record.academicYear ?? (hasExactDate(record.date) ? getAcademicYearFromDate(record.date) : 'Undated');
+    const term = record.term ?? (hasExactDate(record.date) ? getTermFromDate(record.date) : 'Unsorted');
+    return {
+      id: `timeline-performance-${record.id}`,
+      date: getAcademicTimeLabel({ exactDate: record.date, academicYear, term, assessmentName: record.title }),
+      sortKey: getAcademicSortKey({ exactDate: record.date, academicYear, term, assessmentName: record.title, fallbackTime: record.createdAt }),
+      academicYear,
+      term,
+      type: 'Performance' as const,
+      title: record.title,
+      detail: [record.subject, record.grade, record.percentage !== undefined ? `${record.percentage}%` : undefined].filter(Boolean).join(' / '),
+      subjects: [record.subject],
+    };
+  });
   const tutorEvents = state.tutorLessons.map((lesson: TutorLesson) => ({
     id: `timeline-tutor-${lesson.id}`,
-    date: lesson.completedAt ?? lesson.createdAt,
+    date: formatDateLabel(lesson.completedAt ?? lesson.createdAt),
+    sortKey: getAcademicSortKey({ exactDate: lesson.completedAt ?? lesson.createdAt }),
     academicYear: getAcademicYearFromDate(lesson.completedAt ?? lesson.createdAt),
     term: getTermFromDate(lesson.completedAt ?? lesson.createdAt),
     type: 'Tutor' as const,
@@ -232,7 +317,8 @@ export function buildTimelineEvents(state: ResearchState): TimelineEvent[] {
   }));
   const attemptEvents = state.tutorAttempts.slice(0, 20).map((attempt: TutorAttempt) => ({
     id: `timeline-study-${attempt.id}`,
-    date: attempt.createdAt,
+    date: formatDateLabel(attempt.createdAt),
+    sortKey: getAcademicSortKey({ exactDate: attempt.createdAt }),
     academicYear: getAcademicYearFromDate(attempt.createdAt),
     term: getTermFromDate(attempt.createdAt),
     type: 'Study' as const,
@@ -242,16 +328,23 @@ export function buildTimelineEvents(state: ResearchState): TimelineEvent[] {
   }));
   const knowledgeEvents = state.documents
     .filter((document) => document.status === 'Ready' || document.status === 'Indexed')
-    .map((document) => ({
-      id: `timeline-knowledge-${document.id}`,
-      date: document.addedAt,
-      academicYear: getAcademicYearFromDate(document.addedAt),
-      term: getTermFromDate(document.addedAt),
-      type: 'Knowledge' as const,
-      title: `Mapped topics from ${document.title}`,
-      detail: getDocumentMetadata(document, state.performanceRecords).topics.slice(0, 5).join(', ') || 'Ready for topic mapping',
-      subjects: getDocumentMetadata(document, state.performanceRecords).subjects,
-    }));
+    .map((document) => {
+      const metadata = getDocumentMetadata(document, state.performanceRecords);
+      const academicYear = metadata.academicYear ?? metadata.academicYears[0] ?? getAcademicYearFromDate(document.addedAt);
+      const term = metadata.term ?? metadata.terms[0] ?? getTermFromDate(document.addedAt);
+      const assessmentName = metadata.linkedAssessmentName ?? metadata.assessments[0] ?? document.title;
+      return {
+        id: `timeline-knowledge-${document.id}`,
+        date: getAcademicTimeLabel({ exactDate: metadata.sourceDate, academicYear, term, assessmentName }),
+        sortKey: getAcademicSortKey({ exactDate: metadata.sourceDate, academicYear, term, assessmentName, fallbackTime: document.addedAt }),
+        academicYear,
+        term,
+        type: 'Knowledge' as const,
+        title: `Mapped topics from ${document.title}`,
+        detail: metadata.topics.slice(0, 5).join(', ') || 'Ready for topic mapping',
+        subjects: metadata.subjects,
+      };
+    });
 
-  return [...documentEvents, ...performanceEvents, ...tutorEvents, ...attemptEvents, ...knowledgeEvents].sort((a, b) => b.date.localeCompare(a.date));
+  return [...documentEvents, ...performanceEvents, ...tutorEvents, ...attemptEvents, ...knowledgeEvents].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
 }

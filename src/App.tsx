@@ -618,7 +618,7 @@ function ManagedDocumentCard({
   const metadata = getDocumentMetadata(document, records);
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(document.title);
-  const [sourceDate, setSourceDate] = useState(metadata.sourceDate ?? document.addedAt ?? '');
+  const [sourceDate, setSourceDate] = useState(metadata.sourceDate ?? '');
   const [academicYear, setAcademicYear] = useState(metadata.academicYear ?? metadata.academicYears[0] ?? '');
   const [term, setTerm] = useState(metadata.term ?? metadata.terms[0] ?? 'Other');
   const [linkedAssessmentName, setLinkedAssessmentName] = useState(metadata.linkedAssessmentName ?? metadata.assessments[0] ?? '');
@@ -664,15 +664,18 @@ function ManagedDocumentCard({
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Edit source details</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Document title" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4 md:col-span-2" />
-            <input type="date" value={sourceDate} onChange={(event) => setSourceDate(event.target.value)} className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
             <input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} placeholder="Academic year" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
             <select value={term} onChange={(event) => setTerm(event.target.value)} className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">
               {[...academicTerms, term].filter((value, index, values) => value && values.indexOf(value) === index).map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
+            <input value={linkedAssessmentName} onChange={(event) => setLinkedAssessmentName(event.target.value)} placeholder="Assessment / report name" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4 md:col-span-2" />
+            <details className="rounded-lg border border-ink/8 bg-paper/70 p-3 md:col-span-2">
+              <summary className="cursor-pointer text-sm font-semibold text-ink">Add exact date (optional)</summary>
+              <input type="date" value={sourceDate} onChange={(event) => setSourceDate(event.target.value)} className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+            </details>
             <select value={documentCategory} onChange={(event) => setDocumentCategory(event.target.value)} className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">
               {[...documentCategories, documentCategory].filter((value, index, values) => value && values.indexOf(value) === index).map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
-            <input value={linkedAssessmentName} onChange={(event) => setLinkedAssessmentName(event.target.value)} placeholder="Linked assessment/report" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4 md:col-span-2" />
             <EditListField label="Subjects" value={subjects} setValue={setSubjects} />
             <EditListField label="Topics" value={topics} setValue={setTopics} />
             <EditListField label="Academic years" value={academicYears} setValue={setAcademicYears} />
@@ -741,7 +744,7 @@ function IconTextButton({ icon: Icon, label, onClick, danger = false }: { icon: 
 }
 
 const assessmentTypes: AssessmentType[] = ['exam', 'report', 'coursework', 'music', 'mock', 'other'];
-const academicTerms: AcademicTerm[] = ['Michaelmas', 'Lent', 'Summer', 'Other'];
+const academicTerms: AcademicTerm[] = ['Michaelmas', 'Lent', 'Summer', 'Custom'];
 const documentCategories: DocumentCategory[] = ['Report', 'Exam result', 'Mark sheet', 'Notes', 'Past paper', 'Mark scheme', 'Essay', 'Other'];
 const defaultSubjectOptions = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'English', 'History', 'Geography', 'French', 'Spanish', 'Latin', 'Music'];
 
@@ -770,10 +773,10 @@ function buildUploadMetadata(draft: UploadMetadataDraft): Partial<DocumentMetada
   const subjects = getUploadSubjects(draft);
 
   return {
-    sourceDate: draft.sourceDate || undefined,
-    academicYear: draft.academicYear?.trim() || undefined,
+    sourceDate: draft.sourceDate?.trim() || undefined,
+    academicYear: draft.academicYear.trim() || undefined,
     term: draft.term,
-    linkedAssessmentName: draft.linkedAssessmentName?.trim() || undefined,
+    linkedAssessmentName: draft.linkedAssessmentName.trim() || undefined,
     documentCategory: draft.documentCategory,
     subjects,
     ignoreInstrumentalMusic: draft.ignoreInstrumentalMusic,
@@ -820,7 +823,7 @@ function getAcademicPerformanceRecords(records: PerformanceRecord[]) {
 
 function getSubjectGroups(records: PerformanceRecord[]) {
   return [...records]
-    .sort((a, b) => parseDateValue(a.date) - parseDateValue(b.date))
+    .sort((a, b) => getRecordAcademicSortKey(a).localeCompare(getRecordAcademicSortKey(b)))
     .reduce<Record<string, PerformanceRecord[]>>((groups, record) => {
       const subject = record.subject.trim() || 'Unspecified subject';
       groups[subject] = [...(groups[subject] ?? []), record];
@@ -977,7 +980,7 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     id: `performance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     title: typeof record.title === 'string' && record.title.trim() ? record.title.trim() : fallbackTitle,
     sourceDocumentId,
-    date: typeof record.date === 'string' && record.date.trim() ? record.date.trim() : sourceMetadata?.sourceDate || new Date().toISOString().slice(0, 10),
+    date: typeof record.date === 'string' && record.date.trim() ? record.date.trim() : sourceMetadata?.sourceDate || '',
     term: typeof record.term === 'string' && record.term.trim() ? record.term.trim() : sourceMetadata?.term,
     academicYear: typeof record.academicYear === 'string' && record.academicYear.trim() ? record.academicYear.trim() : sourceMetadata?.academicYear,
     subject,
@@ -1766,7 +1769,7 @@ type ReportSnapshot = {
   key: string;
   title: string;
   date: string;
-  time: number;
+  sortKey: string;
   records: PerformanceRecord[];
 };
 
@@ -1797,6 +1800,10 @@ function parseDateValue(date: string) {
   return Number.isFinite(time) ? time : 0;
 }
 
+function hasExactAssessmentDate(date: string | undefined) {
+  return Boolean(date?.trim() && parseDateValue(date) > 0);
+}
+
 function getAssessmentDateKey(date: string) {
   const parts = parseAssessmentDateParts(date);
   if (!parts) return date.trim() || 'undated';
@@ -1809,12 +1816,75 @@ function formatDisplayDate(date: string, options: Intl.DateTimeFormatOptions = {
   return new Intl.DateTimeFormat('en-GB', options).format(new Date(time));
 }
 
+function getAcademicYearSortValue(academicYear?: string) {
+  const match = academicYear?.match(/\b(20\d{2})\b/);
+  return match ? Number(match[1]) : 0;
+}
+
+function getTermSortValue(term?: string) {
+  const normalized = term?.toLowerCase() ?? '';
+  if (normalized.includes('michaelmas') || normalized.includes('autumn')) return 1;
+  if (normalized.includes('lent') || normalized.includes('spring')) return 2;
+  if (normalized.includes('summer') || normalized.includes('trinity')) return 3;
+  return 4;
+}
+
+function normalizeSortText(value?: string) {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function getRecordAssessmentName(record: PerformanceRecord) {
+  return record.title.trim() || record.assessmentType;
+}
+
+function getRecordAcademicSortKey(record: PerformanceRecord) {
+  if (hasExactAssessmentDate(record.date)) {
+    const exactTime = parseDateValue(record.date);
+    const exactDate = new Date(exactTime);
+    return [
+      String(getAcademicYearSortValue(getCurrentAcademicYear(exactDate))).padStart(4, '0'),
+      String(getTermSortValue(getCurrentTermName(exactDate))).padStart(2, '0'),
+      '0',
+      String(exactTime).padStart(16, '0'),
+    ].join('|');
+  }
+
+  return [
+    String(getAcademicYearSortValue(record.academicYear)).padStart(4, '0'),
+    String(getTermSortValue(record.term)).padStart(2, '0'),
+    '1',
+    normalizeSortText(getRecordAssessmentName(record)),
+    record.createdAt,
+  ].join('|');
+}
+
+function getRecordAxisLabel(record: PerformanceRecord) {
+  if (hasExactAssessmentDate(record.date)) return formatDisplayDate(record.date);
+  return [record.term, getRecordAssessmentName(record)].filter(Boolean).join(' ') || record.academicYear || 'Assessment';
+}
+
+function getRecordTimelineLabel(record: PerformanceRecord) {
+  if (hasExactAssessmentDate(record.date)) return formatDisplayDate(record.date);
+  return [getRecordAxisLabel(record), record.academicYear].filter(Boolean).join(' / ') || 'Undated assessment';
+}
+
+function getDocumentAcademicLabel(document: ResearchDocument, records: PerformanceRecord[] = []) {
+  const metadata = getDocumentMetadata(document, records);
+  if (hasExactAssessmentDate(metadata.sourceDate)) return formatDisplayDate(metadata.sourceDate ?? '');
+  return [metadata.linkedAssessmentName || metadata.assessments[0] || metadata.term, metadata.academicYear || metadata.academicYears[0]].filter(Boolean).join(' / ') || formatDisplayDate(document.addedAt);
+}
+
 function sortRecordsByAssessmentDate(records: PerformanceRecord[]) {
-  return [...records].sort((a, b) => parseDateValue(a.date) - parseDateValue(b.date) || a.subject.localeCompare(b.subject) || a.title.localeCompare(b.title));
+  return [...records].sort((a, b) => getRecordAcademicSortKey(a).localeCompare(getRecordAcademicSortKey(b)) || a.subject.localeCompare(b.subject) || a.title.localeCompare(b.title));
 }
 
 function getReportSnapshotKey(record: PerformanceRecord) {
-  return [record.sourceDocumentId || record.title, getAssessmentDateKey(record.date)].join('|');
+  return [
+    record.sourceDocumentId || getRecordAssessmentName(record),
+    hasExactAssessmentDate(record.date) ? getAssessmentDateKey(record.date) : record.academicYear ?? '',
+    record.term ?? '',
+    getRecordAssessmentName(record),
+  ].join('|');
 }
 
 function getReportSnapshots(records: PerformanceRecord[]) {
@@ -1832,12 +1902,12 @@ function getReportSnapshots(records: PerformanceRecord[]) {
       key,
       title: record.title || 'Assessment report',
       date: record.date,
-      time: parseDateValue(record.date),
+      sortKey: getRecordAcademicSortKey(record),
       records: [record],
     });
   });
 
-  return [...snapshots.values()].sort((a, b) => a.time - b.time || a.title.localeCompare(b.title));
+  return [...snapshots.values()].sort((a, b) => a.sortKey.localeCompare(b.sortKey) || a.title.localeCompare(b.title));
 }
 
 function getSubjectTrendSeries(records: PerformanceRecord[]) {
@@ -1848,8 +1918,8 @@ function getSubjectTrendSeries(records: PerformanceRecord[]) {
     if (percentage === undefined) return;
 
     const subject = record.subject.trim() || 'Unspecified subject';
-    const dateKey = getAssessmentDateKey(record.date);
-    const key = `${subject.toLowerCase()}|${dateKey}`;
+    const assessmentKey = getReportSnapshotKey(record);
+    const key = `${subject.toLowerCase()}|${assessmentKey}`;
     const existing = bySubjectDate.get(key);
     if (existing) {
       existing.records.push(record);
@@ -1860,7 +1930,7 @@ function getSubjectTrendSeries(records: PerformanceRecord[]) {
     bySubjectDate.set(key, {
       subject,
       date: record.date,
-      time: parseDateValue(record.date),
+      time: hasExactAssessmentDate(record.date) ? parseDateValue(record.date) : 0,
       percentage,
       records: [record],
     });
@@ -1872,14 +1942,14 @@ function getSubjectTrendSeries(records: PerformanceRecord[]) {
   }, {});
 
   Object.keys(bySubject).forEach((subject) => {
-    bySubject[subject] = bySubject[subject].sort((a, b) => a.time - b.time);
+    bySubject[subject] = bySubject[subject].sort((a, b) => getRecordAcademicSortKey(a.records[0]).localeCompare(getRecordAcademicSortKey(b.records[0])));
   });
 
   return bySubject;
 }
 
 function getTrendEligibleSeries(records: PerformanceRecord[]) {
-  return Object.fromEntries(Object.entries(getSubjectTrendSeries(records)).filter(([, points]) => new Set(points.map((point) => getAssessmentDateKey(point.date))).size >= 2));
+  return Object.fromEntries(Object.entries(getSubjectTrendSeries(records)).filter(([, points]) => new Set(points.map((point) => getReportSnapshotKey(point.records[0]))).size >= 2));
 }
 
 function getTrendChanges(records: PerformanceRecord[]) {
@@ -1920,10 +1990,11 @@ function filterProgressRecords(records: PerformanceRecord[], subject: string, pe
 
   return subjectFiltered.filter((record) => {
     if (period === 'All Time') return true;
-    if (period === 'This Academic Year') return record.academicYear === currentAcademicYear || getCurrentAcademicYear(new Date(parseDateValue(record.date))) === currentAcademicYear;
-    if (period === 'Last Academic Year') return record.academicYear === previousAcademicYear || getCurrentAcademicYear(new Date(parseDateValue(record.date))) === previousAcademicYear;
+    if (period === 'This Academic Year') return record.academicYear === currentAcademicYear || (hasExactAssessmentDate(record.date) && getCurrentAcademicYear(new Date(parseDateValue(record.date))) === currentAcademicYear);
+    if (period === 'Last Academic Year') return record.academicYear === previousAcademicYear || (hasExactAssessmentDate(record.date) && getCurrentAcademicYear(new Date(parseDateValue(record.date))) === previousAcademicYear);
     if (period === 'This Term') return record.term?.toLowerCase() === currentTerm;
     if (period === 'Custom Range') {
+      if (!hasExactAssessmentDate(record.date)) return false;
       const time = parseDateValue(record.date);
       return (!startTime || time >= startTime) && (!endTime || time <= endTime);
     }
@@ -2114,7 +2185,7 @@ function ProgressTimeline({ records, selectedId, onSelect }: { records: Performa
             <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full bg-moss ring-4 ring-white" />
             <span className="flex flex-wrap items-start justify-between gap-3">
               <span>
-                <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{formatDisplayDate(snapshot.date)} / {snapshot.records.length} record{snapshot.records.length === 1 ? '' : 's'}</span>
+                <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{getRecordTimelineLabel(snapshot.records[0])} / {snapshot.records.length} record{snapshot.records.length === 1 ? '' : 's'}</span>
                 <span className="mt-1 block font-semibold text-ink">{snapshot.title}</span>
                 <span className="mt-1 block text-sm leading-6 text-graphite/65">{subjects.join(', ')}</span>
                 {comment ? <span className="mt-2 block line-clamp-2 text-sm leading-6 text-graphite/70">{comment}</span> : null}
@@ -2137,7 +2208,7 @@ function TimelineDetail({ record, documents }: { record: PerformanceRecord; docu
     <div className="mt-4 space-y-4">
       <div>
         <h3 className="text-xl font-semibold text-ink">{record.title}</h3>
-        <p className="mt-1 text-sm text-graphite/70">{[formatDisplayDate(record.date), record.subject, record.academicYear, record.term].filter(Boolean).join(' / ')}</p>
+        <p className="mt-1 text-sm text-graphite/70">{[getRecordTimelineLabel(record), record.subject, record.term].filter(Boolean).join(' / ')}</p>
       </div>
       <p className="rounded-lg bg-paper/70 p-3 text-sm font-semibold text-ink">{formatResult(record)}</p>
       {record.teacherComment ? <p className="text-sm leading-7 text-graphite/74">{record.teacherComment}</p> : null}
@@ -2209,9 +2280,12 @@ function TrendChart({
   const pad = { top: 20, right: 24, bottom: 54, left: 54 };
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
-  const minTime = Math.min(...allPoints.map((point) => point.time));
-  const maxTime = Math.max(...allPoints.map((point) => point.time));
-  const xForTime = (time: number) => pad.left + (minTime === maxTime ? plotWidth / 2 : ((time - minTime) / (maxTime - minTime)) * plotWidth);
+  const axisSlots = [...new Map(allPoints.map((point) => [getReportSnapshotKey(point.records[0]), point])).values()].sort((a, b) => getRecordAcademicSortKey(a.records[0]).localeCompare(getRecordAcademicSortKey(b.records[0])));
+  const slotIndex = new Map(axisSlots.map((point, index) => [getReportSnapshotKey(point.records[0]), index]));
+  const xForPoint = (point: TrendPoint) => {
+    const index = slotIndex.get(getReportSnapshotKey(point.records[0])) ?? 0;
+    return pad.left + (axisSlots.length <= 1 ? plotWidth / 2 : (index / (axisSlots.length - 1)) * plotWidth);
+  };
   const yFor = (percentage: number) => pad.top + plotHeight - (Math.min(100, Math.max(0, percentage)) / 100) * plotHeight;
   const colors = ['rgb(31 41 51)', 'rgb(111 123 92)', 'rgb(183 142 74)', 'rgb(83 102 122)', 'rgb(133 92 78)', 'rgb(92 116 132)'];
   const changes = getTrendChanges(records);
@@ -2239,12 +2313,12 @@ function TrendChart({
             <text x={pad.left + plotWidth / 2} y={height - 10} textAnchor="middle" className="fill-graphite text-[12px] font-semibold">Assessment date</text>
             {seriesEntries.map(([subject, points], seriesIndex) => {
               const color = colors[seriesIndex % colors.length];
-              const line = points.map((point) => `${xForTime(point.time)},${yFor(point.percentage)}`).join(' ');
+              const line = points.map((point) => `${xForPoint(point)},${yFor(point.percentage)}`).join(' ');
               const movingAverage = points
                 .map((point, index) => {
                   const window = points.slice(Math.max(0, index - 2), index + 1);
                   const average = Math.round(window.reduce((total, item) => total + item.percentage, 0) / window.length);
-                  return `${xForTime(point.time)},${yFor(average)}`;
+                  return `${xForPoint(point)},${yFor(average)}`;
                 })
                 .join(' ');
 
@@ -2254,16 +2328,18 @@ function TrendChart({
                   {showMovingAverage ? <polyline points={movingAverage} fill="none" stroke={color} strokeWidth="2" strokeDasharray="8 6" strokeLinecap="round" strokeLinejoin="round" opacity="0.65" /> : null}
                   {points.map((point) => (
                     <g key={`${subject}-${point.date}`}>
-                      {showTeacherConfidence && point.records.some((record) => record.teacherComment) ? <circle cx={xForTime(point.time)} cy={yFor(point.percentage)} r="12" fill="rgba(183,142,74,0.18)" /> : null}
-                      {showAiConfidence && point.records.some((record) => record.strengths.length + record.weaknesses.length + record.actionPoints.length > 1) ? <circle cx={xForTime(point.time)} cy={yFor(point.percentage)} r="7" fill="rgba(111,123,92,0.22)" /> : null}
-                      <circle cx={xForTime(point.time)} cy={yFor(point.percentage)} r="5" fill={color} />
-                      <text x={xForTime(point.time)} y={height - pad.bottom + 20} textAnchor="middle" className="fill-graphite text-[10px]">{formatShortDate(point.date)}</text>
+                      {showTeacherConfidence && point.records.some((record) => record.teacherComment) ? <circle cx={xForPoint(point)} cy={yFor(point.percentage)} r="12" fill="rgba(183,142,74,0.18)" /> : null}
+                      {showAiConfidence && point.records.some((record) => record.strengths.length + record.weaknesses.length + record.actionPoints.length > 1) ? <circle cx={xForPoint(point)} cy={yFor(point.percentage)} r="7" fill="rgba(111,123,92,0.22)" /> : null}
+                      <circle cx={xForPoint(point)} cy={yFor(point.percentage)} r="5" fill={color} />
                     </g>
                   ))}
-                  <text x={xForTime(points[points.length - 1].time) + 8} y={yFor(points[points.length - 1].percentage) + 4} className="fill-graphite text-[10px] font-semibold">{subject}</text>
+                  <text x={xForPoint(points[points.length - 1]) + 8} y={yFor(points[points.length - 1].percentage) + 4} className="fill-graphite text-[10px] font-semibold">{subject}</text>
                 </g>
               );
             })}
+            {axisSlots.map((point) => (
+              <text key={getReportSnapshotKey(point.records[0])} x={xForPoint(point)} y={height - pad.bottom + 20} textAnchor="middle" className="fill-graphite text-[10px]">{getRecordAxisLabel(point.records[0])}</text>
+            ))}
           </svg>
           <div className="grid gap-3 md:grid-cols-2">
             {largestImprovement || largestDecline ? (
@@ -2321,7 +2397,7 @@ function TrendCallout({ label, change }: { label: string; change?: TrendChange }
   return (
     <div className="rounded-lg bg-paper/70 p-3 text-sm">
       <p className="font-semibold text-ink">{label}: {change.delta > 0 ? '+' : ''}{Math.round(change.delta)} points</p>
-      <p className="mt-1 text-graphite/70">{change.subject}: {formatDisplayDate(change.from.date)} to {formatDisplayDate(change.to.date)}</p>
+      <p className="mt-1 text-graphite/70">{change.subject}: {getRecordAxisLabel(change.from.records[0])} to {getRecordAxisLabel(change.to.records[0])}</p>
     </div>
   );
 }
@@ -2330,7 +2406,7 @@ function AssessmentBreakdown({ records, mode = 'Overall' }: { records: Performan
   const points = [...records]
     .map((record) => ({ record, percentage: getRecordPercentage(record) }))
     .filter((point): point is { record: PerformanceRecord; percentage: number } => typeof point.percentage === 'number')
-    .sort((a, b) => parseDateValue(a.record.date) - parseDateValue(b.record.date));
+    .sort((a, b) => getRecordAcademicSortKey(a.record).localeCompare(getRecordAcademicSortKey(b.record)));
   const average = points.length ? Math.round(points.reduce((total, point) => total + point.percentage, 0) / points.length) : undefined;
 
   return (
@@ -2363,7 +2439,7 @@ function AssessmentBreakdown({ records, mode = 'Overall' }: { records: Performan
 }
 
 function TermComparisonChart({ records }: { records: PerformanceRecord[] }) {
-  const termRows = ['Michaelmas', 'Lent', 'Summer', 'Other'].map((term) => {
+  const termRows = ['Michaelmas', 'Lent', 'Summer', 'Custom'].map((term) => {
     const points = records
       .filter((record) => (record.term ?? 'Other').toLowerCase().includes(term.toLowerCase()) || (!record.term && term === 'Other'))
       .map(getRecordPercentage)
@@ -2509,7 +2585,7 @@ function TimelineRow({ event, compact = false }: { event: TimelineEvent; compact
           <p className={`${compact ? 'line-clamp-2' : ''} mt-2 text-sm leading-6 text-graphite/72`}>{event.detail}</p>
           {!compact && event.subjects.length ? <div className="mt-3"><ChipCloud items={event.subjects.slice(0, 6)} /></div> : null}
         </div>
-        <time className="shrink-0 rounded-full bg-paper px-3 py-1 text-xs font-semibold text-graphite/70">{event.date || 'Undated'}</time>
+        <time className="shrink-0 whitespace-pre-line rounded-full bg-paper px-3 py-1 text-xs font-semibold text-graphite/70">{event.date || 'Undated'}</time>
       </div>
     </article>
   );
@@ -2598,7 +2674,7 @@ function Upload({
   const [failedUpload, setFailedUpload] = useState<{ file: File; documentId: string; title: string; cleanName: string; type: 'PDF' | 'DOCX' } | null>(null);
   const [note, setNote] = useState('Choose a document to add to this workspace.');
   const [metadataDraft, setMetadataDraft] = useState<UploadMetadataDraft>({
-    sourceDate: new Date().toISOString().slice(0, 10),
+    sourceDate: '',
     academicYear: '',
     term: 'Michaelmas',
     linkedAssessmentName: '',
@@ -2611,10 +2687,10 @@ function Upload({
   const recentUploads = stateDocuments.filter((document) => document.status !== 'Indexed' || document.type === 'TXT' || document.type === 'PDF' || document.type === 'DOCX').slice(0, 4);
   const uploadSubjects = getUploadSubjects(metadataDraft);
   const hasSelectedFile = Boolean(selectedFile);
-  const hasDate = Boolean(metadataDraft.sourceDate);
+  const hasAcademicTime = Boolean(metadataDraft.academicYear.trim() && metadataDraft.term && metadataDraft.linkedAssessmentName.trim());
   const hasDocumentKind = Boolean(metadataDraft.documentCategory);
   const hasSubjectContext = uploadSubjects.length > 0;
-  const canUpload = hasSelectedFile && hasDate && hasDocumentKind;
+  const canUpload = hasSelectedFile && hasAcademicTime && hasDocumentKind;
 
   function logUploadStage(stage: UploadStage, detail?: unknown) {
     if (import.meta.env.DEV) {
@@ -2657,7 +2733,7 @@ function Upload({
     const metadata = makeMetadata(taggedDocument, performanceRecords, uploadMetadata);
     return {
       ...taggedDocument,
-      addedAt: uploadMetadata.sourceDate ?? document.addedAt,
+      addedAt: document.addedAt,
       metadata,
       collectionIds: metadata.collections.map((collection) => `collection-${collection.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`),
     };
@@ -2852,7 +2928,7 @@ function Upload({
       type: 'PDF',
       workspaceId: activeWorkspaceId,
       authors: 'Local PDF upload',
-      addedAt: new Date().toISOString().slice(0, 10),
+      addedAt: new Date().toISOString(),
       status: 'Extracting',
       tags: ['pdf upload'],
       insightCount: 0,
@@ -2970,7 +3046,7 @@ function Upload({
       type: 'DOCX',
       workspaceId: activeWorkspaceId,
       authors: 'Local DOCX upload',
-      addedAt: new Date().toISOString().slice(0, 10),
+      addedAt: new Date().toISOString(),
       status: 'Extracting',
       tags: ['docx upload'],
       insightCount: 0,
@@ -3107,7 +3183,7 @@ function Upload({
           type,
           workspaceId: activeWorkspaceId,
           authors: 'Local TXT upload',
-          addedAt: new Date().toISOString().slice(0, 10),
+          addedAt: new Date().toISOString(),
           status: 'Ready',
           tags: tags.length ? tags : ['txt upload'],
           insightCount: 0,
@@ -3138,7 +3214,7 @@ function Upload({
           type: 'TXT',
           workspaceId: activeWorkspaceId,
           authors: 'Local TXT upload',
-          addedAt: new Date().toISOString().slice(0, 10),
+          addedAt: new Date().toISOString(),
           status: 'Failed',
           tags: ['txt upload', 'failed'],
           insightCount: 0,
@@ -3210,31 +3286,34 @@ function Upload({
           {hasSelectedFile ? (
             <section className="rounded-lg bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Step 2</p>
-              <h3 className="mt-2 text-xl font-semibold text-ink">When was this?</h3>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <input type="date" value={metadataDraft.sourceDate} onChange={(event) => updateUploadMetadata('sourceDate', event.target.value)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-                <input value={metadataDraft.academicYear} onChange={(event) => updateUploadMetadata('academicYear', event.target.value)} placeholder="Academic year" className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+              <h3 className="mt-2 text-xl font-semibold text-ink">Academic time</h3>
+              <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px]">
+                <input value={metadataDraft.academicYear} onChange={(event) => updateUploadMetadata('academicYear', event.target.value)} placeholder="Academic year, e.g. 2025-2026" className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
                 <select value={metadataDraft.term} onChange={(event) => updateUploadMetadata('term', event.target.value as AcademicTerm)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
                   {academicTerms.map((term) => <option key={term} value={term}>{term}</option>)}
                 </select>
+                <input value={metadataDraft.linkedAssessmentName} onChange={(event) => updateUploadMetadata('linkedAssessmentName', event.target.value)} placeholder="Assessment / report name, e.g. Michaelmas Report" className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
               </div>
+              <details className="mt-3 rounded-lg border border-ink/8 bg-paper/50 p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-ink">Add exact date (optional)</summary>
+                <input type="date" value={metadataDraft.sourceDate} onChange={(event) => updateUploadMetadata('sourceDate', event.target.value)} className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+              </details>
             </section>
           ) : null}
 
-          {hasSelectedFile && hasDate ? (
+          {hasSelectedFile && hasAcademicTime ? (
             <section className="rounded-lg bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Step 3</p>
               <h3 className="mt-2 text-xl font-semibold text-ink">What kind of document is it?</h3>
-              <div className="mt-4 grid gap-3 sm:grid-cols-[220px_1fr]">
+              <div className="mt-4 grid gap-3">
                 <select value={metadataDraft.documentCategory} onChange={(event) => updateUploadMetadata('documentCategory', event.target.value as DocumentCategory)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
                   {documentCategories.map((category) => <option key={category} value={category}>{category}</option>)}
                 </select>
-                <input value={metadataDraft.linkedAssessmentName} onChange={(event) => updateUploadMetadata('linkedAssessmentName', event.target.value)} placeholder="Related report or assessment" className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
               </div>
             </section>
           ) : null}
 
-          {hasSelectedFile && hasDate && hasDocumentKind ? (
+          {hasSelectedFile && hasAcademicTime && hasDocumentKind ? (
             <section className="rounded-lg bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Step 4</p>
               <h3 className="mt-2 text-xl font-semibold text-ink">Which subjects?</h3>
@@ -3253,7 +3332,7 @@ function Upload({
             </section>
           ) : null}
 
-          {hasSelectedFile && hasDate && hasDocumentKind ? (
+          {hasSelectedFile && hasAcademicTime && hasDocumentKind ? (
             <section className="rounded-lg bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Upload</p>
               <h3 className="mt-2 text-xl font-semibold text-ink">{hasSubjectContext ? `Ready for ${uploadSubjects.slice(0, 2).join(', ')}` : 'Ready to add'}</h3>
@@ -3285,7 +3364,7 @@ function Upload({
                       document.status,
                       safeStringArray(getDocumentMetadata(document, performanceRecords).subjects)[0],
                       getDocumentMetadata(document, performanceRecords).linkedAssessmentName,
-                      getDocumentMetadata(document, performanceRecords).sourceDate ?? document.addedAt,
+                      getDocumentAcademicLabel(document, performanceRecords),
                     ]
                       .filter(Boolean)
                       .join(' / ')}
