@@ -821,7 +821,7 @@ export function TutorPage({
             disabled={isLoading}
           />
         ) : (
-          <EmptyPanel title="No exam set yet" copy="Generate exam-style questions from uploaded documents." />
+          <EmptyPanel title="Generate exam practice" copy="Create exam-style questions from uploaded documents." />
         )
       ) : null}
       <TutorConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />

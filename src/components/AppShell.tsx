@@ -92,22 +92,6 @@ export function AppShell({
     'connection-failed': 'Sync issue',
     connected: user?.email ? `Signed in as ${user.email}` : 'Supabase connected',
   }[storageStatus];
-  const storageDescription = {
-    loading: 'Loading saved workspace data.',
-    'missing-env': 'Saved in this browser.',
-    'auth-required': 'Supabase is configured; sign in to load private cloud data.',
-    'client-created': 'Remote storage is configured; checking the connection.',
-    'connection-failed': 'Saved locally for now. Sync is unavailable.',
-    connected: 'Your account is syncing.',
-  }[storageStatus];
-  const storageDotClass = {
-    loading: 'bg-brass',
-    'missing-env': 'bg-graphite/45',
-    'auth-required': 'bg-brass',
-    'client-created': 'bg-brass',
-    'connection-failed': 'bg-red-500',
-    connected: 'bg-moss',
-  }[storageStatus];
   const showDeveloperTools = import.meta.env.DEV || new URLSearchParams(window.location.search).get('dev') === '1';
   const activePillar = getActivePillar(activePage);
   const visibleTabs = getVisibleTabs(activePillar.id);
@@ -184,7 +168,6 @@ export function AppShell({
                 <Plus size={16} />
               </button>
             </div>
-            <p className="mb-3 text-xs leading-5 text-graphite/65">Examples: Biology, History, French, Music, Programming, Personal Research.</p>
             <div className="space-y-2">
               {state.workspaces.map((workspace) => {
                 const active = workspace.id === state.activeWorkspaceId;
@@ -211,22 +194,6 @@ export function AppShell({
           </div>
 
           <div className="mt-auto space-y-3">
-            <div className="rounded-lg bg-paper/45 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Storage</p>
-              <div className="mt-3 flex items-center gap-2">
-                <span className={`size-2 rounded-full ${storageDotClass}`} />
-                <p className="text-sm font-semibold text-ink">{storageLabel}</p>
-              </div>
-              <p className="mt-2 text-xs leading-5 text-graphite/68">{storageDescription}</p>
-            </div>
-
-            <div className="rounded-lg bg-paper/45 p-3">
-              <p className="text-sm font-semibold text-ink">Desk focus</p>
-              <p className="mt-2 text-sm leading-6 text-graphite/72">
-                {activeWorkspace?.description ?? 'Choose a workspace to focus your desk.'}
-              </p>
-            </div>
-
             <button type="button" onClick={() => setActivePage('settings')} className="w-full rounded-lg px-2 py-2 text-left text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55 hover:bg-paper hover:text-ink">
               Settings
             </button>
@@ -249,13 +216,6 @@ export function AppShell({
                 <UploadCloud size={18} />
                 Add Source
               </button>
-            </div>
-            <div className="rounded-lg border border-ink/8 bg-paper/65 px-3 py-2 text-xs leading-5 text-graphite/70 lg:hidden">
-              <div className="flex items-center gap-2 font-semibold text-ink">
-                <span className={`size-2 rounded-full ${storageDotClass}`} />
-                {storageLabel}
-              </div>
-              <p className="mt-1">{storageDescription}</p>
             </div>
             <div className="grid grid-cols-2 gap-2 lg:hidden">
               {navItems.map((item) => {

@@ -4,7 +4,6 @@ import {
   CalendarDays,
   CheckCircle2,
   ClipboardList,
-  Clock3,
   Edit3,
   FilePlus2,
   FolderKanban,
@@ -129,7 +128,7 @@ function App() {
         setState={setState}
       />
     ),
-    upload: <Upload stateDocuments={workspaceDocuments} activeWorkspaceId={state.activeWorkspaceId} storageStatus={storageStatus} performanceRecords={state.performanceRecords} userId={userId} setState={setState} />,
+    upload: <Upload activeWorkspaceId={state.activeWorkspaceId} storageStatus={storageStatus} performanceRecords={state.performanceRecords} userId={userId} setState={setState} />,
     chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} workspaceId={state.activeWorkspaceId} documents={workspaceDocuments} chunks={state.chunks} performanceRecords={state.performanceRecords} performanceSummaries={state.performanceSummaries} tutorLessons={state.tutorLessons} tutorAttempts={state.tutorAttempts} storageStatus={storageStatus} userId={userId} setState={setState} />,
     study: <StudyTools documents={workspaceDocuments} />,
     map: <KnowledgeMap documents={workspaceDocuments} />,
@@ -266,6 +265,12 @@ function Dashboard({
   const hasTimeline = timeline.length > 0;
   const hasSubjects = subjects.length > 0;
   const hasPerformance = academicPerformanceRecords.length > 0;
+  const metrics = [
+    hasSubjects ? ['Subjects', subjects.length.toLocaleString()] : null,
+    hasCollections ? ['Collections', collections.length.toLocaleString()] : null,
+    hasDocuments ? ['Sources', documents.length.toLocaleString()] : null,
+    latestAverage !== undefined ? ['Average', `${latestAverage}%`] : null,
+  ].filter((item): item is [string, string] => Boolean(item));
   const nextAction = !hasDocuments
     ? { label: 'Upload first source', page: 'upload' as PageId, detail: 'Start with a report, notes file, exam paper, or source document.' }
     : weakTopics.length
@@ -280,14 +285,14 @@ function Dashboard({
         <div className="py-3 sm:py-6">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Academic profile</p>
           <h2 className="mt-4 max-w-3xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-6xl">
-            {hasReadySources ? 'Your learning system is connected.' : 'Create your own learning operating system.'}
+            {hasReadySources ? 'Your academic profile is taking shape.' : 'Start with one real document.'}
           </h2>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/72">
             {hasReadySources
               ? `${readyCount} source${readyCount === 1 ? '' : 's'} ready for study.`
               : hasDocuments
                 ? 'One source needs attention before it can support learning.'
-                : 'Start with a workspace that matches your real life: Biology, History, French, Music, Programming, personal research, or anything else you are studying.'}
+                : 'Upload your first report to begin tracking academic progress.'}
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <button type="button" onClick={() => setActivePage(nextAction.page)} className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
@@ -303,26 +308,11 @@ function Dashboard({
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">What should I do next?</p>
           <h3 className="mt-3 text-xl font-semibold text-ink">{nextAction.label}</h3>
           <p className="mt-3 text-sm leading-7 text-graphite/72">{nextAction.detail}</p>
-          {hasDocuments || hasSubjects || hasPerformance ? <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-ink/6 pt-5">
-            <MetricCard label="Subjects" value={subjects.length.toLocaleString()} />
-            <MetricCard label="Collections" value={collections.length.toLocaleString()} />
-            <MetricCard label="Sources" value={documents.length.toLocaleString()} />
-            <MetricCard label="Average" value={latestAverage !== undefined ? `${latestAverage}%` : '-'} />
+          {metrics.length ? <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-ink/6 pt-5">
+            {metrics.map(([label, value]) => <MetricCard key={label} label={label} value={value} />)}
           </div> : null}
         </div>
       </section>
-
-      {!hasDocuments ? (
-        <section className="rounded-lg bg-white p-6 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Upload</p>
-          <h2 className="mt-3 font-serif text-3xl font-semibold text-ink">Add the first report, note, or paper.</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-graphite/70">Research OS becomes useful as soon as it has one real source to work from.</p>
-          <button type="button" onClick={() => setActivePage('upload')} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
-            Upload a source
-            <ArrowRight size={17} />
-          </button>
-        </section>
-      ) : null}
 
       {hasSubjects || hasCollections || hasTimeline ? <section className="grid gap-8 xl:grid-cols-[1fr_1fr_1fr]">
         {hasSubjects ? <div>
@@ -1868,12 +1858,6 @@ function getRecordTimelineLabel(record: PerformanceRecord) {
   return [getRecordAxisLabel(record), record.academicYear].filter(Boolean).join(' / ') || 'Undated assessment';
 }
 
-function getDocumentAcademicLabel(document: ResearchDocument, records: PerformanceRecord[] = []) {
-  const metadata = getDocumentMetadata(document, records);
-  if (hasExactAssessmentDate(metadata.sourceDate)) return formatDisplayDate(metadata.sourceDate ?? '');
-  return [metadata.linkedAssessmentName || metadata.assessments[0] || metadata.term, metadata.academicYear || metadata.academicYears[0]].filter(Boolean).join(' / ') || formatDisplayDate(document.addedAt);
-}
-
 function sortRecordsByAssessmentDate(records: PerformanceRecord[]) {
   return [...records].sort((a, b) => getRecordAcademicSortKey(a).localeCompare(getRecordAcademicSortKey(b)) || a.subject.localeCompare(b.subject) || a.title.localeCompare(b.title));
 }
@@ -2633,7 +2617,7 @@ function TimelinePage({ events }: { events: TimelineEvent[] }) {
           ))}
         </div>
       ) : (
-        <EmptyState title="No timeline yet" copy="Upload a source, analyse a report, or complete a Tutor activity to start the unified learning timeline." />
+        <EmptyState title="Build your learning timeline" copy="Upload a source, analyse a report, or complete a Tutor activity." />
       )}
     </div>
   );
@@ -2654,14 +2638,12 @@ function EmptyState({ title, copy, action, onClick }: { title: string; copy: str
 }
 
 function Upload({
-  stateDocuments,
   activeWorkspaceId,
   storageStatus,
   performanceRecords,
   userId,
   setState,
 }: {
-  stateDocuments: ResearchDocument[];
   activeWorkspaceId: string;
   storageStatus: ReturnType<typeof useResearchState>['storageStatus'];
   performanceRecords: PerformanceRecord[];
@@ -2684,12 +2666,9 @@ function Upload({
     ignoreInstrumentalMusic: false,
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const recentUploads = stateDocuments.filter((document) => document.status !== 'Indexed' || document.type === 'TXT' || document.type === 'PDF' || document.type === 'DOCX').slice(0, 4);
-  const uploadSubjects = getUploadSubjects(metadataDraft);
   const hasSelectedFile = Boolean(selectedFile);
   const hasAcademicTime = Boolean(metadataDraft.academicYear.trim() && metadataDraft.term && metadataDraft.linkedAssessmentName.trim());
   const hasDocumentKind = Boolean(metadataDraft.documentCategory);
-  const hasSubjectContext = uploadSubjects.length > 0;
   const canUpload = hasSelectedFile && hasAcademicTime && hasDocumentKind;
 
   function logUploadStage(stage: UploadStage, detail?: unknown) {
@@ -2710,7 +2689,7 @@ function Upload({
     if (message) return message;
     if (stage === 'file-selected') return `Research OS could not read ${cleanName}. Choose the file again and retry.`;
     if (stage === 'extracting') return `Research OS could not extract text from ${cleanName}. Try another file.`;
-    if (stage === 'chunking') return `${cleanName} could not be prepared for keyword search. Try another file.`;
+    if (stage === 'chunking') return `${cleanName} could not be prepared for study. Try another file.`;
     if (stage === 'saving') return `${cleanName} was read, but could not be saved. Try again.`;
     return `${cleanName} was saved, but search preparation failed.`;
   }
@@ -2780,7 +2759,7 @@ function Upload({
         ...current,
         documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...notEmbeddedDocument, metadata: item.metadata ?? notEmbeddedDocument.metadata } : item)),
       }));
-      setNote(`${readyMessage} Ready for keyword search.`);
+      setNote(readyMessage);
       return;
     }
 
@@ -2800,7 +2779,7 @@ function Upload({
       documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...embeddingDocument, metadata: item.metadata ?? embeddingDocument.metadata } : item)),
       chunks: [...pendingChunks, ...current.chunks.filter((chunk) => chunk.documentId !== document.id)],
     }));
-    setNote('Preparing your source...');
+    setNote('Updating your academic profile...');
 
     try {
       await saveDocument(embeddingDocument, { userId });
@@ -2811,7 +2790,7 @@ function Upload({
       const finalDocument: ResearchDocument = {
         ...embeddingDocument,
         embeddingStatus: nextStatus,
-        embeddingError: result.failed > 0 && result.embedded === 0 ? 'Embedding failed. Keyword search remains available.' : undefined,
+        embeddingError: result.failed > 0 && result.embedded === 0 ? 'Study search preparation failed. Local search remains available.' : undefined,
       };
       const finalChunks = pendingChunks.map((chunk) =>
         chunk.documentId === document.id
@@ -2851,7 +2830,7 @@ function Upload({
       }));
       await saveDocument(keywordOnlyDocument, { userId });
       await saveChunks(failedEmbeddingChunks, { userId });
-      setNote(`${readyMessage} Ready for keyword search.`);
+      setNote(readyMessage);
     }
   }
 
@@ -2932,7 +2911,7 @@ function Upload({
       status: 'Extracting',
       tags: ['pdf upload'],
       insightCount: 0,
-      summary: 'Extracting selectable text from this PDF in your browser.',
+      summary: 'Reading this PDF.',
     };
 
     setState((current) => ({
@@ -2940,11 +2919,12 @@ function Upload({
       documents: [processingDocument, ...current.documents.filter((document) => document.id !== documentId)],
       chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
     }));
-    setNote(`Reading ${cleanName}...`);
+    setNote('Uploading document...');
 
     try {
       uploadStage = 'extracting';
       logUploadStage(uploadStage, { fileName: cleanName });
+      setNote('Reading report...');
       const extracted = await extractPdfText(file);
 
       if (extracted.wordCount === 0 || !extracted.text.trim()) {
@@ -2958,14 +2938,14 @@ function Upload({
             ? {
                 ...document,
                 status: 'Analysing',
-                summary: 'Preparing this source for your workspace.',
+                summary: 'Finding subjects and comments.',
                 pageCount: extracted.pages.length,
                 wordCount: extracted.wordCount,
               }
             : document,
         ),
       }));
-      setNote(`Preparing ${cleanName}...`);
+      setNote('Finding subjects...');
 
       uploadStage = 'chunking';
       logUploadStage(uploadStage, { fileName: cleanName, pages: extracted.pages.length, wordCount: extracted.wordCount });
@@ -2986,6 +2966,7 @@ function Upload({
         wordCount: extracted.wordCount,
         chunkIds: chunks.map((chunk) => chunk.id),
       });
+      setNote('Understanding teacher comments...');
       const metadataAnalysis = await analyseDocumentMetadataIfPossible(readyDocument);
       readyDocument = applyAnalysedDocument(readyDocument, metadataAnalysis);
 
@@ -2996,8 +2977,9 @@ function Upload({
       }));
       uploadStage = 'saving';
       logUploadStage(uploadStage, { documentId, chunkCount: chunks.length });
+      setNote('Updating your academic profile...');
       const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument, metadataAnalysis);
-      const readyMessage = `${cleanName} is ready.${performanceCount ? ` ${performanceCount} assessment record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
+      const readyMessage = performanceCount ? 'Your academic profile has been updated.' : 'Your document has been imported.';
       setNote(readyMessage);
       resetUploadFields();
       await queueEmbeddings(readyDocument, chunks, readyMessage);
@@ -3050,7 +3032,7 @@ function Upload({
       status: 'Extracting',
       tags: ['docx upload'],
       insightCount: 0,
-      summary: 'Extracting document text from this DOCX in your browser.',
+      summary: 'Reading this document.',
     };
 
     setState((current) => ({
@@ -3058,11 +3040,12 @@ function Upload({
       documents: [processingDocument, ...current.documents.filter((document) => document.id !== documentId)],
       chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
     }));
-    setNote(`Reading ${cleanName}...`);
+    setNote('Uploading document...');
 
     try {
       uploadStage = 'extracting';
       logUploadStage(uploadStage, { fileName: cleanName });
+      setNote('Reading report...');
       const extracted = await extractDocxText(file);
 
       if (extracted.wordCount === 0 || !extracted.text.trim()) {
@@ -3076,13 +3059,13 @@ function Upload({
             ? {
                 ...document,
                 status: 'Analysing',
-                summary: 'Preparing this source for your workspace.',
+                summary: 'Finding subjects and comments.',
                 wordCount: extracted.wordCount,
               }
             : document,
         ),
       }));
-      setNote(`Preparing ${cleanName}...`);
+      setNote('Finding subjects...');
 
       uploadStage = 'chunking';
       logUploadStage(uploadStage, { fileName: cleanName, wordCount: extracted.wordCount });
@@ -3102,6 +3085,7 @@ function Upload({
         wordCount: extracted.wordCount,
         chunkIds: chunks.map((chunk) => chunk.id),
       });
+      setNote('Understanding teacher comments...');
       const metadataAnalysis = await analyseDocumentMetadataIfPossible(readyDocument);
       readyDocument = applyAnalysedDocument(readyDocument, metadataAnalysis);
 
@@ -3112,8 +3096,9 @@ function Upload({
       }));
       uploadStage = 'saving';
       logUploadStage(uploadStage, { documentId, chunkCount: chunks.length });
+      setNote('Updating your academic profile...');
       const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument, metadataAnalysis);
-      const readyMessage = `${cleanName} is ready.${performanceCount ? ` ${performanceCount} assessment record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
+      const readyMessage = performanceCount ? 'Your academic profile has been updated.' : 'Your document has been imported.';
       setNote(readyMessage);
       resetUploadFields();
       await queueEmbeddings(readyDocument, chunks, readyMessage);
@@ -3156,10 +3141,12 @@ function Upload({
       let uploadStage: UploadStage = 'file-selected';
       setIsReading(true);
       logUploadStage(uploadStage, { fileName: cleanName, type: 'TXT' });
+      setNote('Uploading document...');
 
       try {
         uploadStage = 'extracting';
         logUploadStage(uploadStage, { fileName: cleanName });
+        setNote('Reading report...');
         const extractedText = await selectedFile.text();
         const wordCount = getWordCount(extractedText);
 
@@ -3169,6 +3156,7 @@ function Upload({
 
         uploadStage = 'chunking';
         logUploadStage(uploadStage, { fileName: cleanName, wordCount });
+        setNote('Finding subjects...');
         const chunks = chunkText({ text: extractedText, documentId });
 
         if (chunks.length === 0) {
@@ -3192,6 +3180,7 @@ function Upload({
           wordCount,
           chunkIds: chunks.map((chunk) => chunk.id),
         });
+        setNote('Understanding teacher comments...');
         const metadataAnalysis = await analyseDocumentMetadataIfPossible(newDocument);
         newDocument = applyAnalysedDocument(newDocument, metadataAnalysis);
 
@@ -3202,8 +3191,9 @@ function Upload({
         }));
         uploadStage = 'saving';
         logUploadStage(uploadStage, { documentId, chunkCount: chunks.length });
+        setNote('Updating your academic profile...');
         const performanceCount = await analyseUploadedPerformanceIfRelevant(newDocument, metadataAnalysis);
-        const readyMessage = `${cleanName} is ready.${performanceCount ? ` ${performanceCount} assessment record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
+        const readyMessage = performanceCount ? 'Your academic profile has been updated.' : 'Your document has been imported.';
         setNote(readyMessage);
         await queueEmbeddings(newDocument, chunks, readyMessage);
       } catch (error) {
@@ -3251,16 +3241,15 @@ function Upload({
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-9 xl:grid-cols-[1.35fr_0.65fr]">
+    <div className="mx-auto max-w-3xl">
       <section>
         <SectionHeader
           eyebrow="Upload"
           title="Add a source"
-          copy="Choose a document, add just enough context, and Research OS will place it where it belongs."
+          copy="Choose a document and add the academic context you want tracked."
         />
         <div className="space-y-4">
           <section className="rounded-lg bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Step 1</p>
             <h3 className="mt-2 text-xl font-semibold text-ink">Choose document</h3>
             <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
               <input value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="Optional display name" className="min-w-0 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4" />
@@ -3285,7 +3274,6 @@ function Upload({
 
           {hasSelectedFile ? (
             <section className="rounded-lg bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Step 2</p>
               <h3 className="mt-2 text-xl font-semibold text-ink">Academic time</h3>
               <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px]">
                 <input value={metadataDraft.academicYear} onChange={(event) => updateUploadMetadata('academicYear', event.target.value)} placeholder="Academic year, e.g. 2025-2026" className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
@@ -3303,8 +3291,7 @@ function Upload({
 
           {hasSelectedFile && hasAcademicTime ? (
             <section className="rounded-lg bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Step 3</p>
-              <h3 className="mt-2 text-xl font-semibold text-ink">What kind of document is it?</h3>
+              <h3 className="mt-2 text-xl font-semibold text-ink">Document type</h3>
               <div className="mt-4 grid gap-3">
                 <select value={metadataDraft.documentCategory} onChange={(event) => updateUploadMetadata('documentCategory', event.target.value as DocumentCategory)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
                   {documentCategories.map((category) => <option key={category} value={category}>{category}</option>)}
@@ -3315,8 +3302,7 @@ function Upload({
 
           {hasSelectedFile && hasAcademicTime && hasDocumentKind ? (
             <section className="rounded-lg bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Step 4</p>
-              <h3 className="mt-2 text-xl font-semibold text-ink">Which subjects?</h3>
+              <h3 className="mt-2 text-xl font-semibold text-ink">Subjects</h3>
               <div className="mt-4 flex flex-wrap gap-2">
                 {defaultSubjectOptions.map((subject) => (
                   <button key={subject} type="button" onClick={() => toggleUploadSubject(subject)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${metadataDraft.subjectsIncluded.includes(subject) ? 'border-ink bg-ink text-white' : 'border-ink/10 bg-paper text-graphite/75'}`}>
@@ -3334,63 +3320,27 @@ function Upload({
 
           {hasSelectedFile && hasAcademicTime && hasDocumentKind ? (
             <section className="rounded-lg bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Upload</p>
-              <h3 className="mt-2 text-xl font-semibold text-ink">{hasSubjectContext ? `Ready for ${uploadSubjects.slice(0, 2).join(', ')}` : 'Ready to add'}</h3>
-              <button type="button" onClick={handleUpload} disabled={isReading || !canUpload} className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+              <button type="button" onClick={handleUpload} disabled={isReading || !canUpload} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
                 <FilePlus2 size={18} />
-                {isReading ? 'Adding...' : 'Add source'}
+                {isReading ? 'Importing...' : 'Import Document'}
               </button>
+              {isReading || note !== 'Choose a document to add to this workspace.' ? <p className="mt-4 text-center text-sm font-medium text-graphite/74">{note}</p> : null}
+              {failedUpload ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    failedUpload.type === 'PDF'
+                      ? processPdfUpload(failedUpload)
+                      : processDocxUpload(failedUpload)
+                  }
+                  disabled={isReading}
+                  className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition disabled:cursor-not-allowed disabled:text-graphite/55"
+                >
+                  Retry import
+                </button>
+              ) : null}
             </section>
           ) : null}
-        </div>
-        <div className="mt-4 rounded-lg bg-paper/60 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{isReading ? 'Processing' : 'Latest result'}</p>
-          <p className="mt-2 text-sm leading-7 text-graphite/74">{note}</p>
-        </div>
-      </section>
-
-      <section>
-        <SectionHeader eyebrow="After upload" title="Recent intake" />
-        <div className="space-y-4">
-          {recentUploads.length ? (
-            recentUploads.map((document) => (
-            <div key={document.id} className="rounded-lg bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-ink">{document.title}</p>
-                  <p className="mt-2 line-clamp-3 text-sm leading-7 text-graphite/72">{document.summary}</p>
-                  <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
-                    {[
-                      document.status,
-                      safeStringArray(getDocumentMetadata(document, performanceRecords).subjects)[0],
-                      getDocumentMetadata(document, performanceRecords).linkedAssessmentName,
-                      getDocumentAcademicLabel(document, performanceRecords),
-                    ]
-                      .filter(Boolean)
-                      .join(' / ')}
-                  </p>
-                  {document.status === 'Failed' && failedUpload?.documentId === document.id ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        failedUpload.type === 'PDF'
-                          ? processPdfUpload(failedUpload)
-                          : processDocxUpload(failedUpload)
-                      }
-                      disabled={isReading}
-                      className="mt-3 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
-                    >
-                      Retry extraction
-                    </button>
-                  ) : null}
-                </div>
-                <Clock3 className="shrink-0 text-graphite/45" size={20} />
-              </div>
-            </div>
-            ))
-          ) : (
-            <EmptyState title="Nothing waiting" copy="Completed uploads and extraction attempts will appear here." />
-          )}
         </div>
       </section>
     </div>
@@ -3847,7 +3797,7 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
                 </div>
               ))
             ) : (
-              <EmptyState title="No study source yet" copy="Upload a document before preparing study material." />
+              <EmptyState title="Upload a study source" copy="Add a readable document before preparing study material." />
             )}
           </div>
         </div>
@@ -3897,7 +3847,7 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
         copy="A quieter map of relationships across the active research area. Topic nodes appear after documents have been extracted."
       />
       {mapNodes.length === 0 ? (
-        <EmptyState title="No knowledge map yet" copy="Upload documents and Research OS will use their topics to start a workspace map." />
+        <EmptyState title="Create a topic map" copy="Upload documents and Research OS will use their topics to start a workspace map." />
       ) : (
       <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
         <div className="relative min-h-[460px] overflow-hidden rounded-lg border border-ink/8 bg-white shadow-sm sm:min-h-[560px]">
