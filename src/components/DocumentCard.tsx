@@ -2,6 +2,8 @@ import type { ResearchDocument } from '../types/research';
 
 export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchDocument; chunkCount?: number }) {
   const metadata = document.metadata;
+  const subjects = safeStringArray(metadata?.subjects);
+  const tags = safeStringArray(document.tags);
   const statusClasses = {
     Indexed: 'bg-moss/10 text-moss',
     Ready: 'bg-moss/10 text-moss',
@@ -17,7 +19,7 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
         <div className="min-w-0">
           <h3 className="truncate text-base font-semibold text-ink">{document.title}</h3>
           <p className="mt-1 text-sm text-graphite/62">
-            {[metadata?.subjects[0], metadata?.linkedAssessmentName, metadata?.sourceDate ?? document.addedAt].filter(Boolean).join(' / ') || document.type}
+            {[subjects[0], metadata?.linkedAssessmentName, metadata?.sourceDate ?? document.addedAt].filter(Boolean).join(' / ') || document.type}
           </p>
         </div>
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[document.status]}`}>{document.status}</span>
@@ -25,7 +27,7 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
       <p className="mt-4 line-clamp-3 text-sm leading-7 text-graphite/75">{document.summary}</p>
       {metadata ? (
         <div className="mt-5 grid gap-x-6 gap-y-4 border-t border-ink/6 pt-4 lg:grid-cols-3">
-          <MetadataBlock label="Subjects" items={metadata.subjects} />
+          <MetadataBlock label="Subjects" items={subjects} />
           <MetadataBlock label="Assessment" items={[metadata.linkedAssessmentName, metadata.documentCategory].filter((item): item is string => Boolean(item))} />
           <MetadataBlock label="Date" items={[metadata.sourceDate ?? document.addedAt].filter((item): item is string => Boolean(item))} />
         </div>
@@ -39,7 +41,7 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
       <details className="mt-4 border-t border-ink/6 pt-3">
         <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">More details</summary>
         <div className="mt-3 flex flex-wrap gap-2">
-          {document.tags.map((tag) => (
+          {tags.map((tag) => (
             <span key={tag} className="rounded-full bg-paper/75 px-2.5 py-1 text-xs font-medium text-graphite/70">
               {tag}
             </span>
@@ -51,6 +53,10 @@ export function DocumentCard({ document, chunkCount = 0 }: { document: ResearchD
       </details>
     </article>
   );
+}
+
+function safeStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
 function MetadataBlock({ label, items }: { label: string; items: string[] }) {

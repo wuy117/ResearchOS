@@ -37,6 +37,10 @@ function unique(values: Array<string | undefined | null>) {
   return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
 }
 
+function safeStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
 function titleCase(value: string) {
   return value.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 }
@@ -70,31 +74,35 @@ function inferTeacherNames(text: string) {
 }
 
 function inferCollections(document: ResearchDocument, metadata: Omit<DocumentMetadata, 'collections' | 'tags'>) {
+  const documentTags = safeStringArray(document.tags);
+
   return unique([
     metadata.documentCategory,
     metadata.term,
     metadata.academicYear,
     metadata.linkedAssessmentName,
-    ...metadata.academicYears,
-    ...metadata.terms.map((term) => `${term} ${metadata.academicYears[0] ?? ''}`),
-    ...metadata.documentTypes,
-    ...metadata.assessments,
-    ...metadata.subjects,
-    ...document.tags.filter((tag) => !/upload|failed/i.test(tag)).slice(0, 4),
+    ...safeStringArray(metadata.academicYears),
+    ...safeStringArray(metadata.terms).map((term) => `${term} ${safeStringArray(metadata.academicYears)[0] ?? ''}`),
+    ...safeStringArray(metadata.documentTypes),
+    ...safeStringArray(metadata.assessments),
+    ...safeStringArray(metadata.subjects),
+    ...documentTags.filter((tag) => !/upload|failed/i.test(tag)).slice(0, 4),
   ]).slice(0, 10);
 }
 
 export function buildDocumentMetadata(document: ResearchDocument, performanceRecords: PerformanceRecord[] = []): DocumentMetadata {
-  const sourceText = [document.title, document.summary, document.authors, document.tags.join(' '), document.extractedText?.slice(0, 8000)].filter(Boolean).join('\n');
-  const linkedRecords = performanceRecords.filter((record) => record.sourceDocumentId === document.id);
-  const subjects = unique([...linkedRecords.map((record) => record.subject), ...document.tags.filter((tag) => !/upload|failed/i.test(tag)).slice(0, 6)]);
-  const topics = unique([...document.tags.filter((tag) => !/upload|failed/i.test(tag)), ...linkedRecords.flatMap((record) => [...record.strengths, ...record.weaknesses])]).slice(0, 12);
+  const documentTags = safeStringArray(document.tags);
+  const safeRecords = Array.isArray(performanceRecords) ? performanceRecords : [];
+  const sourceText = [document.title, document.summary, document.authors, documentTags.join(' '), document.extractedText?.slice(0, 8000)].filter(Boolean).join('\n');
+  const linkedRecords = safeRecords.filter((record) => record.sourceDocumentId === document.id);
+  const subjects = unique([...linkedRecords.map((record) => record.subject), ...documentTags.filter((tag) => !/upload|failed/i.test(tag)).slice(0, 6)]);
+  const topics = unique([...documentTags.filter((tag) => !/upload|failed/i.test(tag)), ...linkedRecords.flatMap((record) => [...safeStringArray(record.strengths), ...safeStringArray(record.weaknesses)])]).slice(0, 12);
   const academicYears = unique([...linkedRecords.map((record) => record.academicYear), ...inferAcademicYears(sourceText)]);
   const terms = unique([...linkedRecords.map((record) => record.term), ...inferTerms(sourceText)]);
   const assessments = unique(linkedRecords.map((record) => record.title));
   const documentTypes = inferDocumentTypes(sourceText, document.type);
   const teacherNames = inferTeacherNames(sourceText);
-  const skills = unique(linkedRecords.flatMap((record) => [...record.strengths, ...record.weaknesses, ...record.actionPoints])).slice(0, 12);
+  const skills = unique(linkedRecords.flatMap((record) => [...safeStringArray(record.strengths), ...safeStringArray(record.weaknesses), ...safeStringArray(record.actionPoints)])).slice(0, 12);
   const performanceRecordNames = linkedRecords.map((record) => record.title);
   const baseMetadata = {
     sourceDate: document.metadata?.sourceDate,
@@ -122,7 +130,7 @@ export function buildDocumentMetadata(document: ResearchDocument, performanceRec
   return {
     ...baseMetadata,
     collections: inferCollections(document, baseMetadata),
-    tags: unique([...document.tags, ...topics, ...subjects]),
+    tags: unique([...documentTags, ...topics, ...subjects]),
   };
 }
 
@@ -131,12 +139,15 @@ export function getDocumentMetadata(document: ResearchDocument, records: Perform
 }
 
 export function deriveCollections(state: ResearchState): Collection[] {
-  const existing = state.collections ?? [];
+  const existing = Array.isArray(state.collections) ? state.collections : [];
   const byName = new Map(existing.filter((collection) => collection.source !== 'metadata').map((collection) => [collection.name.toLowerCase(), collection]));
   const now = new Date().toISOString();
 
-  state.documents.forEach((document) => {
-    getDocumentMetadata(document, state.performanceRecords).collections.forEach((name) => {
+  const documents = Array.isArray(state.documents) ? state.documents : [];
+  const performanceRecords = Array.isArray(state.performanceRecords) ? state.performanceRecords : [];
+
+  documents.forEach((document) => {
+    safeStringArray(getDocumentMetadata(document, performanceRecords).collections).forEach((name) => {
       if (!byName.has(name.toLowerCase())) {
         byName.set(name.toLowerCase(), {
           id: `collection-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
@@ -148,7 +159,7 @@ export function deriveCollections(state: ResearchState): Collection[] {
     });
   });
 
-  state.performanceRecords.forEach((record) => {
+  performanceRecords.forEach((record) => {
     [record.subject, record.academicYear, record.term, record.assessmentType].filter(Boolean).forEach((name) => {
       const label = titleCase(String(name));
       if (!byName.has(label.toLowerCase())) {

@@ -756,8 +756,14 @@ type UploadMetadataDraft = {
   ignoreInstrumentalMusic: boolean;
 };
 
+type UploadStage = 'file-selected' | 'extracting' | 'chunking' | 'saving' | 'embedding';
+
+function safeStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
 function getUploadSubjects(draft: UploadMetadataDraft) {
-  return [...draft.subjectsIncluded, ...normalizeListInput(draft.customSubjects)];
+  return [...safeStringArray(draft.subjectsIncluded), ...normalizeListInput(draft.customSubjects ?? '')];
 }
 
 function buildUploadMetadata(draft: UploadMetadataDraft): Partial<DocumentMetadata> {
@@ -765,9 +771,9 @@ function buildUploadMetadata(draft: UploadMetadataDraft): Partial<DocumentMetada
 
   return {
     sourceDate: draft.sourceDate || undefined,
-    academicYear: draft.academicYear.trim() || undefined,
+    academicYear: draft.academicYear?.trim() || undefined,
     term: draft.term,
-    linkedAssessmentName: draft.linkedAssessmentName.trim() || undefined,
+    linkedAssessmentName: draft.linkedAssessmentName?.trim() || undefined,
     documentCategory: draft.documentCategory,
     subjects,
     ignoreInstrumentalMusic: draft.ignoreInstrumentalMusic,
@@ -851,7 +857,19 @@ function makeMetadata(document: ResearchDocument, records: PerformanceRecord[], 
   return {
     ...base,
     ...overrides,
-    tags: overrides.tags ?? base.tags,
+    subjects: safeStringArray(overrides.subjects ?? base.subjects),
+    topics: safeStringArray(overrides.topics ?? base.topics),
+    academicYears: safeStringArray(overrides.academicYears ?? base.academicYears),
+    terms: safeStringArray(overrides.terms ?? base.terms),
+    assessments: safeStringArray(overrides.assessments ?? base.assessments),
+    documentTypes: safeStringArray(overrides.documentTypes ?? base.documentTypes),
+    teacherNames: safeStringArray(overrides.teacherNames ?? base.teacherNames),
+    skills: safeStringArray(overrides.skills ?? base.skills),
+    performanceRecords: safeStringArray(overrides.performanceRecords ?? base.performanceRecords),
+    extractedFacts: safeStringArray(overrides.extractedFacts ?? base.extractedFacts),
+    inferredMetadata: safeStringArray(overrides.inferredMetadata ?? base.inferredMetadata),
+    collections: safeStringArray(overrides.collections ?? base.collections),
+    tags: safeStringArray(overrides.tags ?? base.tags),
   };
 }
 
@@ -1004,8 +1022,8 @@ function buildEvidenceAwareSummary({
       .join(' ');
   }
 
-  const topics = metadata.topics.slice(0, 5);
-  const subjects = metadata.subjects.slice(0, 4);
+  const topics = safeStringArray(metadata.topics).slice(0, 5);
+  const subjects = safeStringArray(metadata.subjects).slice(0, 4);
   const evidenceLines = text
     .split(/\n+/)
     .map((line) => line.replace(/\s+/g, ' ').trim())
@@ -1026,9 +1044,14 @@ function buildEvidenceAwareSummary({
 
 function metadataFromDocumentAnalysis(document: ResearchDocument, fallback: DocumentMetadata, analysis?: DocumentMetadataAnalysisResponse): DocumentMetadata {
   if (!analysis) {
+    const fallbackSubjects = safeStringArray(fallback.subjects);
+    const fallbackTopics = safeStringArray(fallback.topics);
+
     return {
       ...fallback,
-      metadataConfidence: fallback.metadataConfidence ?? (fallback.subjects.length || fallback.topics.length ? 'Medium' : 'Low'),
+      subjects: fallbackSubjects,
+      topics: fallbackTopics,
+      metadataConfidence: fallback.metadataConfidence ?? (fallbackSubjects.length || fallbackTopics.length ? 'Medium' : 'Low'),
       metadataSource: fallback.metadataSource ?? 'Local fallback',
       shouldAffectAcademicPerformance:
         fallback.shouldAffectAcademicPerformance ??
@@ -1039,15 +1062,15 @@ function metadataFromDocumentAnalysis(document: ResearchDocument, fallback: Docu
   }
 
   const metadata = analysis.metadata;
-  const subjects = uniqueStrings([...(metadata.subjects ?? []), ...fallback.subjects]);
-  const topics = uniqueStrings([...(metadata.topics ?? []), ...fallback.topics]);
-  const skills = uniqueStrings([...(metadata.skills ?? []), ...fallback.skills]);
-  const teacherNames = uniqueStrings([...(metadata.teacherNames ?? []), ...fallback.teacherNames]);
-  const tags = uniqueStrings([...(metadata.tags ?? []), ...topics, ...subjects, ...fallback.tags]);
-  const academicYears = uniqueStrings([metadata.academicYear, ...fallback.academicYears]);
-  const terms = uniqueStrings([metadata.term, ...fallback.terms]);
-  const assessments = uniqueStrings([metadata.linkedAssessmentName, ...fallback.assessments]);
-  const documentTypes = uniqueStrings([metadata.documentCategory, ...fallback.documentTypes]);
+  const subjects = uniqueStrings([...safeStringArray(metadata.subjects), ...safeStringArray(fallback.subjects)]);
+  const topics = uniqueStrings([...safeStringArray(metadata.topics), ...safeStringArray(fallback.topics)]);
+  const skills = uniqueStrings([...safeStringArray(metadata.skills), ...safeStringArray(fallback.skills)]);
+  const teacherNames = uniqueStrings([...safeStringArray(metadata.teacherNames), ...safeStringArray(fallback.teacherNames)]);
+  const tags = uniqueStrings([...safeStringArray(metadata.tags), ...topics, ...subjects, ...safeStringArray(fallback.tags)]);
+  const academicYears = uniqueStrings([metadata.academicYear, ...safeStringArray(fallback.academicYears)]);
+  const terms = uniqueStrings([metadata.term, ...safeStringArray(fallback.terms)]);
+  const assessments = uniqueStrings([metadata.linkedAssessmentName, ...safeStringArray(fallback.assessments)]);
+  const documentTypes = uniqueStrings([metadata.documentCategory, ...safeStringArray(fallback.documentTypes)]);
   const base: DocumentMetadata = {
     ...fallback,
     sourceDate: metadata.sourceDate || fallback.sourceDate,
@@ -1068,14 +1091,14 @@ function metadataFromDocumentAnalysis(document: ResearchDocument, fallback: Docu
     metadataConfidence: metadata.metadataConfidence ?? fallback.metadataConfidence ?? 'Low',
     metadataSource: 'AI generated',
     shouldAffectAcademicPerformance: metadata.shouldAffectAcademicPerformance ?? fallback.shouldAffectAcademicPerformance,
-    extractedFacts: uniqueStrings(metadata.extractedFacts ?? fallback.extractedFacts ?? []),
-    inferredMetadata: uniqueStrings(metadata.inferredMetadata ?? fallback.inferredMetadata ?? []),
+    extractedFacts: uniqueStrings([...safeStringArray(metadata.extractedFacts), ...safeStringArray(fallback.extractedFacts)]),
+    inferredMetadata: uniqueStrings([...safeStringArray(metadata.inferredMetadata), ...safeStringArray(fallback.inferredMetadata)]),
   };
 
   return {
     ...base,
     collections: uniqueStrings([
-      ...base.collections,
+      ...safeStringArray(base.collections),
       base.documentCategory,
       base.term,
       base.academicYear,
@@ -2391,10 +2414,27 @@ function Upload({
   const hasSubjectContext = uploadSubjects.length > 0;
   const canUpload = hasSelectedFile && hasDate && hasDocumentKind;
 
-  function logUploadError(context: string, error: unknown) {
+  function logUploadStage(stage: UploadStage, detail?: unknown) {
     if (import.meta.env.DEV) {
-      console.error(`[Upload] ${context}`, error);
+      console.debug(`[Upload] ${stage}`, detail ?? '');
     }
+  }
+
+  function logUploadError(stage: UploadStage, error: unknown) {
+    if (import.meta.env.DEV) {
+      console.error(`[Upload] ${stage}`, error);
+    }
+  }
+
+  function getStageErrorMessage(stage: UploadStage, cleanName: string, error: unknown) {
+    const message = error instanceof Error ? error.message : '';
+
+    if (message) return message;
+    if (stage === 'file-selected') return `Research OS could not read ${cleanName}. Choose the file again and retry.`;
+    if (stage === 'extracting') return `Research OS could not extract text from ${cleanName}. Try another file.`;
+    if (stage === 'chunking') return `${cleanName} could not be prepared for keyword search. Try another file.`;
+    if (stage === 'saving') return `${cleanName} was read, but could not be saved. Try again.`;
+    return `${cleanName} was saved, but search preparation failed.`;
   }
 
   function resetUploadFields() {
@@ -2431,7 +2471,7 @@ function Upload({
         uploadMetadata: buildUploadMetadata(metadataDraft),
       });
     } catch (error) {
-      logUploadError('Document metadata analysis failed; using local fallback metadata.', error);
+      logUploadError('saving', error);
       return undefined;
     }
   }
@@ -2450,6 +2490,8 @@ function Upload({
   }
 
   async function queueEmbeddings(document: ResearchDocument, chunks: DocumentChunk[], readyMessage: string) {
+    logUploadStage('embedding', { documentId: document.id, chunkCount: chunks.length });
+
     if (!isSupabaseEnabled || storageStatus !== 'connected') {
       const notEmbeddedDocument: ResearchDocument = {
         ...document,
@@ -2460,7 +2502,7 @@ function Upload({
         ...current,
         documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...notEmbeddedDocument, metadata: item.metadata ?? notEmbeddedDocument.metadata } : item)),
       }));
-      setNote(readyMessage);
+      setNote(`${readyMessage} Ready for keyword search.`);
       return;
     }
 
@@ -2509,9 +2551,7 @@ function Upload({
       }));
       await saveDocument(finalDocument, { userId });
       await saveChunks(finalChunks, { userId });
-      setNote(
-        readyMessage,
-      );
+      setNote(readyMessage);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Search preparation is unavailable.';
       const keywordOnlyDocument: ResearchDocument = {
@@ -2525,7 +2565,7 @@ function Upload({
         embeddingError: message,
       }));
 
-      logUploadError('Embedding failed after document upload; keeping keyword search available.', error);
+      logUploadError('embedding', error);
       setState((current) => ({
         ...current,
         documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...keywordOnlyDocument, metadata: item.metadata ?? keywordOnlyDocument.metadata } : item)),
@@ -2533,7 +2573,7 @@ function Upload({
       }));
       await saveDocument(keywordOnlyDocument, { userId });
       await saveChunks(failedEmbeddingChunks, { userId });
-      setNote(readyMessage);
+      setNote(`${readyMessage} Ready for keyword search.`);
     }
   }
 
@@ -2544,7 +2584,9 @@ function Upload({
 
     if (!document.extractedText?.trim() || !canAffectProgress) return 0;
 
-    if (metadata.ignoreInstrumentalMusic && metadata.subjects.length > 0 && metadata.subjects.every(isMusicOrPerformanceSubject)) {
+    const subjects = safeStringArray(metadata.subjects);
+
+    if (metadata.ignoreInstrumentalMusic && subjects.length > 0 && subjects.every(isMusicOrPerformanceSubject)) {
       return 0;
     }
 
@@ -2581,7 +2623,7 @@ function Upload({
 
       return newRecords.filter(isAcademicPerformanceRecord).length;
     } catch (error) {
-      logUploadError('Automatic performance analysis was skipped after upload.', error);
+      logUploadError('saving', error);
       return 0;
     }
   }
@@ -2597,8 +2639,10 @@ function Upload({
     title: string;
     documentId: string;
   }) {
+    let uploadStage: UploadStage = 'file-selected';
     setIsReading(true);
     setFailedUpload(null);
+    logUploadStage(uploadStage, { fileName: cleanName, type: 'PDF' });
 
     const processingDocument: ResearchDocument = {
       id: documentId,
@@ -2621,6 +2665,8 @@ function Upload({
     setNote(`Reading ${cleanName}...`);
 
     try {
+      uploadStage = 'extracting';
+      logUploadStage(uploadStage, { fileName: cleanName });
       const extracted = await extractPdfText(file);
 
       if (extracted.wordCount === 0 || !extracted.text.trim()) {
@@ -2643,6 +2689,8 @@ function Upload({
       }));
       setNote(`Preparing ${cleanName}...`);
 
+      uploadStage = 'chunking';
+      logUploadStage(uploadStage, { fileName: cleanName, pages: extracted.pages.length, wordCount: extracted.wordCount });
       const chunks = chunkText({ text: extracted.text, documentId, pages: extracted.pages });
 
       if (chunks.length === 0) {
@@ -2668,13 +2716,15 @@ function Upload({
         documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
       }));
+      uploadStage = 'saving';
+      logUploadStage(uploadStage, { documentId, chunkCount: chunks.length });
       const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument, metadataAnalysis);
       const readyMessage = `${cleanName} is ready.${performanceCount ? ` ${performanceCount} assessment record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
       setNote(readyMessage);
       resetUploadFields();
       await queueEmbeddings(readyDocument, chunks, readyMessage);
     } catch (error) {
-      const message = error instanceof Error ? error.message : `Research OS could not extract text from ${cleanName}. Please try another PDF.`;
+      const message = getStageErrorMessage(uploadStage, cleanName, error);
       const failedDocument: ResearchDocument = enrichDocument({
         ...processingDocument,
         status: 'Failed',
@@ -2683,7 +2733,7 @@ function Upload({
         extractionError: message,
       });
 
-      logUploadError(`PDF upload failed for ${cleanName}.`, error);
+      logUploadError(uploadStage, error);
       setState((current) => ({
         ...current,
         documents: current.documents.map((document) => (document.id === documentId ? failedDocument : document)),
@@ -2707,8 +2757,10 @@ function Upload({
     title: string;
     documentId: string;
   }) {
+    let uploadStage: UploadStage = 'file-selected';
     setIsReading(true);
     setFailedUpload(null);
+    logUploadStage(uploadStage, { fileName: cleanName, type: 'DOCX' });
 
     const processingDocument: ResearchDocument = {
       id: documentId,
@@ -2731,6 +2783,8 @@ function Upload({
     setNote(`Reading ${cleanName}...`);
 
     try {
+      uploadStage = 'extracting';
+      logUploadStage(uploadStage, { fileName: cleanName });
       const extracted = await extractDocxText(file);
 
       if (extracted.wordCount === 0 || !extracted.text.trim()) {
@@ -2752,6 +2806,8 @@ function Upload({
       }));
       setNote(`Preparing ${cleanName}...`);
 
+      uploadStage = 'chunking';
+      logUploadStage(uploadStage, { fileName: cleanName, wordCount: extracted.wordCount });
       const chunks = chunkText({ text: extracted.text, documentId });
 
       if (chunks.length === 0) {
@@ -2776,13 +2832,15 @@ function Upload({
         documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
       }));
+      uploadStage = 'saving';
+      logUploadStage(uploadStage, { documentId, chunkCount: chunks.length });
       const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument, metadataAnalysis);
       const readyMessage = `${cleanName} is ready.${performanceCount ? ` ${performanceCount} assessment record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
       setNote(readyMessage);
       resetUploadFields();
       await queueEmbeddings(readyDocument, chunks, readyMessage);
     } catch (error) {
-      const message = error instanceof Error ? error.message : `Research OS could not extract text from ${cleanName}. Please try another DOCX.`;
+      const message = getStageErrorMessage(uploadStage, cleanName, error);
       const failedDocument: ResearchDocument = enrichDocument({
         ...processingDocument,
         status: 'Failed',
@@ -2791,7 +2849,7 @@ function Upload({
         extractionError: message,
       });
 
-      logUploadError(`DOCX upload failed for ${cleanName}.`, error);
+      logUploadError(uploadStage, error);
       setState((current) => ({
         ...current,
         documents: current.documents.map((document) => (document.id === documentId ? failedDocument : document)),
@@ -2817,9 +2875,13 @@ function Upload({
     const documentId = `doc-${Date.now()}`;
 
     if (type === 'TXT' && selectedFile) {
+      let uploadStage: UploadStage = 'file-selected';
       setIsReading(true);
+      logUploadStage(uploadStage, { fileName: cleanName, type: 'TXT' });
 
       try {
+        uploadStage = 'extracting';
+        logUploadStage(uploadStage, { fileName: cleanName });
         const extractedText = await selectedFile.text();
         const wordCount = getWordCount(extractedText);
 
@@ -2827,6 +2889,8 @@ function Upload({
           throw new Error('No readable text found in this TXT file.');
         }
 
+        uploadStage = 'chunking';
+        logUploadStage(uploadStage, { fileName: cleanName, wordCount });
         const chunks = chunkText({ text: extractedText, documentId });
 
         if (chunks.length === 0) {
@@ -2858,12 +2922,14 @@ function Upload({
           documents: [newDocument, ...current.documents],
           chunks: [...chunks, ...current.chunks],
         }));
+        uploadStage = 'saving';
+        logUploadStage(uploadStage, { documentId, chunkCount: chunks.length });
         const performanceCount = await analyseUploadedPerformanceIfRelevant(newDocument, metadataAnalysis);
         const readyMessage = `${cleanName} is ready.${performanceCount ? ` ${performanceCount} assessment record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
         setNote(readyMessage);
         await queueEmbeddings(newDocument, chunks, readyMessage);
       } catch (error) {
-        const message = error instanceof Error ? error.message : `Research OS could not read ${cleanName}. Please try a plain UTF-8 text file.`;
+        const message = getStageErrorMessage(uploadStage, cleanName, error);
         const failedDocument: ResearchDocument = enrichDocument({
           id: documentId,
           title,
@@ -2878,7 +2944,7 @@ function Upload({
           extractionError: message,
         });
 
-        logUploadError(`TXT upload failed for ${cleanName}.`, error);
+        logUploadError(uploadStage, error);
         setState((current) => ({
           ...current,
           documents: [failedDocument, ...current.documents.filter((document) => document.id !== documentId)],
@@ -2928,6 +2994,7 @@ function Upload({
                   className="sr-only"
                   onChange={(event) => {
                     const file = event.target.files?.[0] ?? null;
+                    logUploadStage('file-selected', file ? { fileName: file.name, type: file.type, size: file.size } : { fileName: null });
                     setSelectedFile(file);
                     setFileName(file?.name ?? fileName);
                   }}
@@ -3014,7 +3081,7 @@ function Upload({
                   <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
                     {[
                       document.status,
-                      getDocumentMetadata(document, performanceRecords).subjects[0],
+                      safeStringArray(getDocumentMetadata(document, performanceRecords).subjects)[0],
                       getDocumentMetadata(document, performanceRecords).linkedAssessmentName,
                       getDocumentMetadata(document, performanceRecords).sourceDate ?? document.addedAt,
                     ]
