@@ -1,4 +1,4 @@
-export type PageId = 'dashboard' | 'library' | 'performance' | 'timeline' | 'tutor' | 'upload' | 'chat' | 'study' | 'map';
+export type PageId = 'dashboard' | 'settings' | 'library' | 'performance' | 'timeline' | 'tutor' | 'upload' | 'chat' | 'study' | 'map';
 
 export type AcademicTerm = 'Michaelmas' | 'Lent' | 'Summer' | 'Other';
 export type DocumentCategory = 'Report' | 'Exam result' | 'Mark sheet' | 'Notes' | 'Past paper' | 'Mark scheme' | 'Essay' | 'Other';

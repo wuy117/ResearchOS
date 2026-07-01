@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, BookOpen, CalendarDays, Download, Files, GraduationCap, LayoutDashboard, LogOut, MessageSquareText, Plus, Trash2, UploadCloud, UserCircle, Wrench } from 'lucide-react';
+import { AlertTriangle, BarChart3, BookOpen, CalendarDays, Download, Files, GraduationCap, LayoutDashboard, LogOut, MessageSquareText, Plus, Settings, Trash2, UploadCloud, UserCircle, Wrench } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useState } from 'react';
 import type { User } from '@supabase/supabase-js';
@@ -14,14 +14,17 @@ import { clearClaimableResearchState, getResearchStateSummary, getResearchStorag
 type PillarId = 'home' | 'sources' | 'learn' | 'progress';
 
 const navItems: Array<{ id: PillarId; label: string; target: PageId; pages: PageId[]; icon: typeof LayoutDashboard }> = [
-  { id: 'home', label: 'Home', target: 'dashboard', pages: ['dashboard'], icon: LayoutDashboard },
+  { id: 'home', label: 'Home', target: 'dashboard', pages: ['dashboard', 'settings'], icon: LayoutDashboard },
   { id: 'sources', label: 'Sources', target: 'upload', pages: ['upload', 'library'], icon: Files },
   { id: 'learn', label: 'Learn', target: 'chat', pages: ['chat', 'tutor', 'study', 'map'], icon: GraduationCap },
   { id: 'progress', label: 'Progress', target: 'performance', pages: ['performance', 'timeline'], icon: BarChart3 },
 ];
 
 const secondaryTabs: Record<PillarId, Array<{ id: PageId; label: string; icon: typeof LayoutDashboard }>> = {
-  home: [{ id: 'dashboard', label: 'Overview', icon: LayoutDashboard }],
+  home: [
+    { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
+    { id: 'settings', label: 'Settings', icon: Settings },
+  ],
   sources: [
     { id: 'upload', label: 'Upload', icon: UploadCloud },
     { id: 'library', label: 'Library', icon: Files },
@@ -91,11 +94,11 @@ export function AppShell({
   }[storageStatus];
   const storageDescription = {
     loading: 'Loading saved workspace data.',
-    'missing-env': 'Saved in this browser. Add Supabase env vars to sync remotely.',
+    'missing-env': 'Saved in this browser.',
     'auth-required': 'Supabase is configured; sign in to load private cloud data.',
     'client-created': 'Remote storage is configured; checking the connection.',
-    'connection-failed': 'Saved locally for now. Check Supabase connection, auth, or RLS policies.',
-    connected: 'Remote sync is active, with localStorage as a fallback.',
+    'connection-failed': 'Saved locally for now. Sync is unavailable.',
+    connected: 'Your account is syncing.',
   }[storageStatus];
   const storageDotClass = {
     loading: 'bg-brass',
@@ -163,10 +166,6 @@ export function AppShell({
             })}
           </nav>
 
-          <div className="mt-5">
-            <ResetResearchOS state={state} setState={setState} storageStatus={storageStatus} user={user} compact />
-          </div>
-
           <div className="mt-8">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workspaces</p>
@@ -212,7 +211,7 @@ export function AppShell({
           </div>
 
           <div className="mt-auto space-y-3">
-            <div className="rounded-lg bg-paper/65 p-4">
+            <div className="rounded-lg bg-paper/45 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Storage</p>
               <div className="mt-3 flex items-center gap-2">
                 <span className={`size-2 rounded-full ${storageDotClass}`} />
@@ -221,27 +220,16 @@ export function AppShell({
               <p className="mt-2 text-xs leading-5 text-graphite/68">{storageDescription}</p>
             </div>
 
-            <div className="rounded-lg bg-paper/65 p-4">
+            <div className="rounded-lg bg-paper/45 p-3">
               <p className="text-sm font-semibold text-ink">Desk focus</p>
               <p className="mt-2 text-sm leading-6 text-graphite/72">
                 {activeWorkspace?.description ?? 'Choose a workspace to focus your desk.'}
               </p>
             </div>
 
-            <AccountDataControls
-              state={state}
-              setState={setState}
-              storageStatus={storageStatus}
-              user={user}
-              onSignOut={onSignOut}
-              claimableLocalState={claimableLocalState}
-              onImportClaimableLocalData={onImportClaimableLocalData}
-              onDismissClaimableLocalData={onDismissClaimableLocalData}
-            />
-
-            {showDeveloperTools ? (
-              <DeveloperTools state={state} setState={setState} storageStatus={storageStatus} storageLabel={storageLabel} user={user} />
-            ) : null}
+            <button type="button" onClick={() => setActivePage('settings')} className="w-full rounded-lg px-2 py-2 text-left text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55 hover:bg-paper hover:text-ink">
+              Settings
+            </button>
           </div>
         </aside>
 
@@ -308,12 +296,26 @@ export function AppShell({
                 })}
               </div>
             ) : null}
-            <div className="lg:hidden">
-              <ResetResearchOS state={state} setState={setState} storageStatus={storageStatus} user={user} />
-            </div>
           </header>
 
-          <div className="scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-7 sm:px-6 xl:px-10 2xl:px-12">{children}</div>
+          <div className="scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-7 sm:px-6 xl:px-10 2xl:px-12">
+            {activePage === 'settings' ? (
+              <SettingsPage
+                state={state}
+                setState={setState}
+                storageStatus={storageStatus}
+                storageLabel={storageLabel}
+                user={user}
+                onSignOut={onSignOut}
+                claimableLocalState={claimableLocalState}
+                onImportClaimableLocalData={onImportClaimableLocalData}
+                onDismissClaimableLocalData={onDismissClaimableLocalData}
+                showDeveloperTools={showDeveloperTools}
+              />
+            ) : (
+              children
+            )}
+          </div>
         </main>
       </div>
     </div>
@@ -326,6 +328,72 @@ type DeveloperConfirmAction = {
   confirmLabel: string;
   onConfirm: () => Promise<void> | void;
 };
+
+function SettingsPage({
+  state,
+  setState,
+  storageStatus,
+  storageLabel,
+  user,
+  onSignOut,
+  claimableLocalState,
+  onImportClaimableLocalData,
+  onDismissClaimableLocalData,
+  showDeveloperTools,
+}: {
+  state: ResearchState;
+  setState: Dispatch<SetStateAction<ResearchState>>;
+  storageStatus: AppStorageStatus;
+  storageLabel: string;
+  user: User | null;
+  onSignOut: () => Promise<void>;
+  claimableLocalState: ResearchState | null;
+  onImportClaimableLocalData: () => Promise<void>;
+  onDismissClaimableLocalData: () => void;
+  showDeveloperTools: boolean;
+}) {
+  return (
+    <div className="mx-auto max-w-5xl space-y-8">
+      <section>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Settings</p>
+        <h2 className="mt-3 font-serif text-4xl font-semibold leading-tight text-ink">Workspace controls</h2>
+        <p className="mt-3 max-w-2xl text-sm leading-7 text-graphite/70">Account, storage, export, and advanced maintenance live here so daily learning stays focused.</p>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+        <AccountDataControls
+          state={state}
+          setState={setState}
+          storageStatus={storageStatus}
+          user={user}
+          onSignOut={onSignOut}
+          claimableLocalState={claimableLocalState}
+          onImportClaimableLocalData={onImportClaimableLocalData}
+          onDismissClaimableLocalData={onDismissClaimableLocalData}
+        />
+        <section className="rounded-lg bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Storage</p>
+          <h3 className="mt-2 text-lg font-semibold text-ink">{storageLabel}</h3>
+          <p className="mt-3 text-sm leading-7 text-graphite/72">
+            {storageStatus === 'connected'
+              ? 'Your work is syncing to your account.'
+              : storageStatus === 'connection-failed'
+                ? 'Research OS is keeping your work locally until sync is available.'
+                : 'Your work is saved in this browser.'}
+          </p>
+        </section>
+      </div>
+
+      <details className="rounded-lg bg-white p-5 shadow-sm">
+        <summary className="cursor-pointer text-sm font-semibold text-ink">Advanced</summary>
+        <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          <ResetResearchOS state={state} setState={setState} storageStatus={storageStatus} user={user} />
+          {showDeveloperTools ? <DeveloperTools state={state} setState={setState} storageStatus={storageStatus} storageLabel={storageLabel} user={user} /> : null}
+        </div>
+      </details>
+    </div>
+  );
+}
 
 type ResetOption = {
   scope: SupabaseResetScope;
@@ -344,7 +412,7 @@ const resetOptions: ResetOption[] = [
   {
     scope: 'supabase',
     label: 'Clear all Supabase app data',
-    body: 'This deletes Research OS rows from Supabase, including workspaces, documents, chunks, embeddings, insights, chat, Tutor data, Performance data, collections, and legacy study artifacts. Local browser data is kept unless you run a full reset.',
+    body: 'This deletes Research OS data from Supabase, including workspaces, documents, insights, chat, Tutor data, Progress data, collections, and legacy study artifacts. Local browser data is kept unless you run a full reset.',
     confirmLabel: 'Clear Supabase data',
   },
   {
@@ -367,14 +435,14 @@ const resetOptions: ResetOption[] = [
   },
   {
     scope: 'documents',
-    label: 'Clear documents, chunks, and embeddings',
-    body: 'This deletes uploaded documents, extracted chunks, insight rows, and embedding status locally and in Supabase when connected. Performance records are kept but unlinked from sources.',
+    label: 'Clear documents',
+    body: 'This deletes uploaded documents and related source records locally and in Supabase when connected. Performance records are kept but unlinked from sources.',
     confirmLabel: 'Clear documents',
   },
   {
     scope: 'full',
     label: 'Full reset: everything',
-    body: 'This deletes all Research OS local browser state and, when Supabase is connected, all app rows in Supabase: workspaces, documents, chunks, embeddings, insights, chat, Tutor, Performance, collections, and legacy study artifacts. The app returns to the clean first-launch state.',
+    body: 'This deletes all Research OS local browser state and, when Supabase is connected, all app data in Supabase: workspaces, documents, insights, chat, Tutor, Progress, collections, and legacy study artifacts. The app returns to the clean first-launch state.',
     confirmLabel: 'Full reset',
   },
 ];
@@ -463,7 +531,7 @@ function AccountDataControls({
             <div className="rounded-lg border border-brass/25 bg-brass/10 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/60">Local data found</p>
               <p className="mt-2 text-xs leading-5 text-graphite/72">
-                {summary.documents} documents, {summary.chunks} chunks, {summary.performanceRecords} performance records, {summary.tutorSessions} Tutor sessions, {summary.collections} collections.
+                {summary.documents} documents, {summary.performanceRecords} performance records, {summary.tutorSessions} Tutor sessions, {summary.collections} collections.
               </p>
               <div className="mt-3 grid gap-2">
                 <button type="button" disabled={!hasCloud || isImporting} onClick={importLocalData} className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white disabled:bg-graphite/45">
@@ -653,7 +721,7 @@ function ResetResearchOS({
               );
             })}
           </div>
-          <p className="text-xs leading-5 text-graphite/65">Scoped clears preserve unrelated workflows such as Upload, semantic search fallback, Tutor, Progress, Timeline, and document editing.</p>
+          <p className="text-xs leading-5 text-graphite/65">Scoped clears preserve unrelated workflows such as Upload, Tutor, Progress, Timeline, and document editing.</p>
         </div>
       ) : null}
       <DeveloperConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />

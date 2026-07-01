@@ -163,7 +163,7 @@ function formatChunkLocation(result: RetrievedChunk) {
     return result.pageStart === result.pageEnd ? `p. ${result.pageStart}` : `pp. ${result.pageStart}-${result.pageEnd}`;
   }
 
-  return `chunk ${result.chunk.chunkIndex + 1}`;
+  return `section ${result.chunk.chunkIndex + 1}`;
 }
 
 function semanticMatchesToRetrievedChunks(matches: SemanticSearchMatch[], documents: ResearchDocument[]): RetrievedChunk[] {
@@ -288,7 +288,7 @@ export function TutorPage({
   const [topic, setTopic] = useState(suggestedTopic);
   const [difficulty, setDifficulty] = useState<TutorDifficulty>('Core');
   const [isLoading, setIsLoading] = useState(false);
-  const [status, setStatus] = useState('Tutor uses retrieved source chunks before teaching or questioning.');
+  const [status, setStatus] = useState('Tutor reads your sources before teaching or questioning.');
   const [currentLessonId, setCurrentLessonId] = useState(activeLesson?.id ?? '');
   const [checkpointAnswers, setCheckpointAnswers] = useState<Record<string, string>>({});
   const [revealedAnswers, setRevealedAnswers] = useState<Record<string, boolean>>({});
@@ -628,9 +628,9 @@ export function TutorPage({
   return (
     <div className="mx-auto max-w-7xl space-y-7">
       <SectionHeader
-        eyebrow="AI Tutor"
+        eyebrow="Tutor"
         title="Tutor"
-        copy="Lessons, active recall, Socratic questioning, and exam practice grounded in retrieved source chunks."
+        copy="Lessons, active recall, Socratic questioning, and exam practice grounded in your sources."
       />
 
       <div className="rounded-lg bg-paper/65 p-4">
@@ -919,8 +919,8 @@ function TutorHome({
             {activeLesson
               ? activeLesson.objective
               : hasReadableSources
-                ? 'Tutor will retrieve source chunks, teach the topic, and test recall before showing answers.'
-                : 'Upload a readable TXT, PDF, or DOCX source first. Tutor needs extracted chunks before it can teach from your material.'}
+                ? 'Tutor will read your sources, teach the topic, and test recall before showing answers.'
+                : 'Upload a source first. Tutor needs real material before it can teach.'}
           </p>
           <button
             type="button"
@@ -932,14 +932,14 @@ function TutorHome({
             <ArrowRight size={17} />
           </button>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+        {hasReadableSources || tutorMemory.lessonsCompleted > 0 || tutorMemory.revisionStreak > 0 ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
           <TutorMetric icon={Target} label="Weakest topic" value={weakestTopic} />
           <TutorMetric icon={Flame} label="Revision streak" value={`${tutorMemory.revisionStreak} day${tutorMemory.revisionStreak === 1 ? '' : 's'}`} />
           <TutorMetric icon={CheckCircle2} label="Lessons completed" value={tutorMemory.lessonsCompleted.toLocaleString()} />
-        </div>
+        </div> : null}
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-3">
+      {hasReadableSources || recentTopics.length ? <section className="grid gap-6 lg:grid-cols-3">
         <TopicPanel title="Recommended topics" icon={Sparkles} topics={recommendedTopics} onStartTopic={onStartTopic} emptyCopy="Upload readable documents to create source-grounded recommendations." />
         <TopicPanel title="Weak topics from Performance" icon={Lightbulb} topics={weakTopics} onStartTopic={onStartTopic} emptyCopy={hasReadableSources ? 'Performance weaknesses will appear here.' : 'Upload readable source material before turning performance weaknesses into lessons.'} />
         <div className="rounded-lg bg-white p-5 shadow-sm">
@@ -966,7 +966,7 @@ function TutorHome({
           </div>
           {latestAttempt ? <p className="mt-4 text-sm leading-7 text-graphite/70">Recent progress: {latestAttempt.feedback}</p> : null}
         </div>
-      </section>
+      </section> : null}
     </div>
   );
 }

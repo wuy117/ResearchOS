@@ -108,6 +108,7 @@ function App() {
 
   const page = {
     dashboard: <Dashboard state={state} documents={workspaceDocuments} setActivePage={setActivePage} />,
+    settings: null,
     library: <Library state={state} documents={workspaceDocuments} chunks={state.chunks} storageStatus={storageStatus} userId={userId} setState={setState} />,
     performance: <PerformancePage records={state.performanceRecords} summaries={state.performanceSummaries} documents={state.documents} tutorLessons={state.tutorLessons} tutorAttempts={state.tutorAttempts} tutorMemory={state.tutorMemory} storageStatus={storageStatus} userId={userId} setState={setState} />,
     timeline: <TimelinePage events={buildTimelineEvents(state)} />,
@@ -261,13 +262,17 @@ function Dashboard({
   ].slice(0, 4);
   const hasDocuments = documents.length > 0;
   const hasReadySources = readyCount > 0;
+  const hasCollections = collections.length > 0;
+  const hasTimeline = timeline.length > 0;
+  const hasSubjects = subjects.length > 0;
+  const hasPerformance = academicPerformanceRecords.length > 0;
   const nextAction = !hasDocuments
-    ? { label: 'Upload first source', page: 'upload' as PageId, detail: 'Add a report, notes file, exam paper, or source document to start the system.' }
+    ? { label: 'Upload first source', page: 'upload' as PageId, detail: 'Start with a report, notes file, exam paper, or source document.' }
     : weakTopics.length
-      ? { label: 'Practise weak topic', page: 'tutor' as PageId, detail: `Tutor can start with ${weakTopics[0]} using performance and source context.` }
+      ? { label: 'Practise weak topic', page: 'tutor' as PageId, detail: `Start a focused Tutor session on ${weakTopics[0]}.` }
       : activeLesson
         ? { label: 'Continue Tutor', page: 'tutor' as PageId, detail: activeLesson.objective }
-        : { label: 'Ask across metadata', page: 'chat' as PageId, detail: 'Chat can combine source chunks with subjects, collections, performance, and Tutor history.' };
+        : { label: 'Ask your archive', page: 'chat' as PageId, detail: 'Use your saved sources, reports, and feedback to answer a study question.' };
 
   return (
     <div className="space-y-7">
@@ -279,9 +284,9 @@ function Dashboard({
           </h2>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/72">
             {hasReadySources
-              ? `${readyCount} ready source${readyCount === 1 ? '' : 's'} now feed Sources, Learn, Progress, Collections, and Timeline.`
+              ? `${readyCount} source${readyCount === 1 ? '' : 's'} ready for study.`
               : hasDocuments
-                ? 'Some uploads still need readable text or recovery before the rest of Research OS can react.'
+                ? 'One source needs attention before it can support learning.'
                 : 'Start with a workspace that matches your real life: Biology, History, French, Music, Programming, personal research, or anything else you are studying.'}
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
@@ -289,32 +294,44 @@ function Dashboard({
               {nextAction.label}
               <ArrowRight size={17} />
             </button>
-            <button type="button" onClick={() => setActivePage('timeline')} className="inline-flex items-center gap-2 rounded-lg border border-ink/10 bg-paper px-4 py-3 text-sm font-semibold text-ink">
+            {hasTimeline ? <button type="button" onClick={() => setActivePage('timeline')} className="inline-flex items-center gap-2 rounded-lg border border-ink/10 bg-paper px-4 py-3 text-sm font-semibold text-ink">
               View timeline
-            </button>
+            </button> : null}
           </div>
         </div>
         <div className="rounded-lg bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">What should I do next?</p>
           <h3 className="mt-3 text-xl font-semibold text-ink">{nextAction.label}</h3>
           <p className="mt-3 text-sm leading-7 text-graphite/72">{nextAction.detail}</p>
-          <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-ink/6 pt-5">
+          {hasDocuments || hasSubjects || hasPerformance ? <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-ink/6 pt-5">
             <MetricCard label="Subjects" value={subjects.length.toLocaleString()} />
             <MetricCard label="Collections" value={collections.length.toLocaleString()} />
             <MetricCard label="Sources" value={documents.length.toLocaleString()} />
             <MetricCard label="Average" value={latestAverage !== undefined ? `${latestAverage}%` : '-'} />
-          </div>
+          </div> : null}
         </div>
       </section>
 
-      <section className="grid gap-8 xl:grid-cols-[1fr_1fr_1fr]">
-        <div>
+      {!hasDocuments ? (
+        <section className="rounded-lg bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Upload</p>
+          <h2 className="mt-3 font-serif text-3xl font-semibold text-ink">Add the first report, note, or paper.</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-graphite/70">Research OS becomes useful as soon as it has one real source to work from.</p>
+          <button type="button" onClick={() => setActivePage('upload')} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+            Upload a source
+            <ArrowRight size={17} />
+          </button>
+        </section>
+      ) : null}
+
+      {hasSubjects || hasCollections || hasTimeline ? <section className="grid gap-8 xl:grid-cols-[1fr_1fr_1fr]">
+        {hasSubjects ? <div>
           <SectionHeader eyebrow="Subjects" title="What am I studying?" />
           <div className="rounded-lg bg-white p-5 shadow-sm">
-            {subjects.length ? <ChipCloud items={subjects} /> : <p className="text-sm leading-7 text-graphite/70">Create a workspace or upload a source; subjects will be inferred gradually from metadata and performance records.</p>}
+            <ChipCloud items={subjects} />
           </div>
-        </div>
-        <div>
+        </div> : null}
+        {hasCollections ? <div>
           <SectionHeader eyebrow="Collections" title="Virtual source sets" />
           <div className="space-y-3">
             {collections.slice(0, 4).map((collection) => (
@@ -326,43 +343,34 @@ function Dashboard({
                 <FolderKanban size={18} className="text-graphite/55" />
               </button>
             ))}
-            {!collections.length ? <EmptyState title="No collections yet" copy="Uploads will automatically appear in virtual collections such as reports, terms, subjects, assessments, and years." /> : null}
           </div>
-        </div>
-        <div>
+        </div> : null}
+        {hasTimeline ? <div>
           <SectionHeader eyebrow="Continue" title="Recent activity" />
           <div className="space-y-3">
-            {timeline.length ? timeline.map((event) => <TimelineRow key={event.id} event={event} compact />) : <EmptyState title="No activity yet" copy="Uploads, performance records, Tutor sessions, and study events will appear here." />}
+            {timeline.map((event) => <TimelineRow key={event.id} event={event} compact />)}
           </div>
-        </div>
-      </section>
+        </div> : null}
+      </section> : null}
 
-      <section className="grid gap-7 xl:grid-cols-[1.1fr_0.9fr]">
+      {hasDocuments ? <section className="grid gap-7 xl:grid-cols-[1.1fr_0.9fr]">
         <div>
           <SectionHeader eyebrow="Recent uploads" title="Source intake" />
           <div className="space-y-4">
-            {newestDocuments.length ? (
-              newestDocuments.map((document) => <DocumentCard key={document.id} document={document} />)
-            ) : (
-              <EmptyState title="No documents yet" copy="Add a source to begin building this workspace." action="Upload a source" onClick={() => setActivePage('upload')} />
-            )}
+            {newestDocuments.map((document) => <DocumentCard key={document.id} document={document} />)}
           </div>
         </div>
 
-        <div>
+        {hasPerformance ? <div>
           <SectionHeader eyebrow="Performance" title="Progress overview" />
           <div className="rounded-lg bg-white p-5 shadow-sm">
-            {academicPerformanceRecords.length ? (
-              <div className="space-y-4">
-                <TrendChart records={academicPerformanceRecords} />
-                {weakTopics.length ? <TagList label="Priority themes" items={weakTopics} /> : null}
-              </div>
-            ) : (
-              <EmptyState title="No performance picture yet" copy="Analyse an uploaded report or add an assessment record to start long-term progress tracking." action="Open Performance" onClick={() => setActivePage('performance')} />
-            )}
+            <div className="space-y-4">
+              <TrendChart records={academicPerformanceRecords} />
+              {weakTopics.length ? <TagList label="Priority themes" items={weakTopics} /> : null}
+            </div>
           </div>
-        </div>
-      </section>
+        </div> : null}
+      </section> : null}
     </div>
   );
 }
@@ -429,7 +437,7 @@ function Library({
     try {
       await deleteRemoteDocumentIfNeeded(state, document.id, storageStatus, userId);
       setState((current) => removeDocumentFromState(current, document.id));
-      setMessage(`${document.title} and its chunks were deleted.`);
+      setMessage(`${document.title} was deleted.`);
     } catch (error) {
       setMessage(error instanceof Error ? `Document was not deleted: ${error.message}` : 'Document was not deleted because Supabase failed.');
     }
@@ -439,11 +447,11 @@ function Library({
     <div className="space-y-7">
       <SectionHeader
         eyebrow="Document library"
-        title="Sources, metadata, and collections"
-        copy="Documents are sources. Metadata and virtual collections let the same upload enrich Chat, Tutor, study tools, Performance, and Timeline without duplication."
+        title="Sources"
+        copy="Reports, notes, papers, and assessments for this workspace."
       />
       {message ? <StatusNote message={message} /> : null}
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {collections.length ? <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {collections.slice(0, 8).map((collection) => (
           <ManagedCollectionCard
             key={collection.id}
@@ -460,7 +468,7 @@ function Library({
             }
           />
         ))}
-      </section>
+      </section> : null}
       {documents.length ? (
         <div className="grid gap-5 xl:grid-cols-2">
           {documents.map((document) => (
@@ -485,7 +493,7 @@ function Library({
               onDelete={(item) =>
                 setConfirmAction({
                   title: `Delete ${item.title}?`,
-                  body: 'This deletes the document, its chunks, semantic embedding rows, and document-derived timeline events. Performance records are kept but unlinked from this source.',
+                  body: 'This deletes the document and its learning history links. Performance records are kept but unlinked from this source.',
                   confirmLabel: 'Delete document',
                   onConfirm: () => deleteDocument(item),
                 })
@@ -494,7 +502,7 @@ function Library({
           ))}
         </div>
       ) : (
-        <EmptyState title="Your library is empty" copy="Upload a TXT, PDF, or DOCX file to create searchable source material for this workspace." />
+        <EmptyState title="Start with one source" copy="Add a report, note, paper, or assessment to build this workspace around real learning evidence." />
       )}
       <ConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
     </div>
@@ -653,7 +661,7 @@ function ManagedDocumentCard({
       <DocumentCard document={document} chunkCount={chunkCount} />
       {isEditing ? (
         <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Edit source metadata</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Edit source details</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Document title" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4 md:col-span-2" />
             <input type="date" value={sourceDate} onChange={(event) => setSourceDate(event.target.value)} className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
@@ -988,7 +996,7 @@ function buildEvidenceAwareSummary({
 }) {
   if (analysis?.summary.summaryText) {
     return [
-      `[AI generated / confidence: ${analysis.metadata.metadataConfidence ?? 'Low'}] ${analysis.summary.summaryText}`,
+      analysis.summary.summaryText,
       analysis.summary.keyEvidence?.length ? `Key evidence: ${analysis.summary.keyEvidence.slice(0, 3).join('; ')}.` : '',
       analysis.summary.suggestedUse ? `Use it for: ${analysis.summary.suggestedUse}` : '',
     ]
@@ -1006,7 +1014,7 @@ function buildEvidenceAwareSummary({
   const sourceType = metadata.documentCategory ?? 'source document';
 
   return [
-    `[Local fallback / confidence: ${metadata.metadataConfidence ?? 'Low'}] ${title} appears to be a ${sourceType}.`,
+    `${title} appears to be a ${sourceType}.`,
     subjects.length ? `Main subjects: ${subjects.join(', ')}.` : '',
     topics.length ? `Main topics: ${topics.join(', ')}.` : '',
     evidenceLines.length ? `Key evidence: ${evidenceLines.join('; ')}.` : summarizeText(text, 180),
@@ -1303,7 +1311,7 @@ function PerformancePage({
   async function handleAnalyseDocument() {
     const document = documents.find((item) => item.id === selectedDocumentId);
     if (!document?.extractedText) {
-      setStatusMessage('Choose an uploaded document with extracted text first.');
+      setStatusMessage('Choose an uploaded report first.');
       return;
     }
 
@@ -1375,7 +1383,7 @@ function PerformancePage({
         ...current,
         performanceSummaries: [summary, ...current.performanceSummaries],
       }));
-      setStatusMessage('AI performance advice was saved locally.');
+      setStatusMessage('Coaching advice was saved locally.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Performance advice failed. Please try again.';
       setStatusMessage(message);
@@ -1388,7 +1396,7 @@ function PerformancePage({
     <div className="mx-auto max-w-7xl space-y-10">
       <SectionHeader eyebrow="Progress" title="Learning over time" copy="A narrative dashboard for improvement, teacher feedback, performance movement, and next actions." />
 
-      <div className="rounded-lg bg-white p-4 shadow-sm">
+      {records.length > 0 ? <div className="rounded-lg bg-white p-4 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
           <label className="text-sm font-semibold text-ink">
             Subject
@@ -1412,7 +1420,7 @@ function PerformancePage({
             </select>
           </label>
           <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || filteredRecords.filter(isAcademicPerformanceRecord).length === 0} className="self-end rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
-            {isGeneratingAdvice ? 'Generating...' : 'Refresh AI summary'}
+            {isGeneratingAdvice ? 'Generating...' : 'Refresh summary'}
           </button>
         </div>
         {selectedPeriod === 'Custom Range' ? (
@@ -1422,7 +1430,7 @@ function PerformancePage({
           </div>
         ) : null}
         <p className="mt-3 text-sm leading-7 text-graphite/74">{statusMessage}</p>
-      </div>
+      </div> : null}
 
       {records.length === 0 ? (
         <EmptyState
@@ -1431,6 +1439,8 @@ function PerformancePage({
         />
       ) : null}
 
+      {records.length > 0 ? (
+        <>
       <section className="rounded-lg bg-white p-7 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Learning summary</p>
         <div className="mt-5 grid gap-6 xl:grid-cols-[1fr_260px]">
@@ -1538,6 +1548,8 @@ function PerformancePage({
           Academic Progress ignores records marked excludeFromAcademicAnalysis. Select Music or a music subject above to view instrumental records without mixing them into academic trends.
         </p>
       </section>
+        </>
+      ) : null}
 
       <details className="rounded-lg bg-white p-6 shadow-sm">
         <summary className="cursor-pointer text-sm font-semibold text-ink">Manage performance data</summary>
@@ -1607,7 +1619,7 @@ function PerformancePage({
               <Sparkles size={15} />
               Analyse uploaded report
             </div>
-            <p className="mt-3 text-sm leading-7 text-graphite/72">Select an uploaded report with extracted text. Research OS will ask the model for structured academic records and will not invent missing marks.</p>
+            <p className="mt-3 text-sm leading-7 text-graphite/72">Select an uploaded report. Research OS will look for academic records and will not invent missing marks.</p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
                 <option value="">Choose uploaded document</option>
@@ -1622,14 +1634,14 @@ function PerformancePage({
               </button>
             </div>
             {analysableDocuments.length === 0 ? (
-              <p className="mt-3 rounded-lg bg-paper/70 p-3 text-sm leading-6 text-graphite/70">Upload a TXT, PDF, or DOCX report first. Documents without readable text cannot be analysed.</p>
+              <p className="mt-3 rounded-lg bg-paper/70 p-3 text-sm leading-6 text-graphite/70">Upload a TXT, PDF, or DOCX report first.</p>
             ) : null}
           </div>
 
           <div className="rounded-lg border border-ink/8 bg-paper/50 p-5">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">AI advice</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Coaching advice</p>
                 <h3 className="mt-2 font-serif text-3xl font-semibold text-ink">Academic coaching summary</h3>
               </div>
               <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || academicRecords.length === 0} className="rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
@@ -1677,7 +1689,7 @@ function PerformancePage({
                       onClick={() =>
                         setConfirmAction({
                           title: `Delete ${record.title}?`,
-                          body: 'This removes the performance record and updates derived collections, timeline, Tutor recommendations, and document metadata.',
+                          body: 'This removes the performance record and updates collections, timeline, Tutor recommendations, and source details.',
                           confirmLabel: 'Delete record',
                           onConfirm: () => deletePerformanceRecord(record),
                         })
@@ -1816,7 +1828,7 @@ function buildLearningSummary(records: PerformanceRecord[], subject: string, lat
           comments ? `${comments} teacher comment${comments === 1 ? '' : 's'} support this summary.` : 'Add report comments to make this more teacher-led.',
         ].join(' ');
 
-  return { headline, body, confidence, direction, source: latestSummary?.overallCommentary && subject === 'All Subjects' ? 'AI-generated saved performance advice' : 'Local fallback from filtered records and teacher evidence' };
+  return { headline, body, confidence, direction, source: latestSummary?.overallCommentary && subject === 'All Subjects' ? 'Saved coaching note' : 'Filtered records and teacher evidence' };
 }
 
 function buildTeacherInsights(records: PerformanceRecord[]) {
@@ -2165,7 +2177,7 @@ function EvidenceFrequencyChart({ records }: { records: PerformanceRecord[] }) {
     ...topEvidenceTerms(records, 'strengths').slice(0, 3).map((item) => ({ label: `Strength: ${item.term}`, value: item.records.length, count: item.records.length })),
     ...topEvidenceTerms(records, 'weaknesses').slice(0, 3).map((item) => ({ label: `Need: ${item.term}`, value: item.records.length, count: item.records.length })),
   ];
-  return <MiniBarChart title="Strengths/weaknesses frequency" axisLabel="Mentions in evidence" rows={rows} empty="Extracted strengths and weaknesses will appear after reports or feedback are analysed." explanation="Repeated themes carry more weight than one-off comments; this chart counts evidence mentions." />;
+  return <MiniBarChart title="Strengths/weaknesses frequency" axisLabel="Mentions in evidence" rows={rows} empty="Strengths and weaknesses will appear after reports or feedback are analysed." explanation="Repeated themes carry more weight than one-off comments; this chart counts evidence mentions." />;
 }
 
 function SubjectDistributionChart({ documents, records, selectedSubject }: { documents: ResearchDocument[]; records: PerformanceRecord[]; selectedSubject: string }) {
@@ -2182,7 +2194,7 @@ function SubjectDistributionChart({ documents, records, selectedSubject }: { doc
 
   return (
     <div className="mt-7">
-      <MiniBarChart title="Subject distribution from uploaded sources" axisLabel="Ready source count" rows={rows} empty="Upload sources with subject metadata to see coverage by subject." explanation="This indicates the evidence base behind summaries and Tutor recommendations, not student attainment." />
+      <MiniBarChart title="Subject distribution from uploaded sources" axisLabel="Ready source count" rows={rows} empty="Upload sources with subject details to see coverage by subject." explanation="This indicates the evidence base behind summaries and Tutor recommendations, not student attainment." />
     </div>
   );
 }
@@ -2340,15 +2352,6 @@ function EmptyState({ title, copy, action, onClick }: { title: string; copy: str
   );
 }
 
-function formatEmbeddingStatus(document: ResearchDocument) {
-  if (document.embeddingStatus === 'embedding') return 'Embedding';
-  if (document.embeddingStatus === 'embedded') return 'Embedded';
-  if (document.embeddingStatus === 'failed') return 'Keyword search ready';
-  if (document.embeddingStatus === 'keyword_only') return 'Keyword search ready';
-
-  return 'Not embedded';
-}
-
 function Upload({
   stateDocuments,
   activeWorkspaceId,
@@ -2368,7 +2371,7 @@ function Upload({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isReading, setIsReading] = useState(false);
   const [failedUpload, setFailedUpload] = useState<{ file: File; documentId: string; title: string; cleanName: string; type: 'PDF' | 'DOCX' } | null>(null);
-  const [note, setNote] = useState('TXT, PDF, and DOCX files are extracted locally and chunked into searchable research context.');
+  const [note, setNote] = useState('Choose a document to add to this workspace.');
   const [metadataDraft, setMetadataDraft] = useState<UploadMetadataDraft>({
     sourceDate: new Date().toISOString().slice(0, 10),
     academicYear: '',
@@ -2381,6 +2384,12 @@ function Upload({
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const recentUploads = stateDocuments.filter((document) => document.status !== 'Indexed' || document.type === 'TXT' || document.type === 'PDF' || document.type === 'DOCX').slice(0, 4);
+  const uploadSubjects = getUploadSubjects(metadataDraft);
+  const hasSelectedFile = Boolean(selectedFile);
+  const hasDate = Boolean(metadataDraft.sourceDate);
+  const hasDocumentKind = Boolean(metadataDraft.documentCategory);
+  const hasSubjectContext = uploadSubjects.length > 0;
+  const canUpload = hasSelectedFile && hasDate && hasDocumentKind;
 
   function logUploadError(context: string, error: unknown) {
     if (import.meta.env.DEV) {
@@ -2451,7 +2460,7 @@ function Upload({
         ...current,
         documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...notEmbeddedDocument, metadata: item.metadata ?? notEmbeddedDocument.metadata } : item)),
       }));
-      setNote(`${readyMessage} Keyword search is ready now. Semantic search will start after Supabase connects.`);
+      setNote(readyMessage);
       return;
     }
 
@@ -2471,7 +2480,7 @@ function Upload({
       documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...embeddingDocument, metadata: item.metadata ?? embeddingDocument.metadata } : item)),
       chunks: [...pendingChunks, ...current.chunks.filter((chunk) => chunk.documentId !== document.id)],
     }));
-    setNote(`${readyMessage} Embedding chunks for semantic search...`);
+    setNote('Preparing your source...');
 
     try {
       await saveDocument(embeddingDocument, { userId });
@@ -2501,12 +2510,10 @@ function Upload({
       await saveDocument(finalDocument, { userId });
       await saveChunks(finalChunks, { userId });
       setNote(
-        result.embedded > 0
-          ? `${readyMessage} Semantic search is ready for ${result.embedded.toLocaleString()} chunks.`
-          : `${readyMessage} Keyword search is ready; semantic embeddings were skipped.`,
+        readyMessage,
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Embedding is unavailable. Keyword search remains available.';
+      const message = error instanceof Error ? error.message : 'Search preparation is unavailable.';
       const keywordOnlyDocument: ResearchDocument = {
         ...embeddingDocument,
         embeddingStatus: 'keyword_only',
@@ -2526,7 +2533,7 @@ function Upload({
       }));
       await saveDocument(keywordOnlyDocument, { userId });
       await saveChunks(failedEmbeddingChunks, { userId });
-      setNote(`${readyMessage} Keyword search is ready; semantic embeddings failed but upload is saved.`);
+      setNote(readyMessage);
     }
   }
 
@@ -2611,7 +2618,7 @@ function Upload({
       documents: [processingDocument, ...current.documents.filter((document) => document.id !== documentId)],
       chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
     }));
-    setNote(`Extracting text from ${cleanName}...`);
+    setNote(`Reading ${cleanName}...`);
 
     try {
       const extracted = await extractPdfText(file);
@@ -2627,19 +2634,19 @@ function Upload({
             ? {
                 ...document,
                 status: 'Analysing',
-                summary: 'Analysing extracted text, topics, and searchable chunks.',
+                summary: 'Preparing this source for your workspace.',
                 pageCount: extracted.pages.length,
                 wordCount: extracted.wordCount,
               }
             : document,
         ),
       }));
-      setNote(`Analysing ${extracted.wordCount.toLocaleString()} words from ${cleanName}...`);
+      setNote(`Preparing ${cleanName}...`);
 
       const chunks = chunkText({ text: extracted.text, documentId, pages: extracted.pages });
 
       if (chunks.length === 0) {
-        throw new Error('No searchable chunks could be created from this PDF.');
+        throw new Error('This PDF could not be prepared. Try another file.');
       }
 
       const tags = extractTopics(extracted.text);
@@ -2662,7 +2669,7 @@ function Upload({
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
       }));
       const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument, metadataAnalysis);
-      const readyMessage = `${cleanName} is ready with ${extracted.pages.length.toLocaleString()} pages, ${extracted.wordCount.toLocaleString()} words, and ${chunks.length} chunks.${performanceCount ? ` ${performanceCount} academic performance record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
+      const readyMessage = `${cleanName} is ready.${performanceCount ? ` ${performanceCount} assessment record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
       setNote(readyMessage);
       resetUploadFields();
       await queueEmbeddings(readyDocument, chunks, readyMessage);
@@ -2721,7 +2728,7 @@ function Upload({
       documents: [processingDocument, ...current.documents.filter((document) => document.id !== documentId)],
       chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
     }));
-    setNote(`Extracting text from ${cleanName}...`);
+    setNote(`Reading ${cleanName}...`);
 
     try {
       const extracted = await extractDocxText(file);
@@ -2737,18 +2744,18 @@ function Upload({
             ? {
                 ...document,
                 status: 'Analysing',
-                summary: 'Analysing extracted text, topics, and searchable chunks.',
+                summary: 'Preparing this source for your workspace.',
                 wordCount: extracted.wordCount,
               }
             : document,
         ),
       }));
-      setNote(`Analysing ${extracted.wordCount.toLocaleString()} words from ${cleanName}...`);
+      setNote(`Preparing ${cleanName}...`);
 
       const chunks = chunkText({ text: extracted.text, documentId });
 
       if (chunks.length === 0) {
-        throw new Error('No searchable chunks could be created from this DOCX.');
+        throw new Error('This DOCX could not be prepared. Try another file.');
       }
 
       const tags = extractTopics(extracted.text);
@@ -2770,7 +2777,7 @@ function Upload({
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
       }));
       const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument, metadataAnalysis);
-      const readyMessage = `${cleanName} is ready with ${extracted.wordCount.toLocaleString()} words and ${chunks.length} chunks.${performanceCount ? ` ${performanceCount} academic performance record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
+      const readyMessage = `${cleanName} is ready.${performanceCount ? ` ${performanceCount} assessment record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
       setNote(readyMessage);
       resetUploadFields();
       await queueEmbeddings(readyDocument, chunks, readyMessage);
@@ -2823,7 +2830,7 @@ function Upload({
         const chunks = chunkText({ text: extractedText, documentId });
 
         if (chunks.length === 0) {
-          throw new Error('No searchable chunks could be created from this TXT file.');
+          throw new Error('This text file could not be prepared. Try another file.');
         }
 
         const tags = extractTopics(extractedText);
@@ -2852,7 +2859,7 @@ function Upload({
           chunks: [...chunks, ...current.chunks],
         }));
         const performanceCount = await analyseUploadedPerformanceIfRelevant(newDocument, metadataAnalysis);
-        const readyMessage = `${cleanName} was read locally, saved with ${wordCount.toLocaleString()} words, and split into ${chunks.length} chunks.${performanceCount ? ` ${performanceCount} academic performance record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
+        const readyMessage = `${cleanName} is ready.${performanceCount ? ` ${performanceCount} assessment record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
         setNote(readyMessage);
         await queueEmbeddings(newDocument, chunks, readyMessage);
       } catch (error) {
@@ -2904,97 +2911,89 @@ function Upload({
       <section>
         <SectionHeader
           eyebrow="Upload"
-          title="Add source with context"
-          copy="Give the document academic context first, then Research OS extracts readable text, saves metadata, updates Sources and Timeline, and makes it available to Learn."
+          title="Add a source"
+          copy="Choose a document, add just enough context, and Research OS will place it where it belongs."
         />
-        <div className="rounded-lg bg-white p-5 shadow-sm">
-          <div className="grid gap-5 lg:grid-cols-2">
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Date</span>
-                  <input type="date" value={metadataDraft.sourceDate} onChange={(event) => updateUploadMetadata('sourceDate', event.target.value)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Academic year</span>
-                  <input value={metadataDraft.academicYear} onChange={(event) => updateUploadMetadata('academicYear', event.target.value)} placeholder="2026-2027" className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Term</span>
-                  <select value={metadataDraft.term} onChange={(event) => updateUploadMetadata('term', event.target.value as AcademicTerm)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">
-                    {academicTerms.map((term) => <option key={term} value={term}>{term}</option>)}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Document category</span>
-                  <select value={metadataDraft.documentCategory} onChange={(event) => updateUploadMetadata('documentCategory', event.target.value as DocumentCategory)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">
-                    {documentCategories.map((category) => <option key={category} value={category}>{category}</option>)}
-                  </select>
-                </label>
-                <label className="block sm:col-span-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Linked assessment or report</span>
-                  <input value={metadataDraft.linkedAssessmentName} onChange={(event) => updateUploadMetadata('linkedAssessmentName', event.target.value)} placeholder="Michaelmas Report, Summer Exams, Biology Mock" className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-                </label>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Subjects included</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {defaultSubjectOptions.map((subject) => (
-                    <button key={subject} type="button" onClick={() => toggleUploadSubject(subject)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${metadataDraft.subjectsIncluded.includes(subject) ? 'border-ink bg-ink text-white' : 'border-ink/10 bg-paper text-graphite/75'}`}>
-                      {subject}
-                    </button>
-                  ))}
-                </div>
-                <textarea value={metadataDraft.customSubjects} onChange={(event) => updateUploadMetadata('customSubjects', event.target.value)} rows={2} placeholder="Other subjects, separated by commas" className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-              </div>
-              <label className="flex gap-3 rounded-lg border border-ink/8 bg-paper/70 p-3 text-sm leading-6 text-graphite/75">
-                <input type="checkbox" checked={metadataDraft.ignoreInstrumentalMusic} onChange={(event) => updateUploadMetadata('ignoreInstrumentalMusic', event.target.checked)} className="mt-1 size-4 shrink-0 accent-ink" />
-                <span>Ignore instrumental/music lesson content for academic performance analysis. The source is still stored and searchable.</span>
+        <div className="space-y-4">
+          <section className="rounded-lg bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Step 1</p>
+            <h3 className="mt-2 text-xl font-semibold text-ink">Choose document</h3>
+            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+              <input value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="Optional display name" className="min-w-0 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4" />
+              <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-graphite shadow-sm hover:text-ink">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    setSelectedFile(file);
+                    setFileName(file?.name ?? fileName);
+                  }}
+                />
+                Choose File
               </label>
             </div>
+            {selectedFile ? <p className="mt-4 text-sm font-medium text-ink">{selectedFile.name}</p> : null}
+          </section>
 
-            <div className="rounded-lg border border-dashed border-ink/12 bg-paper/45 p-5">
-              <div className="flex items-start gap-4">
-                <div className="grid size-11 shrink-0 place-items-center rounded-lg bg-white text-ink shadow-sm">
-                  <UploadCloud size={22} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-ink">Source file</h3>
-                  <p className="mt-2 text-sm leading-7 text-graphite/72">TXT, PDF, and DOCX files are extracted locally. Scanned PDFs may need OCR first.</p>
-                </div>
+          {hasSelectedFile ? (
+            <section className="rounded-lg bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Step 2</p>
+              <h3 className="mt-2 text-xl font-semibold text-ink">When was this?</h3>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <input type="date" value={metadataDraft.sourceDate} onChange={(event) => updateUploadMetadata('sourceDate', event.target.value)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+                <input value={metadataDraft.academicYear} onChange={(event) => updateUploadMetadata('academicYear', event.target.value)} placeholder="Academic year" className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+                <select value={metadataDraft.term} onChange={(event) => updateUploadMetadata('term', event.target.value as AcademicTerm)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
+                  {academicTerms.map((term) => <option key={term} value={term}>{term}</option>)}
+                </select>
               </div>
-              <div className="mt-5 grid gap-3">
-                <input value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="optional-display-name.pdf" className="min-w-0 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4" />
-                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-graphite shadow-sm transition hover:text-ink">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    className="sr-only"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null;
-                      setSelectedFile(file);
-                      setFileName(file?.name ?? fileName);
-                    }}
-                  />
-                  Choose File
-                </label>
-                <button type="button" onClick={handleUpload} disabled={isReading} className="inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55">
-                  <FilePlus2 size={18} />
-                  {isReading
-                    ? 'Processing...'
-                    : selectedFile?.name.toLowerCase().endsWith('.txt')
-                      ? 'Ingest TXT'
-                      : selectedFile?.name.toLowerCase().endsWith('.pdf')
-                        ? 'Extract PDF'
-                        : selectedFile?.name.toLowerCase().endsWith('.docx')
-                          ? 'Extract DOCX'
-                          : 'Choose File'}
-                </button>
+            </section>
+          ) : null}
+
+          {hasSelectedFile && hasDate ? (
+            <section className="rounded-lg bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Step 3</p>
+              <h3 className="mt-2 text-xl font-semibold text-ink">What kind of document is it?</h3>
+              <div className="mt-4 grid gap-3 sm:grid-cols-[220px_1fr]">
+                <select value={metadataDraft.documentCategory} onChange={(event) => updateUploadMetadata('documentCategory', event.target.value as DocumentCategory)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
+                  {documentCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+                <input value={metadataDraft.linkedAssessmentName} onChange={(event) => updateUploadMetadata('linkedAssessmentName', event.target.value)} placeholder="Related report or assessment" className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
               </div>
-              {selectedFile ? <p className="mt-4 text-sm font-medium text-ink">{selectedFile.name}</p> : null}
-            </div>
-          </div>
+            </section>
+          ) : null}
+
+          {hasSelectedFile && hasDate && hasDocumentKind ? (
+            <section className="rounded-lg bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Step 4</p>
+              <h3 className="mt-2 text-xl font-semibold text-ink">Which subjects?</h3>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {defaultSubjectOptions.map((subject) => (
+                  <button key={subject} type="button" onClick={() => toggleUploadSubject(subject)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${metadataDraft.subjectsIncluded.includes(subject) ? 'border-ink bg-ink text-white' : 'border-ink/10 bg-paper text-graphite/75'}`}>
+                    {subject}
+                  </button>
+                ))}
+              </div>
+              <textarea value={metadataDraft.customSubjects} onChange={(event) => updateUploadMetadata('customSubjects', event.target.value)} rows={2} placeholder="Other subjects" className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+              <label className="mt-3 flex gap-3 rounded-lg bg-paper/60 p-3 text-sm leading-6 text-graphite/75">
+                <input type="checkbox" checked={metadataDraft.ignoreInstrumentalMusic} onChange={(event) => updateUploadMetadata('ignoreInstrumentalMusic', event.target.checked)} className="mt-1 size-4 shrink-0 accent-ink" />
+                <span>Keep instrumental music out of academic progress trends.</span>
+              </label>
+            </section>
+          ) : null}
+
+          {hasSelectedFile && hasDate && hasDocumentKind ? (
+            <section className="rounded-lg bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Upload</p>
+              <h3 className="mt-2 text-xl font-semibold text-ink">{hasSubjectContext ? `Ready for ${uploadSubjects.slice(0, 2).join(', ')}` : 'Ready to add'}</h3>
+              <button type="button" onClick={handleUpload} disabled={isReading || !canUpload} className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+                <FilePlus2 size={18} />
+                {isReading ? 'Adding...' : 'Add source'}
+              </button>
+            </section>
+          ) : null}
         </div>
         <div className="mt-4 rounded-lg bg-paper/60 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{isReading ? 'Processing' : 'Latest result'}</p>
@@ -3015,14 +3014,9 @@ function Upload({
                   <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
                     {[
                       document.status,
-                      document.pageCount ? `${document.pageCount.toLocaleString()} pages` : null,
-                      document.wordCount ? `${document.wordCount.toLocaleString()} words` : null,
-                      document.chunkIds?.length ? `${document.chunkIds.length.toLocaleString()} chunks` : null,
-                      document.status === 'Failed'
-                        ? null
-                        : document.embeddingStatus === 'keyword_only'
-                          ? 'Keyword search ready'
-                          : formatEmbeddingStatus(document),
+                      getDocumentMetadata(document, performanceRecords).subjects[0],
+                      getDocumentMetadata(document, performanceRecords).linkedAssessmentName,
+                      getDocumentMetadata(document, performanceRecords).sourceDate ?? document.addedAt,
                     ]
                       .filter(Boolean)
                       .join(' / ')}
@@ -3060,7 +3054,7 @@ function formatChunkLocation(result: RetrievedChunk) {
     return result.pageStart === result.pageEnd ? `p. ${result.pageStart}` : `pp. ${result.pageStart}-${result.pageEnd}`;
   }
 
-  return `chunk ${result.chunk.chunkIndex + 1}`;
+  return `section ${result.chunk.chunkIndex + 1}`;
 }
 
 function buildResearchChatContext(
@@ -3186,7 +3180,7 @@ function ResearchChat({
 
     if (!question || isLoading) return;
     if (searchableDocuments.length === 0) {
-      setErrorMessage('Upload a readable TXT, PDF, or DOCX file before asking source-grounded questions.');
+      setErrorMessage('Add a source before asking your archive.');
       return;
     }
 
@@ -3302,11 +3296,11 @@ function ResearchChat({
   }
 
   return (
-    <div className="mx-auto grid min-h-[620px] max-w-7xl gap-5 sm:h-[calc(100vh-12rem)] sm:min-h-[480px] xl:grid-cols-[minmax(0,1fr)_340px]">
-      <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-ink/8 bg-white shadow-sm">
-        <div className="shrink-0 border-b border-ink/8 p-5">
+    <div className="mx-auto grid min-h-[620px] max-w-7xl gap-5 sm:h-[calc(100vh-12rem)] sm:min-h-[480px] xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-white shadow-sm">
+        <div className="shrink-0 border-b border-ink/6 p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <SectionHeader eyebrow="Research chat" title="Ask with sources" copy="Answers are grounded in uploaded source chunks. Citations appear with each response when evidence is retrieved." />
+            <SectionHeader eyebrow="Archive" title="Ask your workspace" copy="Use reports, notes, teacher comments, and saved sources as the basis for each answer." />
             {chat.length ? (
               <IconTextButton
                 icon={Trash2}
@@ -3328,7 +3322,7 @@ function ResearchChat({
           {chat.length ? (
             chat.map((message) => (
               <div key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[70ch]' : 'mr-auto max-w-[78ch]'}>
-                <div className={`rounded-lg p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'border border-ink/8 bg-paper/70 text-ink'}`}>
+                <div className={`rounded-lg p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'bg-paper/70 text-ink'}`}>
                   <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
                 </div>
                 <button
@@ -3361,8 +3355,8 @@ function ResearchChat({
             ))
           ) : (
             <EmptyState
-              title="Upload a source before chatting"
-              copy="Chat uses extracted document chunks for grounded answers. Add a readable TXT, PDF, or DOCX file, then ask about claims, methods, contradictions, or gaps."
+              title="Ask once your archive has a source"
+              copy="Add a report, note, paper, or assessment, then ask about themes, teacher comments, weak topics, or contradictions."
             />
           )}
           {isLoading ? (
@@ -3372,14 +3366,14 @@ function ResearchChat({
                   <span className="size-2 animate-pulse rounded-full bg-brass" />
                   <span className="size-2 animate-pulse rounded-full bg-brass [animation-delay:120ms]" />
                   <span className="size-2 animate-pulse rounded-full bg-brass [animation-delay:240ms]" />
-                  <span className="ml-1">Reading workspace sources...</span>
+                  <span className="ml-1">Reading your archive...</span>
                 </div>
               </div>
             </div>
           ) : null}
           <div ref={bottomRef} />
         </div>
-        <div className="shrink-0 border-t border-ink/8 bg-white p-4">
+        <div className="shrink-0 border-t border-ink/6 bg-white p-4">
           {errorMessage ? (
             <div className="mb-3 rounded-lg border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
               Research chat could not answer right now. {errorMessage}
@@ -3393,7 +3387,7 @@ function ResearchChat({
                 if (event.key === 'Enter') sendMessage();
               }}
               disabled={isLoading || searchableDocuments.length === 0}
-              placeholder={searchableDocuments.length ? 'Ask about claims, contradictions, methods, or gaps...' : 'Upload a readable source before asking...'}
+              placeholder={searchableDocuments.length ? 'Ask about claims, contradictions, teacher comments, or gaps...' : 'Add a source before asking...'}
               className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4 disabled:cursor-not-allowed disabled:bg-paper"
             />
             <button
@@ -3410,10 +3404,10 @@ function ResearchChat({
         </div>
       </section>
 
-      <aside className="hidden min-h-0 overflow-hidden rounded-lg border border-ink/8 bg-white shadow-sm xl:flex xl:flex-col">
-        <div className="shrink-0 border-b border-ink/8 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Sources</p>
-          <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">Latest citations</h3>
+      <aside className="hidden min-h-0 overflow-hidden rounded-lg bg-white shadow-sm xl:flex xl:flex-col">
+        <div className="shrink-0 border-b border-ink/6 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Evidence</p>
+          <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">Related sources</h3>
         </div>
         <div className="scrollbar-soft min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {documents.length ? (
@@ -3421,12 +3415,12 @@ function ResearchChat({
             latestCitations.map((citation) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} />)
             ) : (
             <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
-              Source cards will appear here after the assistant answers with citations.
+              Related sources appear here after an answer.
             </p>
             )
           ) : (
             <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
-              Upload documents to give research chat source material for grounded answers.
+              Add a source to begin asking your archive.
             </p>
           )}
         </div>
@@ -3505,7 +3499,7 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
                 </div>
               ))
             ) : (
-              <EmptyState title="No readable source set" copy="Upload a document with extracted text before preparing study material." />
+              <EmptyState title="No study source yet" copy="Upload a document before preparing study material." />
             )}
           </div>
         </div>
@@ -3555,7 +3549,7 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
         copy="A quieter map of relationships across the active research area. Topic nodes appear after documents have been extracted."
       />
       {mapNodes.length === 0 ? (
-        <EmptyState title="No knowledge map yet" copy="Upload documents with readable text and Research OS will use their topics to start a workspace map." />
+        <EmptyState title="No knowledge map yet" copy="Upload documents and Research OS will use their topics to start a workspace map." />
       ) : (
       <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
         <div className="relative min-h-[460px] overflow-hidden rounded-lg border border-ink/8 bg-white shadow-sm sm:min-h-[560px]">
@@ -3608,7 +3602,7 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Strongest bridge</p>
-              <p className="mt-2 text-sm leading-7 text-graphite/72">Shared source tags from extracted documents</p>
+              <p className="mt-2 text-sm leading-7 text-graphite/72">Shared themes across sources</p>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Next useful action</p>
