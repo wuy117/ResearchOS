@@ -5,9 +5,9 @@ import { initialState } from '../data/initialState';
 import type { AppStorageStatus } from '../hooks/useResearchState';
 import { isSupabaseEnabled } from '../lib/supabase';
 import { clearLocalStateOnly, clearSupabaseScope, type SupabaseResetScope } from '../services/researchStore';
-import type { PageId, ResearchState } from '../types/research';
-import { embedChunks } from '../utils/api';
-import { buildDocumentMetadata, deriveCollections } from '../utils/learningModel';
+import type { DocumentMetadata, PageId, ResearchDocument, ResearchState } from '../types/research';
+import { analyseDocumentMetadata, embedChunks, type DocumentMetadataAnalysisResponse } from '../utils/api';
+import { buildDocumentMetadata, deriveCollections, getDocumentMetadata } from '../utils/learningModel';
 import { getResearchStorageStats } from '../utils/storage';
 
 type PillarId = 'home' | 'sources' | 'learn' | 'progress';
@@ -456,6 +456,72 @@ function getResetLabel(scope: SupabaseResetScope) {
   return resetOptions.find((option) => option.scope === scope)?.label ?? 'Data';
 }
 
+function uniqueStrings(values: Array<string | undefined | null>) {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
+}
+
+function applyDeveloperMetadataAnalysis(document: ResearchDocument, performanceRecords: ResearchState['performanceRecords'], analysis: DocumentMetadataAnalysisResponse): ResearchDocument {
+  const fallback = getDocumentMetadata(document, performanceRecords);
+  const metadata: DocumentMetadata = {
+    ...fallback,
+    sourceDate: analysis.metadata.sourceDate || fallback.sourceDate,
+    academicYear: analysis.metadata.academicYear || fallback.academicYear,
+    term: analysis.metadata.term || fallback.term,
+    linkedAssessmentName: analysis.metadata.linkedAssessmentName || fallback.linkedAssessmentName || document.title,
+    documentCategory: analysis.metadata.documentCategory || fallback.documentCategory,
+    ignoreInstrumentalMusic: analysis.metadata.ignoreInstrumentalMusic || fallback.ignoreInstrumentalMusic,
+    subjects: uniqueStrings([...(analysis.metadata.subjects ?? []), ...fallback.subjects]),
+    topics: uniqueStrings([...(analysis.metadata.topics ?? []), ...fallback.topics]),
+    teacherNames: uniqueStrings([...(analysis.metadata.teacherNames ?? []), ...fallback.teacherNames]),
+    skills: uniqueStrings([...(analysis.metadata.skills ?? []), ...fallback.skills]),
+    tags: uniqueStrings([...(analysis.metadata.tags ?? []), ...fallback.tags]),
+    academicYears: uniqueStrings([analysis.metadata.academicYear, ...fallback.academicYears]),
+    terms: uniqueStrings([analysis.metadata.term, ...fallback.terms]),
+    assessments: uniqueStrings([analysis.metadata.linkedAssessmentName, ...fallback.assessments]),
+    documentTypes: uniqueStrings([analysis.metadata.documentCategory, ...fallback.documentTypes]),
+    performanceRecords: fallback.performanceRecords,
+    collections: fallback.collections,
+    metadataConfidence: analysis.metadata.metadataConfidence ?? fallback.metadataConfidence ?? 'Low',
+    metadataSource: 'AI generated',
+    shouldAffectAcademicPerformance: analysis.metadata.shouldAffectAcademicPerformance ?? fallback.shouldAffectAcademicPerformance,
+    extractedFacts: uniqueStrings([...(analysis.metadata.extractedFacts ?? []), ...(fallback.extractedFacts ?? [])]),
+    inferredMetadata: uniqueStrings([...(analysis.metadata.inferredMetadata ?? []), ...(fallback.inferredMetadata ?? [])]),
+  };
+  const collections = uniqueStrings([
+    ...metadata.collections,
+    metadata.documentCategory,
+    metadata.term,
+    metadata.academicYear,
+    metadata.linkedAssessmentName,
+    ...metadata.subjects,
+  ]).slice(0, 12);
+
+  return {
+    ...document,
+    summary: buildDeveloperSummary(document, analysis, metadata),
+    tags: metadata.tags,
+    metadata: {
+      ...metadata,
+      collections,
+    },
+    collectionIds: collections.map((collection) => `collection-${collection.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`),
+  };
+}
+
+function buildDeveloperSummary(document: ResearchDocument, analysis: DocumentMetadataAnalysisResponse, metadata: DocumentMetadata) {
+  if (analysis.summary.summaryText) {
+    return [
+      `[AI generated / confidence: ${metadata.metadataConfidence ?? 'Low'}] ${analysis.summary.summaryText}`,
+      analysis.summary.keyEvidence?.length ? `Key evidence: ${analysis.summary.keyEvidence.slice(0, 3).join('; ')}.` : '',
+      analysis.summary.suggestedUse ? `Use it for: ${analysis.summary.suggestedUse}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  return `[AI generated / confidence: ${metadata.metadataConfidence ?? 'Low'}] ${document.title} was analysed for subjects, topics, teacher evidence, and performance metadata.`;
+}
+
 function DeveloperTools({
   state,
   setState,
@@ -495,6 +561,46 @@ function DeveloperTools({
     }
   }
 
+  async function rerunMetadataExtraction(documentIds: string[], label: string) {
+    const readableDocuments = state.documents.filter((document) => documentIds.includes(document.id) && document.extractedText?.trim());
+    if (!readableDocuments.length) {
+      setMessage('No readable documents were available for metadata extraction.');
+      return;
+    }
+
+    let analysed = 0;
+    let failed = 0;
+    const updates = new Map<string, ResearchDocument>();
+
+    for (const document of readableDocuments) {
+      try {
+        const analysis = await analyseDocumentMetadata({
+          title: document.title,
+          text: document.extractedText ?? '',
+          uploadMetadata: getDocumentMetadata(document, state.performanceRecords),
+        });
+        updates.set(document.id, applyDeveloperMetadataAnalysis(document, state.performanceRecords, analysis));
+        analysed += 1;
+      } catch (error) {
+        failed += 1;
+        if (import.meta.env.DEV) {
+          console.debug(`Metadata extraction failed for ${document.title}.`, error);
+        }
+      }
+    }
+
+    if (updates.size) {
+      setState((current) => {
+        const documents = current.documents.map((document) => updates.get(document.id) ?? document);
+        const nextState = { ...current, documents };
+        return { ...nextState, collections: deriveCollections(nextState) };
+      });
+    }
+
+    setMessage(`${label}: analysed ${analysed}, failed ${failed}. Existing records were preserved.`);
+    setLastError(failed ? `${failed} document${failed === 1 ? '' : 's'} could not be analysed.` : '');
+  }
+
   return (
     <div className="rounded-lg border border-ink/8 bg-white p-4">
       <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
@@ -530,6 +636,12 @@ function DeveloperTools({
             <DeveloperActionButton label="Rebuild local derived metadata" onClick={() => runLocalReset('Metadata rebuild', rebuildMetadata)} />
             <DeveloperActionButton label="Rebuild collections from documents" onClick={() => runLocalReset('Collections rebuild', (current) => ({ ...current, collections: deriveCollections(current) }))} />
             <DeveloperActionButton
+              label="Re-run metadata extraction for all documents"
+              disabled={!state.documents.some((document) => document.extractedText?.trim())}
+              reason={!state.documents.some((document) => document.extractedText?.trim()) ? 'No readable documents to analyse.' : undefined}
+              onClick={() => rerunMetadataExtraction(state.documents.map((document) => document.id), 'All document metadata')}
+            />
+            <DeveloperActionButton
               label="Re-run embeddings for all chunks"
               disabled={!embeddingConfigured || state.chunks.length === 0}
               reason={!embeddingConfigured ? 'Semantic search is not connected.' : state.chunks.length === 0 ? 'No chunks to embed.' : undefined}
@@ -541,6 +653,12 @@ function DeveloperTools({
                 <option key={document.id} value={document.id}>{document.title}</option>
               ))}
             </select>
+            <DeveloperActionButton
+              label="Re-run metadata extraction for one document"
+              disabled={!documentId || !state.documents.find((document) => document.id === documentId)?.extractedText?.trim()}
+              reason={!documentId ? 'Choose a document first.' : !state.documents.find((document) => document.id === documentId)?.extractedText?.trim() ? 'Selected document has no readable text.' : undefined}
+              onClick={() => rerunMetadataExtraction([documentId], 'Document metadata')}
+            />
             <DeveloperActionButton
               label="Re-run embeddings for one document"
               disabled={!embeddingConfigured || !documentId}

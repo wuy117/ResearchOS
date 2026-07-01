@@ -122,20 +122,39 @@ function getWeakTopics(records: PerformanceRecord[], summaries: PerformanceSumma
 }
 
 function getRecommendedTopics(documents: ResearchDocument[], weakTopics: string[], records: PerformanceRecord[], memory: TutorMemory) {
-  const metadataTopics = documents
-    .flatMap((document) => {
-      const metadata = getDocumentMetadata(document, records);
-      return [...metadata.topics, ...metadata.skills, ...metadata.subjects];
-    })
-    .filter((topic) => !/upload|failed/i.test(topic));
-  const staleTopics = memory.topicsStudied
-    .filter((topic) => {
-      const daysSinceReview = Math.floor((Date.now() - new Date(topic.lastReviewed).getTime()) / 86_400_000);
-      return topic.confidence < 70 || daysSinceReview >= 14;
-    })
-    .map((topic) => topic.topic);
+  const scores = new Map<string, number>();
+  const addScore = (topic: string, score: number) => {
+    const clean = topic.trim();
+    if (!clean || /upload|failed/i.test(clean)) return;
+    scores.set(clean, (scores.get(clean) ?? 0) + score);
+  };
 
-  return [...new Set([...weakTopics, ...staleTopics, ...metadataTopics].map((topic) => topic.trim()).filter(Boolean))].slice(0, 8);
+  weakTopics.forEach((topic) => addScore(topic, 8));
+  records.forEach((record) => {
+    const percentage = typeof record.percentage === 'number' ? record.percentage : typeof record.score === 'number' && typeof record.maxScore === 'number' && record.maxScore > 0 ? Math.round((record.score / record.maxScore) * 100) : undefined;
+    const performanceWeight = percentage !== undefined && percentage < 70 ? 6 : 2;
+    [record.subject, ...record.weaknesses, ...record.actionPoints].forEach((topic) => addScore(topic, performanceWeight));
+    if (record.teacherComment) {
+      [...record.teacherComment.matchAll(/\b(evaluation|explain|essay|structure|accuracy|vocabulary|timing|recall|analysis|evidence|technique|osmosis|respiration)\b/gi)]
+        .map((match) => match[1])
+        .forEach((topic) => addScore(topic, 5));
+    }
+  });
+
+  documents.slice(0, 8).forEach((document, index) => {
+    const metadata = getDocumentMetadata(document, records);
+    const recencyWeight = Math.max(1, 5 - index);
+    [...metadata.topics, ...metadata.skills, ...metadata.subjects].forEach((topic) => addScore(topic, recencyWeight));
+  });
+
+  memory.topicsStudied.forEach((topic) => {
+    const daysSinceReview = Math.floor((Date.now() - new Date(topic.lastReviewed).getTime()) / 86_400_000);
+    if (topic.confidence < 70) addScore(topic.topic, 5);
+    if (topic.quizAccuracy < 60) addScore(topic.topic, 5);
+    if (daysSinceReview >= 14) addScore(topic.topic, Math.min(6, Math.floor(daysSinceReview / 7)));
+  });
+
+  return [...scores.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([topic]) => topic).slice(0, 8);
 }
 
 function formatChunkLocation(result: RetrievedChunk) {

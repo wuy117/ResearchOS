@@ -67,6 +67,7 @@ export type PerformanceAnalysisRecord = {
   strengths?: string[];
   weaknesses?: string[];
   actionPoints?: string[];
+  excludeFromAcademicAnalysis?: boolean | null;
 };
 
 export type PerformanceAnalysisResponse = {
@@ -84,6 +85,37 @@ export type PerformanceAdviceResponse = {
   recurringWeaknesses: string[];
   recommendedActions: string[];
   overallCommentary: string;
+};
+
+export type DocumentMetadataAnalysisResponse = {
+  metadata: {
+    sourceDate?: string | null;
+    academicYear?: string | null;
+    term?: string | null;
+    linkedAssessmentName?: string | null;
+    documentCategory?: string | null;
+    subjects?: string[];
+    topics?: string[];
+    teacherNames?: string[];
+    skills?: string[];
+    tags?: string[];
+    ignoreInstrumentalMusic?: boolean;
+    shouldAffectAcademicPerformance?: boolean;
+    metadataConfidence?: 'High' | 'Medium' | 'Low';
+    extractedFacts?: string[];
+    inferredMetadata?: string[];
+  };
+  summary: {
+    sourceType?: string;
+    mainSubjects?: string[];
+    mainTopics?: string[];
+    keyEvidence?: string[];
+    importantCommentsOrResults?: string[];
+    suggestedUse?: string;
+    summaryText?: string;
+  };
+  performanceRecords: PerformanceAnalysisRecord[];
+  message?: string;
 };
 
 export type TutorRequestDocument = ResearchChatRequestDocument;
@@ -227,6 +259,60 @@ export async function analysePerformanceDocument({
 
   return {
     records: Array.isArray(data.records) ? data.records : [],
+    message: typeof data.message === 'string' ? data.message : undefined,
+  };
+}
+
+function normalizeStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [];
+}
+
+export async function analyseDocumentMetadata({
+  title,
+  text,
+  uploadMetadata,
+}: {
+  title: string;
+  text: string;
+  uploadMetadata: unknown;
+}): Promise<DocumentMetadataAnalysisResponse> {
+  const data = await postJson<DocumentMetadataAnalysisResponse>(
+    '/api/analyse-document-metadata',
+    { title, text, uploadMetadata },
+    'Document metadata analysis is unreachable. Local metadata fallback remains available.',
+  );
+
+  const metadata = data && typeof data.metadata === 'object' ? data.metadata : {};
+  const summary = data && typeof data.summary === 'object' ? data.summary : {};
+
+  return {
+    metadata: {
+      sourceDate: typeof metadata.sourceDate === 'string' ? metadata.sourceDate : null,
+      academicYear: typeof metadata.academicYear === 'string' ? metadata.academicYear : null,
+      term: typeof metadata.term === 'string' ? metadata.term : null,
+      linkedAssessmentName: typeof metadata.linkedAssessmentName === 'string' ? metadata.linkedAssessmentName : null,
+      documentCategory: typeof metadata.documentCategory === 'string' ? metadata.documentCategory : null,
+      subjects: normalizeStringArray(metadata.subjects),
+      topics: normalizeStringArray(metadata.topics),
+      teacherNames: normalizeStringArray(metadata.teacherNames),
+      skills: normalizeStringArray(metadata.skills),
+      tags: normalizeStringArray(metadata.tags),
+      ignoreInstrumentalMusic: Boolean(metadata.ignoreInstrumentalMusic),
+      shouldAffectAcademicPerformance: typeof metadata.shouldAffectAcademicPerformance === 'boolean' ? metadata.shouldAffectAcademicPerformance : undefined,
+      metadataConfidence: metadata.metadataConfidence === 'High' || metadata.metadataConfidence === 'Medium' || metadata.metadataConfidence === 'Low' ? metadata.metadataConfidence : 'Low',
+      extractedFacts: normalizeStringArray(metadata.extractedFacts),
+      inferredMetadata: normalizeStringArray(metadata.inferredMetadata),
+    },
+    summary: {
+      sourceType: typeof summary.sourceType === 'string' ? summary.sourceType : undefined,
+      mainSubjects: normalizeStringArray(summary.mainSubjects),
+      mainTopics: normalizeStringArray(summary.mainTopics),
+      keyEvidence: normalizeStringArray(summary.keyEvidence),
+      importantCommentsOrResults: normalizeStringArray(summary.importantCommentsOrResults),
+      suggestedUse: typeof summary.suggestedUse === 'string' ? summary.suggestedUse : undefined,
+      summaryText: typeof summary.summaryText === 'string' ? summary.summaryText : undefined,
+    },
+    performanceRecords: Array.isArray(data.performanceRecords) ? data.performanceRecords : [],
     message: typeof data.message === 'string' ? data.message : undefined,
   };
 }

@@ -40,6 +40,11 @@ export type DocumentMetadata = {
   linkedAssessmentName?: string;
   documentCategory?: DocumentCategory | string;
   ignoreInstrumentalMusic?: boolean;
+  metadataConfidence?: 'High' | 'Medium' | 'Low';
+  metadataSource?: 'AI generated' | 'Local fallback' | 'Manual';
+  shouldAffectAcademicPerformance?: boolean;
+  extractedFacts?: string[];
+  inferredMetadata?: string[];
   subjects: string[];
   topics: string[];
   academicYears: string[];

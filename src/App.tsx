@@ -32,7 +32,7 @@ import { useResearchState } from './hooks/useResearchState';
 import { isSupabaseEnabled } from './lib/supabase';
 import { deleteSupabaseRows, saveChunks, saveDocument } from './services/researchStore';
 import type { AcademicTerm, AssessmentType, ChatMessage, Collection, DocumentCategory, DocumentChunk, DocumentMetadata, MapEdge, MapNode, PageId, PerformanceDomain, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState, TutorAttempt, TutorLesson, TutorMemory } from './types/research';
-import { analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
+import { analyseDocumentMetadata, analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, type DocumentMetadataAnalysisResponse, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
 import { extractPdfText } from './utils/extractPdfText';
@@ -812,7 +812,7 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     subject,
     assessmentType,
     domain,
-    excludeFromAcademicAnalysis: sourceMetadata?.ignoreInstrumentalMusic && domain !== 'academic',
+    excludeFromAcademicAnalysis: Boolean(record.excludeFromAcademicAnalysis) || Boolean(sourceMetadata?.ignoreInstrumentalMusic && domain !== 'academic'),
     score,
     maxScore,
     percentage,
@@ -823,6 +823,130 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     weaknesses: Array.isArray(record.weaknesses) ? record.weaknesses.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
     actionPoints: Array.isArray(record.actionPoints) ? record.actionPoints.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
     createdAt: new Date().toISOString(),
+  };
+}
+
+function uniqueStrings(values: Array<string | undefined | null>) {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
+}
+
+function buildEvidenceAwareSummary({
+  title,
+  text,
+  metadata,
+  analysis,
+}: {
+  title: string;
+  text: string;
+  metadata: DocumentMetadata;
+  analysis?: DocumentMetadataAnalysisResponse;
+}) {
+  if (analysis?.summary.summaryText) {
+    return [
+      `[AI generated / confidence: ${analysis.metadata.metadataConfidence ?? 'Low'}] ${analysis.summary.summaryText}`,
+      analysis.summary.keyEvidence?.length ? `Key evidence: ${analysis.summary.keyEvidence.slice(0, 3).join('; ')}.` : '',
+      analysis.summary.suggestedUse ? `Use it for: ${analysis.summary.suggestedUse}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  const topics = metadata.topics.slice(0, 5);
+  const subjects = metadata.subjects.slice(0, 4);
+  const evidenceLines = text
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line) => /\b(%|score|mark|grade|rank|position|comment|target|strength|improve|excellent|good|weak|needs)\b/i.test(line))
+    .slice(0, 3);
+  const sourceType = metadata.documentCategory ?? 'source document';
+
+  return [
+    `[Local fallback / confidence: ${metadata.metadataConfidence ?? 'Low'}] ${title} appears to be a ${sourceType}.`,
+    subjects.length ? `Main subjects: ${subjects.join(', ')}.` : '',
+    topics.length ? `Main topics: ${topics.join(', ')}.` : '',
+    evidenceLines.length ? `Key evidence: ${evidenceLines.join('; ')}.` : summarizeText(text, 180),
+    `Use it for: source-grounded revision, Tutor context, and Progress evidence${metadata.shouldAffectAcademicPerformance === false ? '; it is not counted in academic performance trends' : ''}.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function metadataFromDocumentAnalysis(document: ResearchDocument, fallback: DocumentMetadata, analysis?: DocumentMetadataAnalysisResponse): DocumentMetadata {
+  if (!analysis) {
+    return {
+      ...fallback,
+      metadataConfidence: fallback.metadataConfidence ?? (fallback.subjects.length || fallback.topics.length ? 'Medium' : 'Low'),
+      metadataSource: fallback.metadataSource ?? 'Local fallback',
+      shouldAffectAcademicPerformance:
+        fallback.shouldAffectAcademicPerformance ??
+        Boolean(fallback.documentCategory && ['Report', 'Exam result', 'Mark sheet'].includes(String(fallback.documentCategory)) && !fallback.ignoreInstrumentalMusic),
+      extractedFacts: fallback.extractedFacts ?? [],
+      inferredMetadata: fallback.inferredMetadata ?? ['Local metadata inferred from upload fields, filename, tags, and extracted text.'],
+    };
+  }
+
+  const metadata = analysis.metadata;
+  const subjects = uniqueStrings([...(metadata.subjects ?? []), ...fallback.subjects]);
+  const topics = uniqueStrings([...(metadata.topics ?? []), ...fallback.topics]);
+  const skills = uniqueStrings([...(metadata.skills ?? []), ...fallback.skills]);
+  const teacherNames = uniqueStrings([...(metadata.teacherNames ?? []), ...fallback.teacherNames]);
+  const tags = uniqueStrings([...(metadata.tags ?? []), ...topics, ...subjects, ...fallback.tags]);
+  const academicYears = uniqueStrings([metadata.academicYear, ...fallback.academicYears]);
+  const terms = uniqueStrings([metadata.term, ...fallback.terms]);
+  const assessments = uniqueStrings([metadata.linkedAssessmentName, ...fallback.assessments]);
+  const documentTypes = uniqueStrings([metadata.documentCategory, ...fallback.documentTypes]);
+  const base: DocumentMetadata = {
+    ...fallback,
+    sourceDate: metadata.sourceDate || fallback.sourceDate,
+    academicYear: metadata.academicYear || fallback.academicYear,
+    term: metadata.term || fallback.term,
+    linkedAssessmentName: metadata.linkedAssessmentName || fallback.linkedAssessmentName || document.title,
+    documentCategory: metadata.documentCategory || fallback.documentCategory,
+    ignoreInstrumentalMusic: metadata.ignoreInstrumentalMusic || fallback.ignoreInstrumentalMusic,
+    subjects,
+    topics,
+    academicYears,
+    terms,
+    assessments,
+    documentTypes,
+    teacherNames,
+    skills,
+    tags,
+    metadataConfidence: metadata.metadataConfidence ?? fallback.metadataConfidence ?? 'Low',
+    metadataSource: 'AI generated',
+    shouldAffectAcademicPerformance: metadata.shouldAffectAcademicPerformance ?? fallback.shouldAffectAcademicPerformance,
+    extractedFacts: uniqueStrings(metadata.extractedFacts ?? fallback.extractedFacts ?? []),
+    inferredMetadata: uniqueStrings(metadata.inferredMetadata ?? fallback.inferredMetadata ?? []),
+  };
+
+  return {
+    ...base,
+    collections: uniqueStrings([
+      ...base.collections,
+      base.documentCategory,
+      base.term,
+      base.academicYear,
+      base.linkedAssessmentName,
+      ...subjects,
+      ...documentTypes,
+    ]).slice(0, 12),
+  };
+}
+
+function applyAnalysedDocument(document: ResearchDocument, analysis?: DocumentMetadataAnalysisResponse) {
+  const fallback = getDocumentMetadata(document);
+  const metadata = metadataFromDocumentAnalysis(document, fallback, analysis);
+  return {
+    ...document,
+    summary: buildEvidenceAwareSummary({
+      title: document.title,
+      text: document.extractedText ?? '',
+      metadata,
+      analysis,
+    }),
+    tags: metadata.tags.length ? metadata.tags : document.tags,
+    metadata,
+    collectionIds: metadata.collections.map(collectionIdFromName),
   };
 }
 
@@ -1170,6 +1294,7 @@ function PerformancePage({
             <p className="text-sm font-semibold text-graphite/62">{selectedSubject}</p>
             <h3 className="mt-2 font-serif text-3xl font-semibold leading-tight text-ink">{learningSummary.headline}</h3>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/76">{learningSummary.body}</p>
+            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Summary source: {learningSummary.source}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             <InsightBadge label="Confidence" value={learningSummary.confidence} />
@@ -1226,6 +1351,11 @@ function PerformancePage({
           </div>
         </div>
         <AssessmentBreakdown records={breakdownRecords} mode={selectedBreakdown} />
+        <div className="mt-7 grid gap-6 xl:grid-cols-3">
+          <TermComparisonChart records={filteredRecords} />
+          <ReportExamComparisonChart records={filteredRecords} />
+          <EvidenceFrequencyChart records={filteredRecords} />
+        </div>
       </section>
 
       <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
@@ -1241,6 +1371,7 @@ function PerformancePage({
           </div>
         </div>
         <TrendChart records={sortedRecords} showTeacherConfidence={showTeacherConfidence} showAiConfidence={showAiConfidence} showMovingAverage={showMovingAverage} />
+        <SubjectDistributionChart documents={documents} records={filteredRecords} selectedSubject={selectedSubject} />
       </section>
 
       <section className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
@@ -1547,7 +1678,7 @@ function buildLearningSummary(records: PerformanceRecord[], subject: string, lat
           comments ? `${comments} teacher comment${comments === 1 ? '' : 's'} support this summary.` : 'Add report comments to make this more teacher-led.',
         ].join(' ');
 
-  return { headline, body, confidence, direction };
+  return { headline, body, confidence, direction, source: latestSummary?.overallCommentary && subject === 'All Subjects' ? 'AI-generated saved performance advice' : 'Local fallback from filtered records and teacher evidence' };
 }
 
 function buildTeacherInsights(records: PerformanceRecord[]) {
@@ -1769,6 +1900,9 @@ function TrendChart({
             <TrendCallout label="Largest improvement" change={largestImprovement} />
             <TrendCallout label="Largest decline" change={largestDecline} />
           </div>
+          <p className="mt-4 text-xs leading-5 text-graphite/65">
+            This chart plots actual assessment dates against percentage results. Larger rings indicate teacher-comment evidence or extracted AI evidence; the dashed line is a short moving average.
+          </p>
         </>
       ) : (
         <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Add at least two marked records in this subject and period to see a dated trend.</p>
@@ -1809,6 +1943,7 @@ function AssessmentBreakdown({ records, mode = 'Overall' }: { records: Performan
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{mode}</p>
         <p className="mt-2 text-3xl font-semibold text-ink">{average !== undefined ? `${average}%` : '-'}</p>
         <p className="mt-2 text-sm leading-6 text-graphite/70">{points.length} marked record{points.length === 1 ? '' : 's'} in this breakdown.</p>
+        <p className="mt-3 text-xs leading-5 text-graphite/60">This shows marked outcomes in the selected assessment type, not a generic count of saved records.</p>
       </div>
       <div className="space-y-3">
         {points.length ? (
@@ -1827,6 +1962,110 @@ function AssessmentBreakdown({ records, mode = 'Overall' }: { records: Performan
           <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">No records match this breakdown yet.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function TermComparisonChart({ records }: { records: PerformanceRecord[] }) {
+  const termRows = ['Michaelmas', 'Lent', 'Summer', 'Other'].map((term) => {
+    const points = records
+      .filter((record) => (record.term ?? 'Other').toLowerCase().includes(term.toLowerCase()) || (!record.term && term === 'Other'))
+      .map(getRecordPercentage)
+      .filter((value): value is number => typeof value === 'number');
+    return {
+      label: term,
+      value: points.length ? Math.round(points.reduce((total, point) => total + point, 0) / points.length) : undefined,
+      count: points.length,
+    };
+  });
+  return <MiniBarChart title="Comparison between terms" axisLabel="Average percentage" rows={termRows} empty="Add dated marks across terms to compare progress." explanation="Use this to see whether results are improving from term to term, rather than judging one isolated assessment." />;
+}
+
+function ReportExamComparisonChart({ records }: { records: PerformanceRecord[] }) {
+  const rows = [
+    { label: 'Reports', types: ['report'] },
+    { label: 'Mocks', types: ['mock'] },
+    { label: 'Exams', types: ['exam'] },
+    { label: 'Coursework', types: ['coursework'] },
+  ].map((group) => {
+    const points = records
+      .filter((record) => group.types.includes(record.assessmentType))
+      .map(getRecordPercentage)
+      .filter((value): value is number => typeof value === 'number');
+    return {
+      label: group.label,
+      value: points.length ? Math.round(points.reduce((total, point) => total + point, 0) / points.length) : undefined,
+      count: points.length,
+    };
+  });
+  return <MiniBarChart title="Report vs exam performance" axisLabel="Average percentage" rows={rows} empty="Add report and exam marks to compare feedback with measured outcomes." explanation="This separates teacher-report evidence from formal assessment results so the chart has a clear meaning." />;
+}
+
+function EvidenceFrequencyChart({ records }: { records: PerformanceRecord[] }) {
+  const rows = [
+    ...topEvidenceTerms(records, 'strengths').slice(0, 3).map((item) => ({ label: `Strength: ${item.term}`, value: item.records.length, count: item.records.length })),
+    ...topEvidenceTerms(records, 'weaknesses').slice(0, 3).map((item) => ({ label: `Need: ${item.term}`, value: item.records.length, count: item.records.length })),
+  ];
+  return <MiniBarChart title="Strengths/weaknesses frequency" axisLabel="Mentions in evidence" rows={rows} empty="Extracted strengths and weaknesses will appear after reports or feedback are analysed." explanation="Repeated themes carry more weight than one-off comments; this chart counts evidence mentions." />;
+}
+
+function SubjectDistributionChart({ documents, records, selectedSubject }: { documents: ResearchDocument[]; records: PerformanceRecord[]; selectedSubject: string }) {
+  const counts = new Map<string, number>();
+  documents.forEach((document) => {
+    const metadata = getDocumentMetadata(document, records);
+    metadata.subjects.forEach((subject) => counts.set(subject, (counts.get(subject) ?? 0) + 1));
+  });
+  const rows = [...counts.entries()]
+    .filter(([subject]) => selectedSubject === 'All Subjects' || subject === selectedSubject)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 6)
+    .map(([label, value]) => ({ label, value, count: value }));
+
+  return (
+    <div className="mt-7">
+      <MiniBarChart title="Subject distribution from uploaded sources" axisLabel="Ready source count" rows={rows} empty="Upload sources with subject metadata to see coverage by subject." explanation="This indicates the evidence base behind summaries and Tutor recommendations, not student attainment." />
+    </div>
+  );
+}
+
+function MiniBarChart({
+  title,
+  axisLabel,
+  rows,
+  empty,
+  explanation,
+}: {
+  title: string;
+  axisLabel: string;
+  rows: Array<{ label: string; value?: number; count: number }>;
+  empty: string;
+  explanation: string;
+}) {
+  const visibleRows = rows.filter((row) => typeof row.value === 'number' && row.value > 0);
+  const max = Math.max(1, ...visibleRows.map((row) => row.value ?? 0));
+
+  return (
+    <div className="rounded-lg border border-ink/8 bg-paper/50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{title}</p>
+      <p className="mt-2 text-xs font-semibold text-graphite/65">Axis: {axisLabel}</p>
+      {visibleRows.length ? (
+        <div className="mt-4 space-y-3">
+          {visibleRows.map((row) => (
+            <div key={row.label}>
+              <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                <span className="line-clamp-1 font-semibold text-ink">{row.label}</span>
+                <span className="shrink-0 text-graphite/70">{row.value}</span>
+              </div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-white">
+                <div className="h-full rounded-full bg-brass" style={{ width: `${Math.max(8, ((row.value ?? 0) / max) * 100)}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-lg bg-white p-3 text-sm leading-6 text-graphite/70">{empty}</p>
+      )}
+      <p className="mt-4 text-xs leading-5 text-graphite/65">{explanation}</p>
     </div>
   );
 }
@@ -2012,6 +2251,21 @@ function Upload({
     };
   }
 
+  async function analyseDocumentMetadataIfPossible(document: ResearchDocument) {
+    if (!document.extractedText?.trim()) return undefined;
+
+    try {
+      return await analyseDocumentMetadata({
+        title: document.title,
+        text: document.extractedText,
+        uploadMetadata: buildUploadMetadata(metadataDraft),
+      });
+    } catch (error) {
+      logUploadError('Document metadata analysis failed; using local fallback metadata.', error);
+      return undefined;
+    }
+  }
+
   function updateUploadMetadata<K extends keyof UploadMetadataDraft>(field: K, value: UploadMetadataDraft[K]) {
     setMetadataDraft((current) => ({ ...current, [field]: value }));
   }
@@ -2115,7 +2369,7 @@ function Upload({
     }
   }
 
-  async function analyseUploadedPerformanceIfRelevant(document: ResearchDocument) {
+  async function analyseUploadedPerformanceIfRelevant(document: ResearchDocument, metadataAnalysis?: DocumentMetadataAnalysisResponse) {
     const metadata = getDocumentMetadata(document, performanceRecords);
     const category = metadata.documentCategory ?? '';
     const canAffectProgress = ['Report', 'Exam result', 'Mark sheet'].includes(category);
@@ -2127,12 +2381,14 @@ function Upload({
     }
 
     try {
-      const response = await analysePerformanceDocument({ title: document.title, text: document.extractedText });
+      const response = metadataAnalysis?.performanceRecords?.length
+        ? { records: metadataAnalysis.performanceRecords, message: metadataAnalysis.message }
+        : await analysePerformanceDocument({ title: document.title, text: document.extractedText });
       const newRecords = response.records
         .map((record) => createRecordFromAnalysis(record, document.id, document.title, metadata))
         .filter((record): record is PerformanceRecord => Boolean(record))
         .map((record) =>
-          metadata.ignoreInstrumentalMusic && (record.domain !== 'academic' || isMusicOrPerformanceSubject(record.subject))
+          record.excludeFromAcademicAnalysis || (metadata.ignoreInstrumentalMusic && (record.domain !== 'academic' || isMusicOrPerformanceSubject(record.subject)))
             ? { ...record, domain: record.domain ?? 'music', excludeFromAcademicAnalysis: true }
             : record,
         );
@@ -2226,7 +2482,7 @@ function Upload({
       }
 
       const tags = extractTopics(extracted.text);
-      const readyDocument: ResearchDocument = enrichDocument({
+      let readyDocument: ResearchDocument = enrichDocument({
         ...processingDocument,
         status: 'Ready',
         tags: tags.length ? tags : ['pdf upload'],
@@ -2236,13 +2492,15 @@ function Upload({
         wordCount: extracted.wordCount,
         chunkIds: chunks.map((chunk) => chunk.id),
       });
+      const metadataAnalysis = await analyseDocumentMetadataIfPossible(readyDocument);
+      readyDocument = applyAnalysedDocument(readyDocument, metadataAnalysis);
 
       setState((current) => withDerivedCollections({
         ...current,
         documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
       }));
-      const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument);
+      const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument, metadataAnalysis);
       const readyMessage = `${cleanName} is ready with ${extracted.pages.length.toLocaleString()} pages, ${extracted.wordCount.toLocaleString()} words, and ${chunks.length} chunks.${performanceCount ? ` ${performanceCount} academic performance record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
       setNote(readyMessage);
       resetUploadFields();
@@ -2333,7 +2591,7 @@ function Upload({
       }
 
       const tags = extractTopics(extracted.text);
-      const readyDocument: ResearchDocument = enrichDocument({
+      let readyDocument: ResearchDocument = enrichDocument({
         ...processingDocument,
         status: 'Ready',
         tags: tags.length ? tags : ['docx upload'],
@@ -2342,13 +2600,15 @@ function Upload({
         wordCount: extracted.wordCount,
         chunkIds: chunks.map((chunk) => chunk.id),
       });
+      const metadataAnalysis = await analyseDocumentMetadataIfPossible(readyDocument);
+      readyDocument = applyAnalysedDocument(readyDocument, metadataAnalysis);
 
       setState((current) => withDerivedCollections({
         ...current,
         documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
         chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
       }));
-      const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument);
+      const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument, metadataAnalysis);
       const readyMessage = `${cleanName} is ready with ${extracted.wordCount.toLocaleString()} words and ${chunks.length} chunks.${performanceCount ? ` ${performanceCount} academic performance record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
       setNote(readyMessage);
       resetUploadFields();
@@ -2407,7 +2667,7 @@ function Upload({
 
         const tags = extractTopics(extractedText);
 
-        const newDocument: ResearchDocument = enrichDocument({
+        let newDocument: ResearchDocument = enrichDocument({
           id: documentId,
           title,
           type,
@@ -2422,13 +2682,15 @@ function Upload({
           wordCount,
           chunkIds: chunks.map((chunk) => chunk.id),
         });
+        const metadataAnalysis = await analyseDocumentMetadataIfPossible(newDocument);
+        newDocument = applyAnalysedDocument(newDocument, metadataAnalysis);
 
         setState((current) => withDerivedCollections({
           ...current,
           documents: [newDocument, ...current.documents],
           chunks: [...chunks, ...current.chunks],
         }));
-        const performanceCount = await analyseUploadedPerformanceIfRelevant(newDocument);
+        const performanceCount = await analyseUploadedPerformanceIfRelevant(newDocument, metadataAnalysis);
         const readyMessage = `${cleanName} was read locally, saved with ${wordCount.toLocaleString()} words, and split into ${chunks.length} chunks.${performanceCount ? ` ${performanceCount} academic performance record${performanceCount === 1 ? '' : 's'} added.` : ''}`;
         setNote(readyMessage);
         await queueEmbeddings(newDocument, chunks, readyMessage);
