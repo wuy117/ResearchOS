@@ -365,7 +365,7 @@ function Dashboard({
           <SectionHeader eyebrow="Performance" title="Progress overview" />
           <div className="rounded-lg bg-white p-5 shadow-sm">
             <div className="space-y-4">
-              <TrendChart records={academicPerformanceRecords} />
+              <TrendChart records={academicPerformanceRecords} documents={documents} selectedSubject="All Subjects" />
               {weakTopics.length ? <TagList label="Priority themes" items={weakTopics} /> : null}
             </div>
           </div>
@@ -820,7 +820,7 @@ function getAcademicPerformanceRecords(records: PerformanceRecord[]) {
 
 function getSubjectGroups(records: PerformanceRecord[]) {
   return [...records]
-    .sort((a, b) => a.date.localeCompare(b.date))
+    .sort((a, b) => parseDateValue(a.date) - parseDateValue(b.date))
     .reduce<Record<string, PerformanceRecord[]>>((groups, record) => {
       const subject = record.subject.trim() || 'Unspecified subject';
       groups[subject] = [...(groups[subject] ?? []), record];
@@ -1191,7 +1191,7 @@ function PerformancePage({
     [availableRecords, customEnd, customStart, selectedPeriod, selectedSubject],
   );
   const breakdownRecords = useMemo(() => filterBreakdownRecords(filteredRecords, selectedBreakdown), [filteredRecords, selectedBreakdown]);
-  const sortedRecords = useMemo(() => [...filteredRecords].sort((a, b) => a.date.localeCompare(b.date)), [filteredRecords]);
+  const sortedRecords = useMemo(() => sortRecordsByAssessmentDate(filteredRecords), [filteredRecords]);
   const selectedTimelineRecord = sortedRecords.find((record) => record.id === selectedTimelineRecordId) ?? sortedRecords[sortedRecords.length - 1];
   const learningSummary = useMemo(() => buildLearningSummary(filteredRecords, selectedSubject, summaries[0]), [filteredRecords, selectedSubject, summaries]);
   const teacherInsights = useMemo(() => buildTeacherInsights(filteredRecords), [filteredRecords]);
@@ -1541,7 +1541,7 @@ function PerformancePage({
             <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showMovingAverage} onChange={(event) => setShowMovingAverage(event.target.checked)} /> Moving average</label>
           </div>
         </div>
-        <TrendChart records={sortedRecords} showTeacherConfidence={showTeacherConfidence} showAiConfidence={showAiConfidence} showMovingAverage={showMovingAverage} />
+        <TrendChart records={sortedRecords} documents={documents} selectedSubject={selectedSubject} showTeacherConfidence={showTeacherConfidence} showAiConfidence={showAiConfidence} showMovingAverage={showMovingAverage} />
         <SubjectDistributionChart documents={documents} records={filteredRecords} selectedSubject={selectedSubject} />
       </section>
 
@@ -1747,9 +1747,150 @@ type PerformanceBreakdown = 'Reports' | 'Mocks' | 'Exams' | 'Coursework' | 'Home
 const progressPeriods: ProgressPeriod[] = ['This Term', 'This Academic Year', 'Last Academic Year', 'All Time', 'Custom Range'];
 const performanceBreakdowns: PerformanceBreakdown[] = ['Reports', 'Mocks', 'Exams', 'Coursework', 'Homework', 'Overall'];
 
+type TrendPoint = {
+  subject: string;
+  date: string;
+  time: number;
+  percentage: number;
+  records: PerformanceRecord[];
+};
+
+type TrendChange = {
+  subject: string;
+  from: TrendPoint;
+  to: TrendPoint;
+  delta: number;
+};
+
+type ReportSnapshot = {
+  key: string;
+  title: string;
+  date: string;
+  time: number;
+  records: PerformanceRecord[];
+};
+
+function parseAssessmentDateParts(date: string) {
+  const value = date.trim();
+  const isoMatch = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    return { year: Number(isoMatch[1]), month: Number(isoMatch[2]), day: Number(isoMatch[3]) };
+  }
+
+  const ukMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (ukMatch) {
+    const year = Number(ukMatch[3].length === 2 ? `20${ukMatch[3]}` : ukMatch[3]);
+    return { year, month: Number(ukMatch[2]), day: Number(ukMatch[1]) };
+  }
+
+  return undefined;
+}
+
 function parseDateValue(date: string) {
+  const parts = parseAssessmentDateParts(date);
+  if (parts && parts.month >= 1 && parts.month <= 12 && parts.day >= 1 && parts.day <= 31) {
+    const time = Date.UTC(parts.year, parts.month - 1, parts.day);
+    return Number.isFinite(time) ? time : 0;
+  }
+
   const time = new Date(date).getTime();
   return Number.isFinite(time) ? time : 0;
+}
+
+function getAssessmentDateKey(date: string) {
+  const parts = parseAssessmentDateParts(date);
+  if (!parts) return date.trim() || 'undated';
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+}
+
+function formatDisplayDate(date: string, options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }) {
+  const time = parseDateValue(date);
+  if (!time) return date || 'Undated';
+  return new Intl.DateTimeFormat('en-GB', options).format(new Date(time));
+}
+
+function sortRecordsByAssessmentDate(records: PerformanceRecord[]) {
+  return [...records].sort((a, b) => parseDateValue(a.date) - parseDateValue(b.date) || a.subject.localeCompare(b.subject) || a.title.localeCompare(b.title));
+}
+
+function getReportSnapshotKey(record: PerformanceRecord) {
+  return [record.sourceDocumentId || record.title, getAssessmentDateKey(record.date)].join('|');
+}
+
+function getReportSnapshots(records: PerformanceRecord[]) {
+  const snapshots = new Map<string, ReportSnapshot>();
+
+  records.forEach((record) => {
+    const key = getReportSnapshotKey(record);
+    const existing = snapshots.get(key);
+    if (existing) {
+      existing.records.push(record);
+      return;
+    }
+
+    snapshots.set(key, {
+      key,
+      title: record.title || 'Assessment report',
+      date: record.date,
+      time: parseDateValue(record.date),
+      records: [record],
+    });
+  });
+
+  return [...snapshots.values()].sort((a, b) => a.time - b.time || a.title.localeCompare(b.title));
+}
+
+function getSubjectTrendSeries(records: PerformanceRecord[]) {
+  const bySubjectDate = new Map<string, TrendPoint>();
+
+  records.forEach((record) => {
+    const percentage = getRecordPercentage(record);
+    if (percentage === undefined) return;
+
+    const subject = record.subject.trim() || 'Unspecified subject';
+    const dateKey = getAssessmentDateKey(record.date);
+    const key = `${subject.toLowerCase()}|${dateKey}`;
+    const existing = bySubjectDate.get(key);
+    if (existing) {
+      existing.records.push(record);
+      existing.percentage = Math.round(existing.records.reduce((total, item) => total + (getRecordPercentage(item) ?? 0), 0) / existing.records.length);
+      return;
+    }
+
+    bySubjectDate.set(key, {
+      subject,
+      date: record.date,
+      time: parseDateValue(record.date),
+      percentage,
+      records: [record],
+    });
+  });
+
+  const bySubject = [...bySubjectDate.values()].reduce<Record<string, TrendPoint[]>>((groups, point) => {
+    groups[point.subject] = [...(groups[point.subject] ?? []), point];
+    return groups;
+  }, {});
+
+  Object.keys(bySubject).forEach((subject) => {
+    bySubject[subject] = bySubject[subject].sort((a, b) => a.time - b.time);
+  });
+
+  return bySubject;
+}
+
+function getTrendEligibleSeries(records: PerformanceRecord[]) {
+  return Object.fromEntries(Object.entries(getSubjectTrendSeries(records)).filter(([, points]) => new Set(points.map((point) => getAssessmentDateKey(point.date))).size >= 2));
+}
+
+function getTrendChanges(records: PerformanceRecord[]) {
+  return Object.entries(getTrendEligibleSeries(records)).flatMap(([subject, points]) =>
+    points.slice(1).map((point, index) => ({
+      subject,
+      from: points[index],
+      to: point,
+      delta: point.percentage - points[index].percentage,
+    })),
+  );
 }
 
 function getCurrentAcademicYear(date = new Date()) {
@@ -1779,8 +1920,8 @@ function filterProgressRecords(records: PerformanceRecord[], subject: string, pe
 
   return subjectFiltered.filter((record) => {
     if (period === 'All Time') return true;
-    if (period === 'This Academic Year') return record.academicYear === currentAcademicYear || getCurrentAcademicYear(new Date(record.date)) === currentAcademicYear;
-    if (period === 'Last Academic Year') return record.academicYear === previousAcademicYear || getCurrentAcademicYear(new Date(record.date)) === previousAcademicYear;
+    if (period === 'This Academic Year') return record.academicYear === currentAcademicYear || getCurrentAcademicYear(new Date(parseDateValue(record.date))) === currentAcademicYear;
+    if (period === 'Last Academic Year') return record.academicYear === previousAcademicYear || getCurrentAcademicYear(new Date(parseDateValue(record.date))) === previousAcademicYear;
     if (period === 'This Term') return record.term?.toLowerCase() === currentTerm;
     if (period === 'Custom Range') {
       const time = parseDateValue(record.date);
@@ -1803,9 +1944,14 @@ function filterBreakdownRecords(records: PerformanceRecord[], breakdown: Perform
 }
 
 function getTrendDelta(records: PerformanceRecord[]) {
-  const points = records.map(getRecordPercentage).filter((value): value is number => typeof value === 'number');
-  if (points.length < 2) return undefined;
-  return points[points.length - 1] - points[0];
+  const changes = getTrendChanges(records);
+  if (changes.length === 0) return undefined;
+  const pointsBySubject = getTrendEligibleSeries(records);
+  const subjectDeltas = Object.values(pointsBySubject)
+    .map((points) => points[points.length - 1].percentage - points[0].percentage)
+    .filter((delta) => Number.isFinite(delta));
+  if (subjectDeltas.length === 0) return undefined;
+  return Math.round(subjectDeltas.reduce((total, delta) => total + delta, 0) / subjectDeltas.length);
 }
 
 function normalizeEvidenceTerm(value: string) {
@@ -1947,28 +2093,37 @@ function InsightBadge({ label, value }: { label: string; value: string }) {
 }
 
 function ProgressTimeline({ records, selectedId, onSelect }: { records: PerformanceRecord[]; selectedId?: string; onSelect: (id: string) => void }) {
-  const points = records.map((record) => ({ record, percentage: getRecordPercentage(record) }));
+  const snapshots = getReportSnapshots(records);
 
-  return points.length ? (
+  return snapshots.length ? (
     <div className="mt-6">
       <div className="mb-3 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
         <span>Assessment date</span>
         <span>Percentage / grade</span>
       </div>
       <div className="relative space-y-4 border-l border-ink/12 pl-5">
-        {points.map(({ record, percentage }) => (
-          <button key={record.id} type="button" onClick={() => onSelect(record.id)} className={`block w-full rounded-lg border p-4 text-left transition ${selectedId === record.id ? 'border-ink/30 bg-paper' : 'border-ink/8 bg-white hover:border-ink/18'}`}>
+        {snapshots.map((snapshot) => {
+          const selected = snapshot.records.some((record) => record.id === selectedId);
+          const percentages = snapshot.records.map(getRecordPercentage).filter((value): value is number => typeof value === 'number');
+          const average = percentages.length ? Math.round(percentages.reduce((total, percentage) => total + percentage, 0) / percentages.length) : undefined;
+          const subjects = uniqueStrings(snapshot.records.map((record) => record.subject)).slice(0, 5);
+          const comment = snapshot.records.find((record) => record.teacherComment)?.teacherComment;
+
+          return (
+          <button key={snapshot.key} type="button" onClick={() => onSelect(snapshot.records[0].id)} className={`block w-full rounded-lg border p-4 text-left transition ${selected ? 'border-ink/30 bg-paper' : 'border-ink/8 bg-white hover:border-ink/18'}`}>
             <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full bg-moss ring-4 ring-white" />
             <span className="flex flex-wrap items-start justify-between gap-3">
               <span>
-                <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{record.date || 'Undated'} / {record.assessmentType}</span>
-                <span className="mt-1 block font-semibold text-ink">{record.title}</span>
-                {record.teacherComment ? <span className="mt-2 block line-clamp-2 text-sm leading-6 text-graphite/70">{record.teacherComment}</span> : null}
+                <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{formatDisplayDate(snapshot.date)} / {snapshot.records.length} record{snapshot.records.length === 1 ? '' : 's'}</span>
+                <span className="mt-1 block font-semibold text-ink">{snapshot.title}</span>
+                <span className="mt-1 block text-sm leading-6 text-graphite/65">{subjects.join(', ')}</span>
+                {comment ? <span className="mt-2 block line-clamp-2 text-sm leading-6 text-graphite/70">{comment}</span> : null}
               </span>
-              <span className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-ink shadow-sm">{[percentage !== undefined ? `${percentage}%` : undefined, record.grade].filter(Boolean).join(' / ') || 'No mark'}</span>
+              <span className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-ink shadow-sm">{average !== undefined ? `${average}% avg` : 'No mark'}</span>
             </span>
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   ) : (
@@ -1982,7 +2137,7 @@ function TimelineDetail({ record, documents }: { record: PerformanceRecord; docu
     <div className="mt-4 space-y-4">
       <div>
         <h3 className="text-xl font-semibold text-ink">{record.title}</h3>
-        <p className="mt-1 text-sm text-graphite/70">{[record.date, record.subject, record.academicYear, record.term].filter(Boolean).join(' / ')}</p>
+        <p className="mt-1 text-sm text-graphite/70">{[formatDisplayDate(record.date), record.subject, record.academicYear, record.term].filter(Boolean).join(' / ')}</p>
       </div>
       <p className="rounded-lg bg-paper/70 p-3 text-sm font-semibold text-ink">{formatResult(record)}</p>
       {record.teacherComment ? <p className="text-sm leading-7 text-graphite/74">{record.teacherComment}</p> : null}
@@ -2032,42 +2187,45 @@ function EvidencePanel({ title, icon: Icon, items, empty }: { title: string; ico
 
 function TrendChart({
   records,
+  documents,
+  selectedSubject,
   showTeacherConfidence,
   showAiConfidence,
   showMovingAverage,
 }: {
   records: PerformanceRecord[];
+  documents: ResearchDocument[];
+  selectedSubject: string;
   showTeacherConfidence?: boolean;
   showAiConfidence?: boolean;
   showMovingAverage?: boolean;
 }) {
-  const points = [...records]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((record) => ({ record, date: record.date, percentage: getRecordPercentage(record) }))
-    .filter((point): point is { record: PerformanceRecord; date: string; percentage: number } => typeof point.percentage === 'number');
+  const snapshots = getReportSnapshots(records);
+  const trendSeries = getTrendEligibleSeries(records);
+  const seriesEntries = Object.entries(trendSeries);
+  const allPoints = seriesEntries.flatMap(([, points]) => points);
   const width = 760;
   const height = 260;
   const pad = { top: 20, right: 24, bottom: 54, left: 54 };
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
-  const xFor = (index: number) => pad.left + (points.length === 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth);
+  const minTime = Math.min(...allPoints.map((point) => point.time));
+  const maxTime = Math.max(...allPoints.map((point) => point.time));
+  const xForTime = (time: number) => pad.left + (minTime === maxTime ? plotWidth / 2 : ((time - minTime) / (maxTime - minTime)) * plotWidth);
   const yFor = (percentage: number) => pad.top + plotHeight - (Math.min(100, Math.max(0, percentage)) / 100) * plotHeight;
-  const line = points.map((point, index) => `${xFor(index)},${yFor(point.percentage)}`).join(' ');
-  const movingAverage = points
-    .map((point, index) => {
-      const window = points.slice(Math.max(0, index - 2), index + 1);
-      const average = Math.round(window.reduce((total, item) => total + item.percentage, 0) / window.length);
-      return `${xFor(index)},${yFor(average)}`;
-    })
-    .join(' ');
-  const changes = points.slice(1).map((point, index) => ({ from: points[index], to: point, delta: point.percentage - points[index].percentage }));
-  const largestImprovement = [...changes].sort((a, b) => b.delta - a.delta)[0];
-  const largestDecline = [...changes].sort((a, b) => a.delta - b.delta)[0];
+  const colors = ['rgb(31 41 51)', 'rgb(111 123 92)', 'rgb(183 142 74)', 'rgb(83 102 122)', 'rgb(133 92 78)', 'rgb(92 116 132)'];
+  const changes = getTrendChanges(records);
+  const largestImprovement = [...changes].filter((change) => change.delta > 0).sort((a, b) => b.delta - a.delta)[0];
+  const largestDecline = [...changes].filter((change) => change.delta < 0).sort((a, b) => a.delta - b.delta)[0];
+  const singleSnapshot = snapshots.length === 1 ? snapshots[0] : undefined;
+  const singleSnapshotSource = singleSnapshot?.records[0]?.sourceDocumentId ? documents.find((document) => document.id === singleSnapshot.records[0].sourceDocumentId)?.title : undefined;
+  const snapshotTitle = singleSnapshot ? `Snapshot from ${singleSnapshotSource || singleSnapshot.title}` : selectedSubject === 'All Subjects' ? 'Snapshot by subject' : `Snapshot for ${selectedSubject}`;
 
   return (
     <div className="mt-5">
-      {points.length > 1 ? (
+      {seriesEntries.length ? (
         <>
+          <p className="mb-4 text-sm font-semibold text-ink">Trend over time</p>
           <svg className="h-[320px] w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Progression over time by assessment date and percentage">
             {[0, 25, 50, 75, 100].map((tick) => (
               <g key={tick}>
@@ -2079,39 +2237,83 @@ function TrendChart({
             <line x1={pad.left} x2={width - pad.right} y1={height - pad.bottom} y2={height - pad.bottom} stroke="rgba(31,41,51,0.25)" />
             <text x={18} y={pad.top + plotHeight / 2} transform={`rotate(-90 18 ${pad.top + plotHeight / 2})`} className="fill-graphite text-[12px] font-semibold">Percentage</text>
             <text x={pad.left + plotWidth / 2} y={height - 10} textAnchor="middle" className="fill-graphite text-[12px] font-semibold">Assessment date</text>
-            {showTeacherConfidence ? points.map((point, index) => (point.record.teacherComment ? <circle key={`teacher-${point.record.id}`} cx={xFor(index)} cy={yFor(point.percentage)} r="12" fill="rgba(183,142,74,0.18)" /> : null)) : null}
-            {showAiConfidence ? points.map((point, index) => (point.record.strengths.length + point.record.weaknesses.length + point.record.actionPoints.length > 1 ? <circle key={`ai-${point.record.id}`} cx={xFor(index)} cy={yFor(point.percentage)} r="7" fill="rgba(111,123,92,0.22)" /> : null)) : null}
-            <polyline points={line} fill="none" stroke="rgb(31 41 51)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            {showMovingAverage ? <polyline points={movingAverage} fill="none" stroke="rgb(111 123 92)" strokeWidth="3" strokeDasharray="8 6" strokeLinecap="round" strokeLinejoin="round" /> : null}
-            {points.map((point, index) => (
-              <g key={point.record.id}>
-                <circle cx={xFor(index)} cy={yFor(point.percentage)} r="5" fill="rgb(31 41 51)" />
-                <text x={xFor(index)} y={height - pad.bottom + 20} textAnchor="middle" className="fill-graphite text-[10px]">{formatShortDate(point.date)}</text>
-              </g>
-            ))}
+            {seriesEntries.map(([subject, points], seriesIndex) => {
+              const color = colors[seriesIndex % colors.length];
+              const line = points.map((point) => `${xForTime(point.time)},${yFor(point.percentage)}`).join(' ');
+              const movingAverage = points
+                .map((point, index) => {
+                  const window = points.slice(Math.max(0, index - 2), index + 1);
+                  const average = Math.round(window.reduce((total, item) => total + item.percentage, 0) / window.length);
+                  return `${xForTime(point.time)},${yFor(average)}`;
+                })
+                .join(' ');
+
+              return (
+                <g key={subject}>
+                  <polyline points={line} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  {showMovingAverage ? <polyline points={movingAverage} fill="none" stroke={color} strokeWidth="2" strokeDasharray="8 6" strokeLinecap="round" strokeLinejoin="round" opacity="0.65" /> : null}
+                  {points.map((point) => (
+                    <g key={`${subject}-${point.date}`}>
+                      {showTeacherConfidence && point.records.some((record) => record.teacherComment) ? <circle cx={xForTime(point.time)} cy={yFor(point.percentage)} r="12" fill="rgba(183,142,74,0.18)" /> : null}
+                      {showAiConfidence && point.records.some((record) => record.strengths.length + record.weaknesses.length + record.actionPoints.length > 1) ? <circle cx={xForTime(point.time)} cy={yFor(point.percentage)} r="7" fill="rgba(111,123,92,0.22)" /> : null}
+                      <circle cx={xForTime(point.time)} cy={yFor(point.percentage)} r="5" fill={color} />
+                      <text x={xForTime(point.time)} y={height - pad.bottom + 20} textAnchor="middle" className="fill-graphite text-[10px]">{formatShortDate(point.date)}</text>
+                    </g>
+                  ))}
+                  <text x={xForTime(points[points.length - 1].time) + 8} y={yFor(points[points.length - 1].percentage) + 4} className="fill-graphite text-[10px] font-semibold">{subject}</text>
+                </g>
+              );
+            })}
           </svg>
           <div className="grid gap-3 md:grid-cols-2">
-            <TrendCallout label="Largest improvement" change={largestImprovement} />
-            <TrendCallout label="Largest decline" change={largestDecline} />
+            {largestImprovement || largestDecline ? (
+              <>
+                {largestImprovement ? <TrendCallout label="Largest improvement" change={largestImprovement} /> : <TrendDataNotice />}
+                {largestDecline ? <TrendCallout label="Largest decline" change={largestDecline} /> : <TrendDataNotice />}
+              </>
+            ) : (
+              <div className="md:col-span-2"><TrendDataNotice /></div>
+            )}
           </div>
           <p className="mt-4 text-xs leading-5 text-graphite/65">
-            This chart plots actual assessment dates against percentage results. Larger rings indicate teacher-comment evidence or extracted AI evidence; the dashed line is a short moving average.
+            This chart only connects records inside the same subject across different assessment dates. Larger rings indicate teacher-comment evidence or extracted AI evidence; the dashed line is a short moving average.
           </p>
         </>
+      ) : records.length ? (
+        <>
+          <p className="mb-4 text-sm font-semibold text-ink">{snapshotTitle}</p>
+          <SubjectSnapshotChart records={records} />
+          <div className="mt-4"><TrendDataNotice /></div>
+        </>
       ) : (
-        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Add at least two marked records in this subject and period to see a dated trend.</p>
+        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">No records match this subject and time period yet.</p>
       )}
     </div>
   );
 }
 
-function formatShortDate(date: string) {
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) return date || 'Undated';
-  return parsed.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+function SubjectSnapshotChart({ records }: { records: PerformanceRecord[] }) {
+  const bySubject = Object.entries(getSubjectTrendSeries(records)).map(([subject, points]) => {
+    const percentages = points.map((point) => point.percentage);
+    return {
+      label: subject,
+      value: percentages.length ? Math.round(percentages.reduce((total, percentage) => total + percentage, 0) / percentages.length) : undefined,
+      count: points.reduce((total, point) => total + point.records.length, 0),
+    };
+  });
+
+  return <MiniBarChart title="Report snapshot" axisLabel="Average percentage by subject" rows={bySubject} empty="Add marked subject records to see this report snapshot." explanation="Snapshot bars compare subjects inside the selected evidence. They are not connected as progress over time." />;
 }
 
-function TrendCallout({ label, change }: { label: string; change?: { from: { record: PerformanceRecord; percentage: number }; to: { record: PerformanceRecord; percentage: number }; delta: number } }) {
+function TrendDataNotice() {
+  return <p className="rounded-lg bg-paper/70 p-3 text-sm leading-6 text-graphite/70">Add another assessment for this subject to see progress over time.</p>;
+}
+
+function formatShortDate(date: string) {
+  return formatDisplayDate(date, { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
+function TrendCallout({ label, change }: { label: string; change?: TrendChange }) {
   if (!change) {
     return <p className="rounded-lg bg-paper/70 p-3 text-sm text-graphite/70">{label}: more data needed.</p>;
   }
@@ -2119,7 +2321,7 @@ function TrendCallout({ label, change }: { label: string; change?: { from: { rec
   return (
     <div className="rounded-lg bg-paper/70 p-3 text-sm">
       <p className="font-semibold text-ink">{label}: {change.delta > 0 ? '+' : ''}{Math.round(change.delta)} points</p>
-      <p className="mt-1 text-graphite/70">{change.from.record.title} to {change.to.record.title}</p>
+      <p className="mt-1 text-graphite/70">{change.subject}: {formatDisplayDate(change.from.date)} to {formatDisplayDate(change.to.date)}</p>
     </div>
   );
 }
@@ -2128,7 +2330,7 @@ function AssessmentBreakdown({ records, mode = 'Overall' }: { records: Performan
   const points = [...records]
     .map((record) => ({ record, percentage: getRecordPercentage(record) }))
     .filter((point): point is { record: PerformanceRecord; percentage: number } => typeof point.percentage === 'number')
-    .sort((a, b) => a.record.date.localeCompare(b.record.date));
+    .sort((a, b) => parseDateValue(a.record.date) - parseDateValue(b.record.date));
   const average = points.length ? Math.round(points.reduce((total, point) => total + point.percentage, 0) / points.length) : undefined;
 
   return (
