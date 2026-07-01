@@ -22,7 +22,7 @@ import {
   Target,
   UploadCloud,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
 import { AppShell } from './components/AppShell';
 import { AuthGate } from './components/AuthGate';
 import { CitationCard } from './components/CitationCard';
@@ -41,6 +41,42 @@ import { extractPdfText } from './utils/extractPdfText';
 import { buildDocumentMetadata, buildTimelineEvents, deriveCollections, getCollectionDocumentCount, getDocumentMetadata, type TimelineEvent } from './utils/learningModel';
 import { retrieveChunks, type RetrievedChunk } from './utils/retrieveChunks';
 
+class AuthenticatedAppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    if (import.meta.env.DEV) {
+      console.error('Authenticated Research OS crashed.', error, errorInfo);
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="grid min-h-screen place-items-center bg-ivory px-4 text-ink">
+          <section className="w-full max-w-lg rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Research OS needs a refresh</p>
+            <h1 className="mt-3 font-serif text-3xl font-semibold text-ink">Something went wrong after sign-in.</h1>
+            <p className="mt-4 text-sm leading-7 text-graphite/72">
+              Your data has not been cleared. Refresh the page to reload the workspace, or sign out and back in if the problem continues.
+            </p>
+            <button type="button" onClick={() => window.location.reload()} className="mt-6 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+              Refresh Research OS
+            </button>
+            {import.meta.env.DEV ? <pre className="mt-4 max-h-40 overflow-auto rounded-lg bg-paper p-3 text-xs text-graphite/75">{this.state.error.message}</pre> : null}
+          </section>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function App() {
   const auth = useAuth();
   const userId = auth.currentUser?.id ?? null;
@@ -51,6 +87,12 @@ function App() {
     setApiAccessTokenProvider(() => auth.session?.access_token);
     return () => setApiAccessTokenProvider(null);
   }, [auth.session?.access_token]);
+
+  const workspaceDocuments = useMemo(
+    () => state.documents.filter((document) => document.workspaceId === state.activeWorkspaceId),
+    [state.activeWorkspaceId, state.documents],
+  );
+  const activeWorkspaceName = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId)?.name ?? 'Research workspace';
 
   if (isSupabaseEnabled && (auth.authLoading || storageStatus === 'client-created')) {
     return (
@@ -63,12 +105,6 @@ function App() {
   if (isSupabaseEnabled && !auth.currentUser) {
     return <AuthGate authLoading={auth.authLoading} authError={auth.authError} onSignIn={auth.signIn} onSignUp={auth.signUp} />;
   }
-
-  const workspaceDocuments = useMemo(
-    () => state.documents.filter((document) => document.workspaceId === state.activeWorkspaceId),
-    [state.activeWorkspaceId, state.documents],
-  );
-  const activeWorkspaceName = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId)?.name ?? 'Research workspace';
 
   const page = {
     dashboard: <Dashboard state={state} documents={workspaceDocuments} setActivePage={setActivePage} />,
@@ -107,20 +143,22 @@ function App() {
   }
 
   return (
-    <AppShell
-      state={state}
-      activePage={activePage}
-      setActivePage={setActivePage}
-      setState={setState}
-      storageStatus={storageStatus}
-      user={auth.currentUser}
-      onSignOut={auth.signOut}
-      claimableLocalState={claimableLocalState}
-      onImportClaimableLocalData={importClaimableLocalData}
-      onDismissClaimableLocalData={dismissClaimableLocalState}
-    >
-      {page}
-    </AppShell>
+    <AuthenticatedAppErrorBoundary>
+      <AppShell
+        state={state}
+        activePage={activePage}
+        setActivePage={setActivePage}
+        setState={setState}
+        storageStatus={storageStatus}
+        user={auth.currentUser}
+        onSignOut={auth.signOut}
+        claimableLocalState={claimableLocalState}
+        onImportClaimableLocalData={importClaimableLocalData}
+        onDismissClaimableLocalData={dismissClaimableLocalState}
+      >
+        {page}
+      </AppShell>
+    </AuthenticatedAppErrorBoundary>
   );
 }
 
