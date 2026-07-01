@@ -18,7 +18,7 @@ import type {
 } from '../types/research';
 import { clearResearchState, loadResearchState, saveResearchState } from '../utils/storage';
 
-export type StorageStatus = 'missing-env' | 'client-created' | 'connection-failed' | 'connected';
+export type StorageStatus = 'missing-env' | 'auth-required' | 'client-created' | 'connection-failed' | 'connected';
 type StoredRow<T> = {
   local_id: string;
   data: T;
@@ -28,6 +28,7 @@ type StoredRow<T> = {
 
 type SupabasePayload<T extends { id: string }> = {
   local_id: string;
+  user_id?: string;
   data: T;
   updated_at: string;
   workspace_local_id?: string;
@@ -46,6 +47,10 @@ type SupabasePayload<T extends { id: string }> = {
 export type LoadStateResult = {
   state: ResearchState;
   status: StorageStatus;
+};
+
+type UserScopedOptions = {
+  userId?: string | null;
 };
 
 function getNow() {
@@ -121,20 +126,39 @@ function hasRemoteResearchData(rows: {
   );
 }
 
-async function selectData<T>(table: string): Promise<T[]> {
-  const client = getSupabaseClient();
-  if (!client) return [];
+function requireUserId(userId?: string | null) {
+  if (!userId) {
+    throw new Error('Sign in is required before Research OS can read or write Supabase data.');
+  }
 
-  const { data, error } = await client.from(table).select('local_id, data, created_at').order('created_at', { ascending: true });
-  if (error) throw error;
-
-  return ((data ?? []) as StoredRow<T>[]).map((row) => row.data);
+  return userId;
 }
 
-async function selectOptionalData<T>(table: string): Promise<T[]> {
+function withUserId<T>(item: T, userId: string): T {
+  return item && typeof item === 'object' ? { ...item, userId } : item;
+}
+
+function isSecurityOrPermissionError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes('row-level security') || message.includes('permission') || message.includes('policy') || message.includes('jwt') || message.includes('auth');
+}
+
+async function selectData<T>(table: string, userId?: string | null): Promise<T[]> {
+  const client = getSupabaseClient();
+  if (!client) return [];
+  const ownerId = requireUserId(userId);
+
+  const { data, error } = await client.from(table).select('local_id, data, created_at').eq('user_id', ownerId).order('created_at', { ascending: true });
+  if (error) throw error;
+
+  return ((data ?? []) as StoredRow<T>[]).map((row) => withUserId(row.data, ownerId));
+}
+
+async function selectOptionalData<T>(table: string, userId?: string | null): Promise<T[]> {
   try {
-    return await selectData<T>(table);
+    return await selectData<T>(table, userId);
   } catch (error) {
+    if (isSecurityOrPermissionError(error)) throw error;
     if (import.meta.env.DEV) {
       console.debug(`${table} is unavailable; continuing without optional Tutor data.`, error);
     }
@@ -143,86 +167,95 @@ async function selectOptionalData<T>(table: string): Promise<T[]> {
   }
 }
 
-async function upsertData<T extends { id: string }>(table: string, item: T) {
+async function upsertData<T extends { id: string }>(table: string, item: T, userId?: string | null) {
   const client = getSupabaseClient();
   if (!client) throw new Error('Supabase is not configured.');
+  const ownerId = requireUserId(userId);
 
   const now = getNow();
-  const { error } = await client.from(table).upsert(buildSupabasePayload(table, item, now), { onConflict: 'local_id' });
+  const { error } = await client.from(table).upsert(buildSupabasePayload(table, item, now, ownerId), { onConflict: 'user_id,local_id' });
 
   if (error) throw error;
 }
 
-async function upsertMany<T extends { id: string }>(table: string, items: T[]) {
+async function upsertMany<T extends { id: string }>(table: string, items: T[], userId?: string | null) {
   const client = getSupabaseClient();
   if (!client || items.length === 0) return;
+  const ownerId = requireUserId(userId);
 
   const now = getNow();
-  const { error } = await client.from(table).upsert(items.map((item) => buildSupabasePayload(table, item, now)), { onConflict: 'local_id' });
+  const { error } = await client.from(table).upsert(items.map((item) => buildSupabasePayload(table, item, now, ownerId)), { onConflict: 'user_id,local_id' });
 
   if (error) throw error;
 }
 
-async function upsertOptionalData<T extends { id: string }>(table: string, item: T) {
+async function upsertOptionalData<T extends { id: string }>(table: string, item: T, userId?: string | null) {
   try {
-    await upsertData(table, item);
+    await upsertData(table, item, userId);
   } catch (error) {
+    if (isSecurityOrPermissionError(error)) throw error;
     if (import.meta.env.DEV) {
       console.debug(`${table} was not saved; optional table may be missing.`, error);
     }
   }
 }
 
-async function upsertOptionalMany<T extends { id: string }>(table: string, items: T[]) {
+async function upsertOptionalMany<T extends { id: string }>(table: string, items: T[], userId?: string | null) {
   try {
-    await upsertMany(table, items);
+    await upsertMany(table, items, userId);
   } catch (error) {
+    if (isSecurityOrPermissionError(error)) throw error;
     if (import.meta.env.DEV) {
       console.debug(`${table} was not saved; optional table may be missing.`, error);
     }
   }
 }
 
-async function deleteDataByIds(table: string, ids: string[]) {
+async function deleteDataByIds(table: string, ids: string[], userId?: string | null) {
   const client = getSupabaseClient();
   if (!client || ids.length === 0) return;
+  const ownerId = requireUserId(userId);
 
-  const { error } = await client.from(table).delete().in('local_id', ids);
+  const { error } = await client.from(table).delete().eq('user_id', ownerId).in('local_id', ids);
   if (error) throw error;
 }
 
-async function deleteOptionalDataByIds(table: string, ids: string[]) {
+async function deleteOptionalDataByIds(table: string, ids: string[], userId?: string | null) {
   try {
-    await deleteDataByIds(table, ids);
+    await deleteDataByIds(table, ids, userId);
   } catch (error) {
+    if (isSecurityOrPermissionError(error)) throw error;
     if (import.meta.env.DEV) {
       console.debug(`${table} rows were not deleted; optional table may be missing.`, error);
     }
   }
 }
 
-async function clearTable(table: string) {
+async function clearTable(table: string, userId?: string | null) {
   const client = getSupabaseClient();
   if (!client) return;
+  const ownerId = requireUserId(userId);
 
-  const { error } = await client.from(table).delete().neq('local_id', '__never__');
+  const { error } = await client.from(table).delete().eq('user_id', ownerId).neq('local_id', '__never__');
   if (error) throw error;
 }
 
-async function clearOptionalTable(table: string) {
+async function clearOptionalTable(table: string, userId?: string | null) {
   try {
-    await clearTable(table);
+    await clearTable(table, userId);
   } catch (error) {
+    if (isSecurityOrPermissionError(error)) throw error;
     if (import.meta.env.DEV) {
       console.debug(`${table} was not cleared; optional table may be missing.`, error);
     }
   }
 }
 
-function buildSupabasePayload<T extends { id: string }>(table: string, item: T, updatedAt: string): SupabasePayload<T> {
+function buildSupabasePayload<T extends { id: string }>(table: string, item: T, updatedAt: string, userId: string): SupabasePayload<T> {
   const payload: SupabasePayload<T> = {
     local_id: item.id,
-    data: item,
+    user_id: userId,
+    data: withUserId(item, userId),
     updated_at: updatedAt,
   };
 
@@ -256,28 +289,32 @@ function buildSupabasePayload<T extends { id: string }>(table: string, item: T, 
   return payload;
 }
 
-export async function loadState(): Promise<LoadStateResult> {
+export async function loadState(options: UserScopedOptions = {}): Promise<LoadStateResult> {
   const localState = loadResearchState();
 
   if (!isSupabaseEnabled) {
     return { state: localState, status: 'missing-env' };
   }
 
+  if (!options.userId) {
+    return { state: initialState, status: 'auth-required' };
+  }
+
   try {
     const [workspaces, collections, documents, chunks, insights, chat, performanceRecords, performanceSummaries, tutorLessons, tutorAttempts, tutorSocraticTurns, tutorExamSessions, tutorMemory] = await Promise.all([
-      selectData<Workspace>('workspaces'),
-      selectOptionalData<Collection>('collections'),
-      selectData<ResearchDocument>('documents'),
-      selectData<DocumentChunk>('document_chunks'),
-      selectData<Insight>('insights'),
-      selectData<ChatMessage>('chat_messages'),
-      selectData<PerformanceRecord>('performance_records'),
-      selectData<PerformanceSummary>('performance_summaries'),
-      selectOptionalData<TutorLesson>('tutor_lessons'),
-      selectOptionalData<TutorAttempt>('tutor_attempts'),
-      selectOptionalData<TutorSocraticTurn>('tutor_socratic_turns'),
-      selectOptionalData<TutorExamSession>('tutor_exam_sessions'),
-      selectOptionalData<TutorMemory>('tutor_memory'),
+      selectData<Workspace>('workspaces', options.userId),
+      selectOptionalData<Collection>('collections', options.userId),
+      selectData<ResearchDocument>('documents', options.userId),
+      selectData<DocumentChunk>('document_chunks', options.userId),
+      selectData<Insight>('insights', options.userId),
+      selectData<ChatMessage>('chat_messages', options.userId),
+      selectData<PerformanceRecord>('performance_records', options.userId),
+      selectData<PerformanceSummary>('performance_summaries', options.userId),
+      selectOptionalData<TutorLesson>('tutor_lessons', options.userId),
+      selectOptionalData<TutorAttempt>('tutor_attempts', options.userId),
+      selectOptionalData<TutorSocraticTurn>('tutor_socratic_turns', options.userId),
+      selectOptionalData<TutorExamSession>('tutor_exam_sessions', options.userId),
+      selectOptionalData<TutorMemory>('tutor_memory', options.userId),
     ]);
 
     const rows = {
@@ -305,28 +342,32 @@ export async function loadState(): Promise<LoadStateResult> {
   }
 }
 
-export async function saveState(state: ResearchState): Promise<StorageStatus> {
+export async function saveState(state: ResearchState, options: UserScopedOptions = {}): Promise<StorageStatus> {
   saveResearchState(state);
 
   if (!isSupabaseEnabled) {
     return 'missing-env';
   }
 
+  if (!options.userId) {
+    return 'auth-required';
+  }
+
   try {
     await Promise.all([
-      upsertMany('workspaces', state.workspaces),
-      upsertOptionalMany('collections', state.collections),
-      upsertMany('documents', state.documents),
-      upsertMany('document_chunks', state.chunks),
-      upsertMany('insights', state.insights),
-      upsertMany('chat_messages', state.chat),
-      upsertMany('performance_records', state.performanceRecords),
-      upsertMany('performance_summaries', state.performanceSummaries),
-      upsertOptionalMany('tutor_lessons', state.tutorLessons),
-      upsertOptionalMany('tutor_attempts', state.tutorAttempts),
-      upsertOptionalMany('tutor_socratic_turns', state.tutorSocraticTurns),
-      upsertOptionalMany('tutor_exam_sessions', state.tutorExamSessions),
-      upsertOptionalData('tutor_memory', { id: 'tutor-memory', ...state.tutorMemory }),
+      upsertMany('workspaces', state.workspaces, options.userId),
+      upsertOptionalMany('collections', state.collections, options.userId),
+      upsertMany('documents', state.documents, options.userId),
+      upsertMany('document_chunks', state.chunks, options.userId),
+      upsertMany('insights', state.insights, options.userId),
+      upsertMany('chat_messages', state.chat, options.userId),
+      upsertMany('performance_records', state.performanceRecords, options.userId),
+      upsertMany('performance_summaries', state.performanceSummaries, options.userId),
+      upsertOptionalMany('tutor_lessons', state.tutorLessons, options.userId),
+      upsertOptionalMany('tutor_attempts', state.tutorAttempts, options.userId),
+      upsertOptionalMany('tutor_socratic_turns', state.tutorSocraticTurns, options.userId),
+      upsertOptionalMany('tutor_exam_sessions', state.tutorExamSessions, options.userId),
+      upsertOptionalData('tutor_memory', { id: 'tutor-memory', ...state.tutorMemory }, options.userId),
     ]);
 
     return 'connected';
@@ -336,9 +377,9 @@ export async function saveState(state: ResearchState): Promise<StorageStatus> {
   }
 }
 
-export async function saveWorkspace(workspace: Workspace) {
+export async function saveWorkspace(workspace: Workspace, options: UserScopedOptions = {}) {
   try {
-    await upsertData('workspaces', workspace);
+    await upsertData('workspaces', workspace, options.userId);
   } catch (error) {
     const state = loadResearchState();
     saveResearchState({
@@ -349,9 +390,9 @@ export async function saveWorkspace(workspace: Workspace) {
   }
 }
 
-export async function saveDocument(document: ResearchDocument) {
+export async function saveDocument(document: ResearchDocument, options: UserScopedOptions = {}) {
   try {
-    await upsertData('documents', document);
+    await upsertData('documents', document, options.userId);
   } catch (error) {
     const state = loadResearchState();
     saveResearchState({
@@ -362,9 +403,9 @@ export async function saveDocument(document: ResearchDocument) {
   }
 }
 
-export async function saveChunks(chunks: DocumentChunk[]) {
+export async function saveChunks(chunks: DocumentChunk[], options: UserScopedOptions = {}) {
   try {
-    await upsertMany('document_chunks', chunks);
+    await upsertMany('document_chunks', chunks, options.userId);
   } catch (error) {
     const state = loadResearchState();
     const chunkIds = new Set(chunks.map((chunk) => chunk.id));
@@ -376,9 +417,9 @@ export async function saveChunks(chunks: DocumentChunk[]) {
   }
 }
 
-export async function saveInsight(insight: Insight) {
+export async function saveInsight(insight: Insight, options: UserScopedOptions = {}) {
   try {
-    await upsertData('insights', insight);
+    await upsertData('insights', insight, options.userId);
   } catch (error) {
     const state = loadResearchState();
     saveResearchState({
@@ -389,9 +430,9 @@ export async function saveInsight(insight: Insight) {
   }
 }
 
-export async function saveChatMessage(message: ChatMessage) {
+export async function saveChatMessage(message: ChatMessage, options: UserScopedOptions = {}) {
   try {
-    await upsertData('chat_messages', message);
+    await upsertData('chat_messages', message, options.userId);
   } catch (error) {
     const state = loadResearchState();
     saveResearchState({
@@ -402,9 +443,9 @@ export async function saveChatMessage(message: ChatMessage) {
   }
 }
 
-export async function savePerformanceRecord(record: PerformanceRecord) {
+export async function savePerformanceRecord(record: PerformanceRecord, options: UserScopedOptions = {}) {
   try {
-    await upsertData('performance_records', record);
+    await upsertData('performance_records', record, options.userId);
   } catch (error) {
     const state = loadResearchState();
     saveResearchState({
@@ -415,9 +456,9 @@ export async function savePerformanceRecord(record: PerformanceRecord) {
   }
 }
 
-export async function savePerformanceSummary(summary: PerformanceSummary) {
+export async function savePerformanceSummary(summary: PerformanceSummary, options: UserScopedOptions = {}) {
   try {
-    await upsertData('performance_summaries', summary);
+    await upsertData('performance_summaries', summary, options.userId);
   } catch (error) {
     const state = loadResearchState();
     saveResearchState({
@@ -443,72 +484,74 @@ export async function deleteSupabaseRows(rows: Partial<Record<
   | 'tutor_exam_sessions'
   | 'tutor_memory',
   string[]
->>) {
+>>, options: UserScopedOptions = {}) {
   if (!isSupabaseEnabled) return;
+  const ownerId = requireUserId(options.userId);
 
   await Promise.all([
-    deleteDataByIds('workspaces', rows.workspaces ?? []),
-    deleteOptionalDataByIds('collections', rows.collections ?? []),
-    deleteDataByIds('documents', rows.documents ?? []),
-    deleteDataByIds('document_chunks', rows.document_chunks ?? []),
-    deleteDataByIds('insights', rows.insights ?? []),
-    deleteDataByIds('chat_messages', rows.chat_messages ?? []),
-    deleteDataByIds('performance_records', rows.performance_records ?? []),
-    deleteDataByIds('performance_summaries', rows.performance_summaries ?? []),
-    deleteOptionalDataByIds('tutor_lessons', rows.tutor_lessons ?? []),
-    deleteOptionalDataByIds('tutor_attempts', rows.tutor_attempts ?? []),
-    deleteOptionalDataByIds('tutor_socratic_turns', rows.tutor_socratic_turns ?? []),
-    deleteOptionalDataByIds('tutor_exam_sessions', rows.tutor_exam_sessions ?? []),
-    deleteOptionalDataByIds('tutor_memory', rows.tutor_memory ?? []),
+    deleteDataByIds('workspaces', rows.workspaces ?? [], ownerId),
+    deleteOptionalDataByIds('collections', rows.collections ?? [], ownerId),
+    deleteDataByIds('documents', rows.documents ?? [], ownerId),
+    deleteDataByIds('document_chunks', rows.document_chunks ?? [], ownerId),
+    deleteDataByIds('insights', rows.insights ?? [], ownerId),
+    deleteDataByIds('chat_messages', rows.chat_messages ?? [], ownerId),
+    deleteDataByIds('performance_records', rows.performance_records ?? [], ownerId),
+    deleteDataByIds('performance_summaries', rows.performance_summaries ?? [], ownerId),
+    deleteOptionalDataByIds('tutor_lessons', rows.tutor_lessons ?? [], ownerId),
+    deleteOptionalDataByIds('tutor_attempts', rows.tutor_attempts ?? [], ownerId),
+    deleteOptionalDataByIds('tutor_socratic_turns', rows.tutor_socratic_turns ?? [], ownerId),
+    deleteOptionalDataByIds('tutor_exam_sessions', rows.tutor_exam_sessions ?? [], ownerId),
+    deleteOptionalDataByIds('tutor_memory', rows.tutor_memory ?? [], ownerId),
   ]);
 }
 
 export type SupabaseResetScope = 'local' | 'supabase' | 'chat' | 'documents' | 'performance' | 'tutor' | 'collections' | 'full';
 
-export async function clearSupabaseScope(scope: SupabaseResetScope) {
+export async function clearSupabaseScope(scope: SupabaseResetScope, options: UserScopedOptions = {}) {
   if (!isSupabaseEnabled) {
     throw new Error('Supabase is not configured for this app instance.');
   }
+  const ownerId = requireUserId(options.userId);
 
   if (scope === 'local') return;
 
   if (scope === 'documents' || scope === 'supabase' || scope === 'full') {
     await Promise.all([
-      clearTable('insights'),
-      clearTable('document_chunks'),
-      clearTable('documents'),
+      clearTable('insights', ownerId),
+      clearTable('document_chunks', ownerId),
+      clearTable('documents', ownerId),
     ]);
   }
 
   if (scope === 'performance' || scope === 'supabase' || scope === 'full') {
     await Promise.all([
-      clearTable('performance_records'),
-      clearTable('performance_summaries'),
+      clearTable('performance_records', ownerId),
+      clearTable('performance_summaries', ownerId),
     ]);
   }
 
   if (scope === 'tutor' || scope === 'supabase' || scope === 'full') {
     await Promise.all([
-      clearOptionalTable('tutor_lessons'),
-      clearOptionalTable('tutor_attempts'),
-      clearOptionalTable('tutor_socratic_turns'),
-      clearOptionalTable('tutor_exam_sessions'),
-      clearOptionalTable('tutor_memory'),
+      clearOptionalTable('tutor_lessons', ownerId),
+      clearOptionalTable('tutor_attempts', ownerId),
+      clearOptionalTable('tutor_socratic_turns', ownerId),
+      clearOptionalTable('tutor_exam_sessions', ownerId),
+      clearOptionalTable('tutor_memory', ownerId),
     ]);
   }
 
   if (scope === 'collections' || scope === 'supabase' || scope === 'full') {
-    await clearOptionalTable('collections');
+    await clearOptionalTable('collections', ownerId);
   }
 
   if (scope === 'chat' || scope === 'supabase' || scope === 'full') {
-    await clearTable('chat_messages');
+    await clearTable('chat_messages', ownerId);
   }
 
   if (scope === 'supabase' || scope === 'full') {
     await Promise.all([
-      clearOptionalTable('study_artifacts'),
-      clearTable('workspaces'),
+      clearOptionalTable('study_artifacts', ownerId),
+      clearTable('workspaces', ownerId),
     ]);
   }
 }

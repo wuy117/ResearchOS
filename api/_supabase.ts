@@ -12,10 +12,7 @@ export class SupabaseServerError extends Error {
 
 export function getSupabaseServerClient() {
   const supabaseUrl = process.env.SUPABASE_URL?.trim() || process.env.VITE_SUPABASE_URL?.trim();
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
-    process.env.SUPABASE_ANON_KEY?.trim() ||
-    process.env.VITE_SUPABASE_ANON_KEY?.trim();
+  const supabaseKey = process.env.SUPABASE_ANON_KEY?.trim() || process.env.VITE_SUPABASE_ANON_KEY?.trim();
 
   if (!supabaseUrl || !supabaseKey) {
     throw new SupabaseServerError('Supabase server environment is not configured.', 503);

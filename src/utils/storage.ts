@@ -2,6 +2,7 @@ import { initialState } from '../data/initialState';
 import type { ResearchState } from '../types/research';
 
 const STORAGE_KEY = 'research-os-state-v1';
+const CLAIM_STORAGE_KEY = 'research-os-local-claim-v1';
 const DEMO_DOCUMENT_IDS = new Set(['doc-1', 'doc-2', 'doc-3', 'doc-4']);
 const DEMO_INSIGHT_IDS = new Set(['insight-1', 'insight-2', 'insight-3']);
 const DEMO_ACTION_IDS = new Set(['action-1', 'action-2', 'action-3']);
@@ -80,12 +81,67 @@ export function saveResearchState(state: ResearchState) {
   }
 }
 
+export function saveClaimableResearchState(state: ResearchState) {
+  try {
+    localStorage.setItem(CLAIM_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Claim snapshots are best-effort; the live app should keep working.
+  }
+}
+
+export function loadClaimableResearchState(): ResearchState | null {
+  try {
+    const saved = localStorage.getItem(CLAIM_STORAGE_KEY);
+    return saved ? ({ ...initialState, ...(JSON.parse(saved) as Partial<ResearchState>) } as ResearchState) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearClaimableResearchState() {
+  try {
+    localStorage.removeItem(CLAIM_STORAGE_KEY);
+  } catch {
+    // Clearing a claim snapshot should never crash the app.
+  }
+}
+
 export function clearResearchState() {
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {
     // Clearing local data should never crash the app.
   }
+}
+
+export function getResearchStateSummary(state: ResearchState) {
+  return {
+    documents: state.documents.length,
+    chunks: state.chunks.length,
+    performanceRecords: state.performanceRecords.length,
+    tutorSessions: state.tutorLessons.length + state.tutorSocraticTurns.length + state.tutorExamSessions.length,
+    collections: state.collections.length,
+  };
+}
+
+export function hasClaimableResearchState(state: ResearchState) {
+  const summary = getResearchStateSummary(state);
+  const userOwnedItems = [
+    ...state.workspaces,
+    ...state.collections,
+    ...state.documents,
+    ...state.chunks,
+    ...state.insights,
+    ...state.chat,
+    ...state.performanceRecords,
+    ...state.performanceSummaries,
+    ...state.tutorLessons,
+    ...state.tutorAttempts,
+    ...state.tutorSocraticTurns,
+    ...state.tutorExamSessions,
+  ];
+
+  return Object.values(summary).some((value) => value > 0) && !userOwnedItems.some((item) => Boolean(item.userId));
 }
 
 export function getResearchStorageStats() {

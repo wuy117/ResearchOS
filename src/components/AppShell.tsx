@@ -1,6 +1,7 @@
-import { AlertTriangle, BarChart3, BookOpen, CalendarDays, Files, GraduationCap, LayoutDashboard, MessageSquareText, Plus, Search, Trash2, UploadCloud, Wrench } from 'lucide-react';
+import { AlertTriangle, BarChart3, BookOpen, CalendarDays, Download, Files, GraduationCap, LayoutDashboard, LogOut, MessageSquareText, Plus, Search, Trash2, UploadCloud, UserCircle, Wrench } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useState } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { initialState } from '../data/initialState';
 import type { AppStorageStatus } from '../hooks/useResearchState';
 import { isSupabaseEnabled } from '../lib/supabase';
@@ -8,7 +9,7 @@ import { clearLocalStateOnly, clearSupabaseScope, type SupabaseResetScope } from
 import type { DocumentMetadata, PageId, ResearchDocument, ResearchState } from '../types/research';
 import { analyseDocumentMetadata, embedChunks, type DocumentMetadataAnalysisResponse } from '../utils/api';
 import { buildDocumentMetadata, deriveCollections, getDocumentMetadata } from '../utils/learningModel';
-import { getResearchStorageStats } from '../utils/storage';
+import { clearClaimableResearchState, getResearchStateSummary, getResearchStorageStats } from '../utils/storage';
 
 type PillarId = 'home' | 'sources' | 'learn' | 'progress';
 
@@ -56,30 +57,50 @@ type AppShellProps = {
   setActivePage: (page: PageId) => void;
   setState: Dispatch<SetStateAction<ResearchState>>;
   storageStatus: AppStorageStatus;
+  user: User | null;
+  onSignOut: () => Promise<void>;
+  claimableLocalState: ResearchState | null;
+  onImportClaimableLocalData: () => Promise<void>;
+  onDismissClaimableLocalData: () => void;
   children: React.ReactNode;
 };
 
-export function AppShell({ state, activePage, setActivePage, setState, storageStatus, children }: AppShellProps) {
+export function AppShell({
+  state,
+  activePage,
+  setActivePage,
+  setState,
+  storageStatus,
+  user,
+  onSignOut,
+  claimableLocalState,
+  onImportClaimableLocalData,
+  onDismissClaimableLocalData,
+  children,
+}: AppShellProps) {
   const [workspaceName, setWorkspaceName] = useState('');
   const activeWorkspace = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
   const getWorkspaceDocumentCount = (workspaceId: string) => state.documents.filter((document) => document.workspaceId === workspaceId).length;
   const storageLabel = {
     loading: 'Checking storage',
-    'missing-env': 'Local storage',
+    'missing-env': 'Local only',
+    'auth-required': 'Sign in required',
     'client-created': 'Checking Supabase',
-    'connection-failed': 'Local fallback active',
-    connected: 'Supabase connected',
+    'connection-failed': 'Sync issue',
+    connected: user?.email ? `Signed in as ${user.email}` : 'Supabase connected',
   }[storageStatus];
   const storageDescription = {
     loading: 'Loading saved workspace data.',
     'missing-env': 'Saved in this browser. Add Supabase env vars to sync remotely.',
+    'auth-required': 'Supabase is configured; sign in to load private cloud data.',
     'client-created': 'Remote storage is configured; checking the connection.',
-    'connection-failed': 'Saved locally for now. Remote sync will resume when Supabase is reachable.',
+    'connection-failed': 'Saved locally for now. Check Supabase connection, auth, or RLS policies.',
     connected: 'Remote sync is active, with localStorage as a fallback.',
   }[storageStatus];
   const storageDotClass = {
     loading: 'bg-brass',
     'missing-env': 'bg-graphite/45',
+    'auth-required': 'bg-brass',
     'client-created': 'bg-brass',
     'connection-failed': 'bg-red-500',
     connected: 'bg-moss',
@@ -150,7 +171,7 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
           </nav>
 
           <div className="mt-5">
-            <ResetResearchOS state={state} setState={setState} storageStatus={storageStatus} compact />
+            <ResetResearchOS state={state} setState={setState} storageStatus={storageStatus} user={user} compact />
           </div>
 
           <div className="mt-8">
@@ -214,8 +235,19 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
               </p>
             </div>
 
+            <AccountDataControls
+              state={state}
+              setState={setState}
+              storageStatus={storageStatus}
+              user={user}
+              onSignOut={onSignOut}
+              claimableLocalState={claimableLocalState}
+              onImportClaimableLocalData={onImportClaimableLocalData}
+              onDismissClaimableLocalData={onDismissClaimableLocalData}
+            />
+
             {showDeveloperTools ? (
-              <DeveloperTools state={state} setState={setState} storageStatus={storageStatus} storageLabel={storageLabel} />
+              <DeveloperTools state={state} setState={setState} storageStatus={storageStatus} storageLabel={storageLabel} user={user} />
             ) : null}
           </div>
         </aside>
@@ -284,7 +316,7 @@ export function AppShell({ state, activePage, setActivePage, setState, storageSt
               </div>
             ) : null}
             <div className="lg:hidden">
-              <ResetResearchOS state={state} setState={setState} storageStatus={storageStatus} />
+              <ResetResearchOS state={state} setState={setState} storageStatus={storageStatus} user={user} />
             </div>
           </header>
 
@@ -354,15 +386,199 @@ const resetOptions: ResetOption[] = [
   },
 ];
 
+function AccountDataControls({
+  state,
+  setState,
+  storageStatus,
+  user,
+  onSignOut,
+  claimableLocalState,
+  onImportClaimableLocalData,
+  onDismissClaimableLocalData,
+}: {
+  state: ResearchState;
+  setState: Dispatch<SetStateAction<ResearchState>>;
+  storageStatus: AppStorageStatus;
+  user: User | null;
+  onSignOut: () => Promise<void>;
+  claimableLocalState: ResearchState | null;
+  onImportClaimableLocalData: () => Promise<void>;
+  onDismissClaimableLocalData: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [message, setMessage] = useState('');
+  const [confirmAction, setConfirmAction] = useState<DeveloperConfirmAction | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const summary = claimableLocalState ? getResearchStateSummary(claimableLocalState) : null;
+  const hasCloud = storageStatus === 'connected' && Boolean(user);
+
+  function exportData() {
+    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), user: user?.email ?? null, state }, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `research-os-export-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setMessage('Export prepared as JSON.');
+  }
+
+  async function importLocalData() {
+    setIsImporting(true);
+    try {
+      await onImportClaimableLocalData();
+      setMessage('Local browser data was copied into this account. Original local data was not deleted.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Local data could not be imported.');
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  async function runCloudDelete(fullReset: boolean) {
+    if (!hasCloud) {
+      setMessage('Cloud data is unavailable because Supabase is not signed in and connected.');
+      return;
+    }
+    await clearSupabaseScope('full', { userId: user?.id });
+    if (fullReset) {
+      clearLocalStateOnly();
+      clearClaimableResearchState();
+      setState(initialState);
+      setMessage('This account and browser were reset. The Supabase Auth user was not deleted.');
+    } else {
+      setState(initialState);
+      setMessage('All cloud data for this account was deleted. Local browser data was not cleared.');
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-ink/8 bg-white p-4">
+      <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
+        <span>
+          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Account</span>
+          <span className="mt-1 block truncate text-sm font-semibold text-ink">{user?.email ?? 'Local-only mode'}</span>
+        </span>
+        <UserCircle size={17} className="text-graphite/60" />
+      </button>
+      {isOpen ? (
+        <div className="mt-4 space-y-3">
+          {message ? <p className="rounded-lg bg-paper px-3 py-2 text-xs leading-5 text-graphite/75">{message}</p> : null}
+          {summary ? (
+            <div className="rounded-lg border border-brass/25 bg-brass/10 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/60">Local data found</p>
+              <p className="mt-2 text-xs leading-5 text-graphite/72">
+                {summary.documents} documents, {summary.chunks} chunks, {summary.performanceRecords} performance records, {summary.tutorSessions} Tutor sessions, {summary.collections} collections.
+              </p>
+              <div className="mt-3 grid gap-2">
+                <button type="button" disabled={!hasCloud || isImporting} onClick={importLocalData} className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white disabled:bg-graphite/45">
+                  {isImporting ? 'Importing...' : 'Import local data to my account'}
+                </button>
+                <button type="button" onClick={onDismissClaimableLocalData} className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+                  Keep local data only for now
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setConfirmAction({
+                      title: 'Clear saved local import offer?',
+                      body: 'This clears the saved claim snapshot in this browser. It does not delete your active cloud data.',
+                      confirmLabel: 'Clear local offer',
+                      onConfirm: () => {
+                        clearClaimableResearchState();
+                        onDismissClaimableLocalData();
+                        setMessage('The local import offer was cleared.');
+                      },
+                    })
+                  }
+                  className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700"
+                >
+                  Clear local data
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <button type="button" onClick={exportData} className="inline-flex w-full items-center gap-2 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+            <Download size={14} />
+            Export my data as JSON
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setConfirmAction({
+                title: 'Clear local browser data?',
+                body: 'This removes Research OS data saved in this browser. It does not delete cloud data for your account.',
+                confirmLabel: 'Clear local data',
+                onConfirm: () => {
+                  clearLocalStateOnly();
+                  clearClaimableResearchState();
+                  setMessage('Local browser data was cleared. Cloud data was not deleted.');
+                },
+              })
+            }
+            className="inline-flex w-full items-center gap-2 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink"
+          >
+            <Trash2 size={14} />
+            Clear local browser data
+          </button>
+          {user ? (
+            <button type="button" onClick={onSignOut} className="inline-flex w-full items-center gap-2 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+              <LogOut size={14} />
+              Sign out
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={!hasCloud}
+            onClick={() =>
+              setConfirmAction({
+                title: 'Delete all cloud data?',
+                body: 'This deletes Research OS rows owned by the current Supabase user through normal RLS-protected permissions. It does not delete the Supabase Auth account.',
+                confirmLabel: 'Delete cloud data',
+                onConfirm: () => runCloudDelete(false),
+              })
+            }
+            className="inline-flex w-full items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 disabled:cursor-not-allowed disabled:border-ink/8 disabled:bg-paper disabled:text-graphite/45"
+          >
+            <Trash2 size={14} />
+            Delete all my cloud data
+          </button>
+          <button
+            type="button"
+            disabled={!hasCloud}
+            onClick={() =>
+              setConfirmAction({
+                title: 'Full reset for this account?',
+                body: 'This deletes cloud data for the signed-in account and clears local browser data. It does not delete the Supabase Auth user.',
+                confirmLabel: 'Full reset',
+                onConfirm: () => runCloudDelete(true),
+              })
+            }
+            className="inline-flex w-full items-center gap-2 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white disabled:bg-graphite/45"
+          >
+            <AlertTriangle size={14} />
+            Full reset for this account
+          </button>
+        </div>
+      ) : null}
+      <DeveloperConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
+    </div>
+  );
+}
+
 function ResetResearchOS({
   state,
   setState,
   storageStatus,
+  user,
   compact = false,
 }: {
   state: ResearchState;
   setState: Dispatch<SetStateAction<ResearchState>>;
   storageStatus: AppStorageStatus;
+  user: User | null;
   compact?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -382,13 +598,13 @@ function ResetResearchOS({
         setMessage('Supabase is not connected, so no remote data was cleared.');
         return;
       }
-      await clearSupabaseScope('supabase');
+      await clearSupabaseScope('supabase', { userId: user?.id });
       setMessage('All Supabase app data was cleared. Local browser data was kept.');
       return;
     }
 
     if (hasSupabase) {
-      await clearSupabaseScope(scope);
+      await clearSupabaseScope(scope, { userId: user?.id });
     }
 
     if (scope === 'full') {
@@ -527,11 +743,13 @@ function DeveloperTools({
   setState,
   storageStatus,
   storageLabel,
+  user,
 }: {
   state: ResearchState;
   setState: Dispatch<SetStateAction<ResearchState>>;
   storageStatus: AppStorageStatus;
   storageLabel: string;
+  user: User | null;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
@@ -619,6 +837,9 @@ function DeveloperTools({
               ['Environment', import.meta.env.DEV ? 'development' : 'production'],
               ['Storage mode', storageLabel],
               ['Supabase', isSupabaseEnabled ? 'enabled' : 'disabled'],
+              ['Signed-in email', user?.email ?? 'none'],
+              ['User id', user?.id ?? 'none'],
+              ['RLS path', storageStatus === 'connected' && user ? 'user-scoped' : 'not ready'],
               ['Embedding', embeddingConfigured ? 'configured' : 'not ready'],
               ['localStorage keys', storageStats.keys.toLocaleString()],
               ['localStorage bytes', storageStats.bytes.toLocaleString()],

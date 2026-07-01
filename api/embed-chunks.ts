@@ -1,8 +1,10 @@
+import { AuthError, requireUser } from './_auth.js';
 import { createEmbeddings, EmbeddingError, getEmbeddingModelName } from './_embeddings.js';
 import { getSupabaseServerClient, parseBody, SupabaseServerError, vectorLiteral } from './_supabase.js';
 
 type ApiRequest = {
   method?: string;
+  headers?: Record<string, string | string[] | undefined>;
   body?: unknown;
 };
 
@@ -59,7 +61,7 @@ function normalizeChunk(row: StoredChunkRow) {
   };
 }
 
-async function updateChunkFailure(client: ReturnType<typeof getSupabaseServerClient>, chunk: ReturnType<typeof normalizeChunk>, message: string) {
+async function updateChunkFailure(client: ReturnType<typeof getSupabaseServerClient>, userId: string, chunk: ReturnType<typeof normalizeChunk>, message: string) {
   await client
     .from('document_chunks')
     .update({
@@ -71,11 +73,12 @@ async function updateChunkFailure(client: ReturnType<typeof getSupabaseServerCli
         embeddingError: message,
       },
     })
+    .eq('user_id', userId)
     .eq('local_id', chunk.id);
 }
 
-async function updateDocumentEmbeddingStatus(client: ReturnType<typeof getSupabaseServerClient>, documentId: string, status: string, error?: string) {
-  const { data: documentRow } = await client.from('documents').select('data').eq('local_id', documentId).maybeSingle();
+async function updateDocumentEmbeddingStatus(client: ReturnType<typeof getSupabaseServerClient>, userId: string, documentId: string, status: string, error?: string) {
+  const { data: documentRow } = await client.from('documents').select('data').eq('user_id', userId).eq('local_id', documentId).maybeSingle();
   const documentData = documentRow && typeof documentRow.data === 'object' && documentRow.data ? documentRow.data : {};
 
   await client
@@ -87,13 +90,15 @@ async function updateDocumentEmbeddingStatus(client: ReturnType<typeof getSupaba
         embeddingError: error,
       },
     })
+    .eq('user_id', userId)
     .eq('local_id', documentId);
 }
 
-async function loadCandidateChunks(client: ReturnType<typeof getSupabaseServerClient>, documentId: string, chunkIds: string[]) {
+async function loadCandidateChunks(client: ReturnType<typeof getSupabaseServerClient>, userId: string, documentId: string, chunkIds: string[]) {
   let query = client
     .from('document_chunks')
     .select('local_id, document_local_id, chunk_index, text_content, word_count, data, embedding_status')
+    .eq('user_id', userId)
     .limit(1000);
 
   if (chunkIds.length > 0) {
@@ -134,15 +139,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   try {
-    const client = getSupabaseServerClient();
-    const chunks = await loadCandidateChunks(client, documentId, chunkIds);
+    const { client, userId } = await requireUser(req);
+    const chunks = await loadCandidateChunks(client, userId, documentId, chunkIds);
     const model = getEmbeddingModelName();
     let embedded = 0;
     let failed = 0;
     let skipped = 0;
 
     if (documentId) {
-      await updateDocumentEmbeddingStatus(client, documentId, 'embedding');
+      await updateDocumentEmbeddingStatus(client, userId, documentId, 'embedding');
     }
 
     for (let index = 0; index < chunks.length; index += EMBEDDING_BATCH_SIZE) {
@@ -176,6 +181,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
                   embeddingError: undefined,
                 },
               })
+              .eq('user_id', userId)
               .eq('local_id', chunk.id),
           ),
         );
@@ -184,21 +190,21 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Embedding failed for this chunk.';
         failed += batch.length;
-        await Promise.all(batch.map((chunk) => updateChunkFailure(client, chunk, message)));
+        await Promise.all(batch.map((chunk) => updateChunkFailure(client, userId, chunk, message)));
       }
     }
 
     skipped = Math.max(0, (chunkIds.length || chunks.length) - embedded - failed);
 
     if (documentId) {
-      await updateDocumentEmbeddingStatus(client, documentId, failed > 0 && embedded === 0 ? 'failed' : embedded > 0 ? 'embedded' : 'not_embedded');
+      await updateDocumentEmbeddingStatus(client, userId, documentId, failed > 0 && embedded === 0 ? 'failed' : embedded > 0 ? 'embedded' : 'not_embedded');
     }
 
     return res.status(200).json({ embedded, failed, skipped });
   } catch (error: unknown) {
     console.error('Embed chunks error:', error);
 
-    if (error instanceof EmbeddingError || error instanceof SupabaseServerError) {
+    if (error instanceof AuthError || error instanceof EmbeddingError || error instanceof SupabaseServerError) {
       return res.status(error.statusCode).json({
         error: error.message,
         configurationMissing: error instanceof EmbeddingError ? error.isConfigurationError : error instanceof SupabaseServerError,

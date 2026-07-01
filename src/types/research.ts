@@ -5,6 +5,7 @@ export type DocumentCategory = 'Report' | 'Exam result' | 'Mark sheet' | 'Notes'
 
 export type Workspace = {
   id: string;
+  userId?: string;
   name: string;
   description: string;
   documentCount: number;
@@ -13,6 +14,7 @@ export type Workspace = {
 
 export type ResearchDocument = {
   id: string;
+  userId?: string;
   title: string;
   type: 'PDF' | 'TXT' | 'DOCX';
   workspaceId: string;
@@ -60,6 +62,7 @@ export type DocumentMetadata = {
 
 export type Collection = {
   id: string;
+  userId?: string;
   name: string;
   description?: string;
   source: 'system' | 'user' | 'metadata';
@@ -68,6 +71,7 @@ export type Collection = {
 
 export type DocumentChunk = {
   id: string;
+  userId?: string;
   documentId: string;
   chunkIndex: number;
   text: string;
@@ -82,6 +86,7 @@ export type DocumentChunk = {
 
 export type Insight = {
   id: string;
+  userId?: string;
   title: string;
   body: string;
   sourceId: string;
@@ -106,6 +111,7 @@ export type Citation = {
 
 export type ChatMessage = {
   id: string;
+  userId?: string;
   role: 'user' | 'assistant';
   content: string;
   citations?: Citation[];
@@ -130,6 +136,7 @@ export type PerformanceDomain = 'academic' | 'music' | 'performance';
 
 export type PerformanceRecord = {
   id: string;
+  userId?: string;
   title: string;
   sourceDocumentId?: string;
   date: string;
@@ -153,6 +160,7 @@ export type PerformanceRecord = {
 
 export type PerformanceSummary = {
   id: string;
+  userId?: string;
   generatedAt: string;
   subjects: string[];
   strongestSubjects: string[];
@@ -177,6 +185,7 @@ export type TutorCheckpointQuestion = {
 
 export type TutorLesson = {
   id: string;
+  userId?: string;
   workspaceId: string;
   topic: string;
   objective: string;
@@ -205,6 +214,7 @@ export type TutorMemoryTopic = {
 
 export type TutorAttempt = {
   id: string;
+  userId?: string;
   workspaceId: string;
   lessonId?: string;
   mode: 'lesson' | 'socratic' | 'exam';
@@ -218,6 +228,7 @@ export type TutorAttempt = {
 
 export type TutorSocraticTurn = {
   id: string;
+  userId?: string;
   workspaceId: string;
   topic: string;
   question: string;
@@ -239,6 +250,7 @@ export type TutorExamQuestion = {
 
 export type TutorExamSession = {
   id: string;
+  userId?: string;
   workspaceId: string;
   topic: string;
   questions: TutorExamQuestion[];
@@ -247,6 +259,7 @@ export type TutorExamSession = {
 };
 
 export type TutorMemory = {
+  userId?: string;
   lessonsCompleted: number;
   topicsStudied: TutorMemoryTopic[];
   revisionStreak: number;

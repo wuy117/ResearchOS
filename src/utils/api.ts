@@ -1,5 +1,11 @@
 export type RequestMetadataValue = string | boolean | string[] | undefined;
 
+let accessTokenProvider: (() => string | undefined) | null = null;
+
+export function setApiAccessTokenProvider(provider: (() => string | undefined) | null) {
+  accessTokenProvider = provider;
+}
+
 export type ResearchChatRequestDocument = {
   title: string;
   summary: string;
@@ -178,12 +184,14 @@ export async function askResearchChat({
   documents: ResearchChatRequestDocument[];
 }): Promise<ResearchChatResponse> {
   let response: Response;
+  const token = accessTokenProvider?.();
 
   try {
     response = await fetch('/api/research-chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ question, workspaceName, documents }),
     });
@@ -215,12 +223,14 @@ export async function askResearchChat({
 
 async function postJson<TResponse>(url: string, body: unknown, fallbackError: string): Promise<TResponse> {
   let response: Response;
+  const token = accessTokenProvider?.();
 
   try {
     response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(body),
     });

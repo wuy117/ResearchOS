@@ -24,15 +24,17 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from './components/AppShell';
+import { AuthGate } from './components/AuthGate';
 import { CitationCard } from './components/CitationCard';
 import { DocumentCard } from './components/DocumentCard';
 import { SectionHeader } from './components/SectionHeader';
 import { TutorPage } from './components/TutorPage';
+import { useAuth } from './hooks/useAuth';
 import { useResearchState } from './hooks/useResearchState';
 import { isSupabaseEnabled } from './lib/supabase';
-import { deleteSupabaseRows, saveChunks, saveDocument } from './services/researchStore';
+import { deleteSupabaseRows, saveChunks, saveDocument, saveState } from './services/researchStore';
 import type { AcademicTerm, AssessmentType, ChatMessage, Collection, DocumentCategory, DocumentChunk, DocumentMetadata, MapEdge, MapNode, PageId, PerformanceDomain, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState, TutorAttempt, TutorLesson, TutorMemory } from './types/research';
-import { analyseDocumentMetadata, analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, type DocumentMetadataAnalysisResponse, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
+import { analyseDocumentMetadata, analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, setApiAccessTokenProvider, type DocumentMetadataAnalysisResponse, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
 import { extractPdfText } from './utils/extractPdfText';
@@ -40,8 +42,27 @@ import { buildDocumentMetadata, buildTimelineEvents, deriveCollections, getColle
 import { retrieveChunks, type RetrievedChunk } from './utils/retrieveChunks';
 
 function App() {
-  const { state, setState, storageStatus } = useResearchState();
+  const auth = useAuth();
+  const userId = auth.currentUser?.id ?? null;
+  const { state, setState, storageStatus, claimableLocalState, dismissClaimableLocalState } = useResearchState(userId);
   const [activePage, setActivePage] = useState<PageId>('dashboard');
+
+  useEffect(() => {
+    setApiAccessTokenProvider(() => auth.session?.access_token);
+    return () => setApiAccessTokenProvider(null);
+  }, [auth.session?.access_token]);
+
+  if (isSupabaseEnabled && (auth.authLoading || storageStatus === 'client-created')) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-ivory px-4 text-ink">
+        <p className="rounded-lg border border-ink/8 bg-white px-4 py-3 text-sm font-semibold shadow-sm">Checking your Research OS session...</p>
+      </div>
+    );
+  }
+
+  if (isSupabaseEnabled && !auth.currentUser) {
+    return <AuthGate authLoading={auth.authLoading} authError={auth.authError} onSignIn={auth.signIn} onSignUp={auth.signUp} />;
+  }
 
   const workspaceDocuments = useMemo(
     () => state.documents.filter((document) => document.workspaceId === state.activeWorkspaceId),
@@ -51,8 +72,8 @@ function App() {
 
   const page = {
     dashboard: <Dashboard state={state} documents={workspaceDocuments} setActivePage={setActivePage} />,
-    library: <Library state={state} documents={workspaceDocuments} chunks={state.chunks} storageStatus={storageStatus} setState={setState} />,
-    performance: <PerformancePage records={state.performanceRecords} summaries={state.performanceSummaries} documents={state.documents} tutorLessons={state.tutorLessons} tutorAttempts={state.tutorAttempts} tutorMemory={state.tutorMemory} storageStatus={storageStatus} setState={setState} />,
+    library: <Library state={state} documents={workspaceDocuments} chunks={state.chunks} storageStatus={storageStatus} userId={userId} setState={setState} />,
+    performance: <PerformancePage records={state.performanceRecords} summaries={state.performanceSummaries} documents={state.documents} tutorLessons={state.tutorLessons} tutorAttempts={state.tutorAttempts} tutorMemory={state.tutorMemory} storageStatus={storageStatus} userId={userId} setState={setState} />,
     timeline: <TimelinePage events={buildTimelineEvents(state)} />,
     tutor: (
       <TutorPage
@@ -67,20 +88,104 @@ function App() {
         tutorExamSessions={state.tutorExamSessions}
         tutorMemory={state.tutorMemory}
         storageStatus={storageStatus}
+        userId={userId}
         setState={setState}
       />
     ),
-    upload: <Upload stateDocuments={workspaceDocuments} activeWorkspaceId={state.activeWorkspaceId} storageStatus={storageStatus} performanceRecords={state.performanceRecords} setState={setState} />,
-    chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} workspaceId={state.activeWorkspaceId} documents={workspaceDocuments} chunks={state.chunks} performanceRecords={state.performanceRecords} performanceSummaries={state.performanceSummaries} tutorLessons={state.tutorLessons} tutorAttempts={state.tutorAttempts} storageStatus={storageStatus} setState={setState} />,
+    upload: <Upload stateDocuments={workspaceDocuments} activeWorkspaceId={state.activeWorkspaceId} storageStatus={storageStatus} performanceRecords={state.performanceRecords} userId={userId} setState={setState} />,
+    chat: <ResearchChat chat={state.chat} workspaceName={activeWorkspaceName} workspaceId={state.activeWorkspaceId} documents={workspaceDocuments} chunks={state.chunks} performanceRecords={state.performanceRecords} performanceSummaries={state.performanceSummaries} tutorLessons={state.tutorLessons} tutorAttempts={state.tutorAttempts} storageStatus={storageStatus} userId={userId} setState={setState} />,
     study: <StudyTools documents={workspaceDocuments} />,
     map: <KnowledgeMap documents={workspaceDocuments} />,
   }[activePage];
 
+  async function importClaimableLocalData() {
+    if (!claimableLocalState || !userId) return;
+    const merged = mergeImportedLocalState(state, claimableLocalState, userId);
+    setState(merged);
+    await saveState(merged, { userId });
+    dismissClaimableLocalState();
+  }
+
   return (
-    <AppShell state={state} activePage={activePage} setActivePage={setActivePage} setState={setState} storageStatus={storageStatus}>
+    <AppShell
+      state={state}
+      activePage={activePage}
+      setActivePage={setActivePage}
+      setState={setState}
+      storageStatus={storageStatus}
+      user={auth.currentUser}
+      onSignOut={auth.signOut}
+      claimableLocalState={claimableLocalState}
+      onImportClaimableLocalData={importClaimableLocalData}
+      onDismissClaimableLocalData={dismissClaimableLocalState}
+    >
       {page}
     </AppShell>
   );
+}
+
+function markOwned<T extends { id: string; userId?: string }>(items: T[], userId: string): T[] {
+  return items.map((item) => ({ ...item, userId }));
+}
+
+function mergeById<T extends { id: string; userId?: string }>(remoteItems: T[], localItems: T[], userId: string): T[] {
+  const remoteIds = new Set(remoteItems.map((item) => item.id));
+  return [...markOwned(remoteItems, userId), ...markOwned(localItems.filter((item) => !remoteIds.has(item.id)), userId)];
+}
+
+function mergeImportedLocalState(remoteState: ResearchState, localState: ResearchState, userId: string): ResearchState {
+  const workspaces = mergeById(remoteState.workspaces, localState.workspaces, userId);
+  const activeWorkspaceId = workspaces.some((workspace) => workspace.id === remoteState.activeWorkspaceId)
+    ? remoteState.activeWorkspaceId
+    : workspaces[0]?.id ?? remoteState.activeWorkspaceId;
+
+  return withDerivedCollections({
+    ...remoteState,
+    workspaces,
+    activeWorkspaceId,
+    collections: mergeById(remoteState.collections, localState.collections, userId),
+    documents: mergeById(remoteState.documents, localState.documents, userId),
+    chunks: mergeById(remoteState.chunks, localState.chunks, userId),
+    insights: mergeById(remoteState.insights, localState.insights, userId),
+    chat: mergeById(remoteState.chat, localState.chat, userId),
+    performanceRecords: mergeById(remoteState.performanceRecords, localState.performanceRecords, userId),
+    performanceSummaries: mergeById(remoteState.performanceSummaries, localState.performanceSummaries, userId),
+    tutorLessons: mergeById(remoteState.tutorLessons, localState.tutorLessons, userId),
+    tutorAttempts: mergeById(remoteState.tutorAttempts, localState.tutorAttempts, userId),
+    tutorSocraticTurns: mergeById(remoteState.tutorSocraticTurns, localState.tutorSocraticTurns, userId),
+    tutorExamSessions: mergeById(remoteState.tutorExamSessions, localState.tutorExamSessions, userId),
+    tutorMemory: {
+      ...localState.tutorMemory,
+      ...remoteState.tutorMemory,
+      userId,
+      lessonsCompleted: Math.max(remoteState.tutorMemory.lessonsCompleted ?? 0, localState.tutorMemory.lessonsCompleted ?? 0),
+      topicsStudied: mergeTutorTopics(remoteState.tutorMemory.topicsStudied ?? [], localState.tutorMemory.topicsStudied ?? []),
+      revisionStreak: Math.max(remoteState.tutorMemory.revisionStreak ?? 0, localState.tutorMemory.revisionStreak ?? 0),
+      lastReviewed: remoteState.tutorMemory.lastReviewed ?? localState.tutorMemory.lastReviewed,
+    },
+  });
+}
+
+function mergeTutorTopics(remoteTopics: TutorMemory['topicsStudied'], localTopics: TutorMemory['topicsStudied']) {
+  const topics = new Map(remoteTopics.map((topic) => [topic.topic.toLowerCase(), topic]));
+  for (const topic of localTopics) {
+    const key = topic.topic.toLowerCase();
+    const existing = topics.get(key);
+    if (!existing) {
+      topics.set(key, topic);
+      continue;
+    }
+    topics.set(key, {
+      ...existing,
+      confidence: Math.max(existing.confidence, topic.confidence),
+      quizAccuracy: Math.max(existing.quizAccuracy, topic.quizAccuracy),
+      lessonsCompleted: Math.max(existing.lessonsCompleted, topic.lessonsCompleted),
+      attempts: Math.max(existing.attempts, topic.attempts),
+      correctAttempts: Math.max(existing.correctAttempts, topic.correctAttempts),
+      lastReviewed: existing.lastReviewed > topic.lastReviewed ? existing.lastReviewed : topic.lastReviewed,
+    });
+  }
+  return [...topics.values()];
 }
 
 function Dashboard({
@@ -229,12 +334,14 @@ function Library({
   documents,
   chunks,
   storageStatus,
+  userId,
   setState,
 }: {
   state: ReturnType<typeof useResearchState>['state'];
   documents: ResearchDocument[];
   chunks: DocumentChunk[];
   storageStatus: ReturnType<typeof useResearchState>['storageStatus'];
+  userId?: string | null;
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
   const collections = deriveCollections(state);
@@ -266,7 +373,7 @@ function Library({
 
   async function deleteCollection(collection: Collection) {
     try {
-      await deleteRemoteRowsIfNeeded({ collections: [collection.id] }, storageStatus);
+      await deleteRemoteRowsIfNeeded({ collections: [collection.id] }, storageStatus, userId);
       setState((current) =>
         withDerivedCollections({
           ...current,
@@ -282,7 +389,7 @@ function Library({
 
   async function deleteDocument(document: ResearchDocument) {
     try {
-      await deleteRemoteDocumentIfNeeded(state, document.id, storageStatus);
+      await deleteRemoteDocumentIfNeeded(state, document.id, storageStatus, userId);
       setState((current) => removeDocumentFromState(current, document.id));
       setMessage(`${document.title} and its chunks were deleted.`);
     } catch (error) {
@@ -747,7 +854,7 @@ function removeDocumentFromState(state: ResearchState, documentId: string) {
   });
 }
 
-async function deleteRemoteDocumentIfNeeded(state: ResearchState, documentId: string, storageStatus: ReturnType<typeof useResearchState>['storageStatus']) {
+async function deleteRemoteDocumentIfNeeded(state: ResearchState, documentId: string, storageStatus: ReturnType<typeof useResearchState>['storageStatus'], userId?: string | null) {
   if (storageStatus !== 'connected') return;
   const chunkIds = state.chunks.filter((chunk) => chunk.documentId === documentId).map((chunk) => chunk.id);
   const insightIds = state.insights.filter((insight) => insight.sourceId === documentId).map((insight) => insight.id);
@@ -756,12 +863,12 @@ async function deleteRemoteDocumentIfNeeded(state: ResearchState, documentId: st
     documents: [documentId],
     document_chunks: chunkIds,
     insights: insightIds,
-  });
+  }, { userId });
 }
 
-async function deleteRemoteRowsIfNeeded(rows: Parameters<typeof deleteSupabaseRows>[0], storageStatus: ReturnType<typeof useResearchState>['storageStatus']) {
+async function deleteRemoteRowsIfNeeded(rows: Parameters<typeof deleteSupabaseRows>[0], storageStatus: ReturnType<typeof useResearchState>['storageStatus'], userId?: string | null) {
   if (storageStatus !== 'connected') return;
-  await deleteSupabaseRows(rows);
+  await deleteSupabaseRows(rows, { userId });
 }
 
 function buildPerformanceSummary(records: PerformanceRecord[], advice: Omit<PerformanceSummary, 'id' | 'generatedAt'>): PerformanceSummary {
@@ -958,6 +1065,7 @@ function PerformancePage({
   tutorAttempts,
   tutorMemory,
   storageStatus,
+  userId,
   setState,
 }: {
   records: PerformanceRecord[];
@@ -967,6 +1075,7 @@ function PerformancePage({
   tutorAttempts: TutorAttempt[];
   tutorMemory: TutorMemory;
   storageStatus: ReturnType<typeof useResearchState>['storageStatus'];
+  userId?: string | null;
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
   const [form, setForm] = useState({
@@ -1135,7 +1244,7 @@ function PerformancePage({
 
   async function deletePerformanceRecord(record: PerformanceRecord) {
     try {
-      await deleteRemoteRowsIfNeeded({ performance_records: [record.id] }, storageStatus);
+      await deleteRemoteRowsIfNeeded({ performance_records: [record.id] }, storageStatus, userId);
       setState((current) => {
         const performanceRecords = current.performanceRecords.filter((item) => item.id !== record.id);
         return withDerivedCollections({
@@ -2195,12 +2304,14 @@ function Upload({
   activeWorkspaceId,
   storageStatus,
   performanceRecords,
+  userId,
   setState,
 }: {
   stateDocuments: ResearchDocument[];
   activeWorkspaceId: string;
   storageStatus: ReturnType<typeof useResearchState>['storageStatus'];
   performanceRecords: PerformanceRecord[];
+  userId?: string | null;
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
   const [fileName, setFileName] = useState('');
@@ -2313,8 +2424,8 @@ function Upload({
     setNote(`${readyMessage} Embedding chunks for semantic search...`);
 
     try {
-      await saveDocument(embeddingDocument);
-      await saveChunks(pendingChunks);
+      await saveDocument(embeddingDocument, { userId });
+      await saveChunks(pendingChunks, { userId });
 
       const result = await embedChunks({ documentId: document.id });
       const nextStatus = result.embedded > 0 ? 'embedded' : result.failed > 0 ? 'failed' : 'keyword_only';
@@ -2337,8 +2448,8 @@ function Upload({
         documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...finalDocument, metadata: item.metadata ?? finalDocument.metadata } : item)),
         chunks: current.chunks.map((chunk) => finalChunks.find((item) => item.id === chunk.id) ?? chunk),
       }));
-      await saveDocument(finalDocument);
-      await saveChunks(finalChunks);
+      await saveDocument(finalDocument, { userId });
+      await saveChunks(finalChunks, { userId });
       setNote(
         result.embedded > 0
           ? `${readyMessage} Semantic search is ready for ${result.embedded.toLocaleString()} chunks.`
@@ -2363,8 +2474,8 @@ function Upload({
         documents: current.documents.map((item) => (item.id === document.id ? { ...item, ...keywordOnlyDocument, metadata: item.metadata ?? keywordOnlyDocument.metadata } : item)),
         chunks: current.chunks.map((chunk) => failedEmbeddingChunks.find((item) => item.id === chunk.id) ?? chunk),
       }));
-      await saveDocument(keywordOnlyDocument);
-      await saveChunks(failedEmbeddingChunks);
+      await saveDocument(keywordOnlyDocument, { userId });
+      await saveChunks(failedEmbeddingChunks, { userId });
       setNote(`${readyMessage} Keyword search is ready; semantic embeddings failed but upload is saved.`);
     }
   }
@@ -2992,6 +3103,7 @@ function ResearchChat({
   tutorLessons,
   tutorAttempts,
   storageStatus,
+  userId,
   setState,
 }: {
   chat: ChatMessage[];
@@ -3004,6 +3116,7 @@ function ResearchChat({
   tutorLessons: ReturnType<typeof useResearchState>['state']['tutorLessons'];
   tutorAttempts: ReturnType<typeof useResearchState>['state']['tutorAttempts'];
   storageStatus: ReturnType<typeof useResearchState>['storageStatus'];
+  userId?: string | null;
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
   const [prompt, setPrompt] = useState('');
@@ -3122,7 +3235,7 @@ function ResearchChat({
 
   async function deleteMessage(message: ChatMessage) {
     try {
-      await deleteRemoteRowsIfNeeded({ chat_messages: [message.id] }, storageStatus);
+      await deleteRemoteRowsIfNeeded({ chat_messages: [message.id] }, storageStatus, userId);
       setState((current) => ({ ...current, chat: current.chat.filter((item) => item.id !== message.id) }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? `Message was not deleted: ${error.message}` : 'Message was not deleted because Supabase failed.');
@@ -3131,7 +3244,7 @@ function ResearchChat({
 
   async function clearChatHistory() {
     try {
-      await deleteRemoteRowsIfNeeded({ chat_messages: chat.map((message) => message.id) }, storageStatus);
+      await deleteRemoteRowsIfNeeded({ chat_messages: chat.map((message) => message.id) }, storageStatus, userId);
       setState((current) => ({ ...current, chat: [] }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? `Chat history was not cleared: ${error.message}` : 'Chat history was not cleared because Supabase failed.');

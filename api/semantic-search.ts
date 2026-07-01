@@ -1,8 +1,10 @@
+import { AuthError, requireUser } from './_auth.js';
 import { createEmbedding, EmbeddingError } from './_embeddings.js';
-import { getSupabaseServerClient, parseBody, SupabaseServerError, vectorLiteral } from './_supabase.js';
+import { parseBody, SupabaseServerError, vectorLiteral } from './_supabase.js';
 
 type ApiRequest = {
   method?: string;
+  headers?: Record<string, string | string[] | undefined>;
   body?: unknown;
 };
 
@@ -50,12 +52,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   try {
-    const client = getSupabaseServerClient();
+    const { client, userId } = await requireUser(req);
     const embedding = await createEmbedding(query);
     const { data, error } = await client.rpc('match_document_chunks', {
       query_embedding: vectorLiteral(embedding),
       match_count: matchCount,
       workspace_filter: workspaceId || null,
+      user_filter: userId,
     });
 
     if (error) {
@@ -77,7 +80,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   } catch (error: unknown) {
     console.error('Semantic search error:', error);
 
-    if (error instanceof EmbeddingError || error instanceof SupabaseServerError) {
+    if (error instanceof AuthError || error instanceof EmbeddingError || error instanceof SupabaseServerError) {
       return res.status(error.statusCode).json({
         error: error.message,
         configurationMissing: error instanceof EmbeddingError ? error.isConfigurationError : error instanceof SupabaseServerError,

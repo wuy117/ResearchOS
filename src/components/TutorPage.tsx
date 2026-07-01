@@ -63,6 +63,7 @@ type TutorPageProps = {
   tutorExamSessions: TutorExamSession[];
   tutorMemory: TutorMemory;
   storageStatus: AppStorageStatus;
+  userId?: string | null;
   setState: Dispatch<SetStateAction<ResearchState>>;
 };
 
@@ -272,6 +273,7 @@ export function TutorPage({
   tutorExamSessions,
   tutorMemory,
   storageStatus,
+  userId,
   setState,
 }: TutorPageProps) {
   const weakTopics = useMemo(() => getWeakTopics(performanceRecords, performanceSummaries, tutorMemory), [performanceRecords, performanceSummaries, tutorMemory]);
@@ -584,7 +586,7 @@ export function TutorPage({
           tutor_lessons: kind === 'lesson' ? [id] : [],
           tutor_socratic_turns: kind === 'socratic' ? [id] : [],
           tutor_exam_sessions: kind === 'exam' ? [id] : [],
-        });
+        }, { userId });
       }
 
       setState((current) => ({
@@ -605,7 +607,7 @@ export function TutorPage({
         await deleteSupabaseRows({
           tutor_memory: ['tutor-memory'],
           tutor_attempts: tutorAttempts.map((attempt) => attempt.id),
-        });
+        }, { userId });
       }
 
       setState((current) => ({
