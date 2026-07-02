@@ -35,6 +35,7 @@ import type { AcademicTerm, AssessmentType, ChatMessage, DocumentCategory, Docum
 import { analyseDocumentMetadata, analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, setApiAccessTokenProvider, type DocumentMetadataAnalysisResponse, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
+import { extractImageText, isSupportedImageFile } from './utils/extractImageText';
 import { extractPdfText } from './utils/extractPdfText';
 import { buildDocumentMetadata, buildTimelineEvents, deriveCollections, getDocumentMetadata, type TimelineEvent } from './utils/learningModel';
 import { retrieveChunks, type RetrievedChunk } from './utils/retrieveChunks';
@@ -2760,7 +2761,7 @@ function Upload({
   const [fileName, setFileName] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isReading, setIsReading] = useState(false);
-  const [failedUpload, setFailedUpload] = useState<{ file: File; documentId: string; title: string; cleanName: string; type: 'PDF' | 'DOCX' } | null>(null);
+  const [failedUpload, setFailedUpload] = useState<{ file: File; documentId: string; title: string; cleanName: string; type: 'PDF' | 'DOCX' | 'IMAGE' } | null>(null);
   const [note, setNote] = useState('Choose a document to add to this workspace.');
   const [metadataDraft, setMetadataDraft] = useState<UploadMetadataDraft>({
     sourceDate: '',
@@ -3232,16 +3233,130 @@ function Upload({
     }
   }
 
+  async function processImageUpload({
+    file,
+    cleanName,
+    title,
+    documentId,
+  }: {
+    file: File;
+    cleanName: string;
+    title: string;
+    documentId: string;
+  }) {
+    let uploadStage: UploadStage = 'file-selected';
+    setIsReading(true);
+    setFailedUpload(null);
+    logUploadStage(uploadStage, { fileName: cleanName, type: file.type || 'IMAGE' });
+
+    const processingDocument: ResearchDocument = {
+      id: documentId,
+      title,
+      type: 'IMAGE',
+      workspaceId: activeWorkspaceId,
+      authors: 'Local image upload',
+      addedAt: new Date().toISOString(),
+      status: 'Extracting',
+      tags: ['image upload'],
+      insightCount: 0,
+      summary: 'Reading this image.',
+    };
+
+    setState((current) => ({
+      ...current,
+      documents: [processingDocument, ...current.documents.filter((document) => document.id !== documentId)],
+      chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
+    }));
+    setNote('Reading image...');
+
+    try {
+      uploadStage = 'extracting';
+      logUploadStage(uploadStage, { fileName: cleanName });
+      setNote('Extracting text...');
+      const extracted = await extractImageText(file);
+
+      setState((current) => ({
+        ...current,
+        documents: current.documents.map((document) =>
+          document.id === documentId
+            ? {
+                ...document,
+                status: 'Analysing',
+                summary: 'Understanding report.',
+                wordCount: extracted.wordCount,
+              }
+            : document,
+        ),
+      }));
+      setNote('Understanding report...');
+
+      uploadStage = 'chunking';
+      logUploadStage(uploadStage, { fileName: cleanName, wordCount: extracted.wordCount, confidence: extracted.confidence });
+      const chunks = chunkText({ text: extracted.text, documentId });
+
+      if (chunks.length === 0) {
+        throw new Error("This image doesn't appear to contain readable text. Try a higher-quality image.");
+      }
+
+      const tags = extractTopics(extracted.text);
+      let readyDocument: ResearchDocument = enrichDocument({
+        ...processingDocument,
+        status: 'Ready',
+        tags: tags.length ? tags : ['image upload'],
+        summary: summarizeText(extracted.text),
+        extractedText: extracted.text,
+        wordCount: extracted.wordCount,
+        chunkIds: chunks.map((chunk) => chunk.id),
+      });
+      const metadataAnalysis = await analyseDocumentMetadataIfPossible(readyDocument);
+      readyDocument = applyAnalysedDocument(readyDocument, metadataAnalysis);
+
+      setState((current) => withDerivedCollections({
+        ...current,
+        documents: current.documents.map((document) => (document.id === documentId ? readyDocument : document)),
+        chunks: [...chunks, ...current.chunks.filter((chunk) => chunk.documentId !== documentId)],
+      }));
+      uploadStage = 'saving';
+      logUploadStage(uploadStage, { documentId, chunkCount: chunks.length });
+      setNote('Updating academic profile...');
+      const performanceCount = await analyseUploadedPerformanceIfRelevant(readyDocument, metadataAnalysis);
+      const readyMessage = performanceCount ? 'Your academic profile has been updated.' : 'Your document has been imported.';
+      setNote(readyMessage);
+      resetUploadFields();
+      await queueEmbeddings(readyDocument, chunks, readyMessage);
+    } catch (error) {
+      const message = getStageErrorMessage(uploadStage, cleanName, error);
+      const failedDocument: ResearchDocument = enrichDocument({
+        ...processingDocument,
+        status: 'Failed',
+        tags: ['image upload', 'failed'],
+        summary: message,
+        extractionError: message,
+      });
+
+      logUploadError(uploadStage, error);
+      setState((current) => ({
+        ...current,
+        documents: current.documents.map((document) => (document.id === documentId ? failedDocument : document)),
+        chunks: current.chunks.filter((chunk) => chunk.documentId !== documentId),
+      }));
+      setFailedUpload({ file, documentId, title, cleanName, type: 'IMAGE' });
+      setNote(`${message} You can retry the import without selecting the file again.`);
+    } finally {
+      setIsReading(false);
+    }
+  }
+
   async function handleUpload() {
     if (!selectedFile) {
-      setNote('Choose a TXT, PDF, or DOCX file before uploading.');
+      setNote('Choose a TXT, PDF, DOCX, PNG, JPG, JPEG, or HEIC file before uploading.');
       return;
     }
 
     const cleanName = selectedFile?.name || fileName.trim() || 'Untitled Research Source.pdf';
     const extension = cleanName.split('.').pop()?.toUpperCase();
-    const type = extension === 'TXT' || extension === 'DOCX' ? extension : 'PDF';
-    const title = cleanName.replace(/\.(pdf|txt|docx)$/i, '').replace(/[-_]/g, ' ');
+    const type = extension === 'TXT' || extension === 'DOCX' ? extension : isSupportedImageFile(selectedFile, cleanName) ? 'IMAGE' : 'PDF';
+    const title = cleanName.replace(/\.(pdf|txt|docx|png|jpe?g|heic)$/i, '').replace(/[-_]/g, ' ');
     const documentId = `doc-${Date.now()}`;
 
     if (type === 'TXT' && selectedFile) {
@@ -3344,7 +3459,12 @@ function Upload({
       return;
     }
 
-    setNote('Choose a TXT, PDF, or DOCX file to extract. Research OS no longer creates placeholder documents from a filename alone.');
+    if (type === 'IMAGE' && selectedFile) {
+      await processImageUpload({ file: selectedFile, cleanName, title, documentId });
+      return;
+    }
+
+    setNote('Choose a TXT, PDF, DOCX, PNG, JPG, JPEG, or HEIC file to extract. Research OS no longer creates placeholder documents from a filename alone.');
   }
 
   return (
@@ -3364,7 +3484,7 @@ function Upload({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  accept=".txt,.pdf,.docx,.png,.jpg,.jpeg,.heic,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/heic"
                   className="sr-only"
                   onChange={(event) => {
                     const file = event.target.files?.[0] ?? null;
@@ -3438,7 +3558,9 @@ function Upload({
                   onClick={() =>
                     failedUpload.type === 'PDF'
                       ? processPdfUpload(failedUpload)
-                      : processDocxUpload(failedUpload)
+                      : failedUpload.type === 'DOCX'
+                        ? processDocxUpload(failedUpload)
+                        : processImageUpload(failedUpload)
                   }
                   disabled={isReading}
                   className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition disabled:cursor-not-allowed disabled:text-graphite/55"

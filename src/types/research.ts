@@ -16,7 +16,7 @@ export type ResearchDocument = {
   id: string;
   userId?: string;
   title: string;
-  type: 'PDF' | 'TXT' | 'DOCX';
+  type: 'PDF' | 'TXT' | 'DOCX' | 'IMAGE';
   workspaceId: string;
   authors: string;
   addedAt: string;

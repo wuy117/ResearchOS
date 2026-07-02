@@ -76,7 +76,7 @@ function inferTerms(text: string) {
 
 function inferDocumentTypes(text: string, fallbackType: ResearchDocument['type']) {
   const types = documentTypePatterns.flatMap(([pattern, label]) => (pattern.test(text) ? [label] : []));
-  return unique([...types, fallbackType]);
+  return unique([...types, fallbackType === 'IMAGE' ? 'Image' : fallbackType]);
 }
 
 function inferTeacherNames(text: string) {
