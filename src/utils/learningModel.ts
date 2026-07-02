@@ -4,8 +4,6 @@ import type {
   PerformanceRecord,
   ResearchDocument,
   ResearchState,
-  TutorAttempt,
-  TutorLesson,
 } from '../types/research';
 
 export type TimelineEvent = {
@@ -14,10 +12,22 @@ export type TimelineEvent = {
   sortKey: string;
   academicYear: string;
   term: string;
-  type: 'Upload' | 'Performance' | 'Tutor' | 'Study' | 'Knowledge';
+  type: 'Report' | 'Assessment' | 'Source';
   title: string;
   detail: string;
   subjects: string[];
+  subjectRecords: Array<{
+    id: string;
+    subject: string;
+    teacher?: string;
+    teacherComment?: string;
+    effort?: string;
+    attainment?: string;
+    percentage?: number;
+    grade?: string;
+    predictedGrade?: string;
+    targetGrade?: string;
+  }>;
 };
 
 const termPatterns: Array<[RegExp, string]> = [
@@ -274,77 +284,40 @@ function getAcademicTimeLabel({ exactDate, academicYear, term, assessmentName }:
 export function buildTimelineEvents(state: ResearchState): TimelineEvent[] {
   const documentEvents = state.documents.map((document) => {
     const metadata = getDocumentMetadata(document, state.performanceRecords);
+    const linkedRecords = state.performanceRecords.filter((record) => record.sourceDocumentId === document.id);
     const academicYear = metadata.academicYear ?? metadata.academicYears[0] ?? getAcademicYearFromDate(document.addedAt);
     const term = metadata.term ?? metadata.terms[0] ?? getTermFromDate(document.addedAt);
     const assessmentName = metadata.linkedAssessmentName ?? metadata.assessments[0] ?? document.title;
+    const subjects = unique([...metadata.subjects, ...linkedRecords.map((record) => record.subject)]);
+    const eventType: TimelineEvent['type'] = metadata.documentCategory === 'Report'
+      ? 'Report'
+      : metadata.documentCategory === 'Exam result' || metadata.documentCategory === 'Mark sheet'
+        ? 'Assessment'
+        : 'Source';
     return {
       id: `timeline-document-${document.id}`,
       date: getAcademicTimeLabel({ exactDate: metadata.sourceDate, academicYear, term, assessmentName }),
       sortKey: getAcademicSortKey({ exactDate: metadata.sourceDate, academicYear, term, assessmentName, fallbackTime: document.addedAt }),
       academicYear,
       term,
-      type: 'Upload' as const,
-      title: document.title,
-      detail: `${document.status} source${metadata.collections.length ? ` in ${metadata.collections.slice(0, 3).join(', ')}` : ''}`,
-      subjects: metadata.subjects,
+      type: eventType,
+      title: assessmentName || document.title,
+      detail: [document.title, metadata.documentCategory, subjects.length ? `${subjects.length} subject${subjects.length === 1 ? '' : 's'}` : undefined].filter(Boolean).join(' / '),
+      subjects,
+      subjectRecords: linkedRecords.map((record) => ({
+        id: record.id,
+        subject: record.subject,
+        teacher: record.teacher,
+        teacherComment: record.teacherComment,
+        effort: record.effort,
+        attainment: record.attainment,
+        percentage: typeof record.percentage === 'number' ? record.percentage : typeof record.score === 'number' && typeof record.maxScore === 'number' && record.maxScore > 0 ? Math.round((record.score / record.maxScore) * 100) : undefined,
+        grade: record.grade,
+        predictedGrade: record.predictedGrade,
+        targetGrade: record.targetGrade,
+      })),
     };
   });
-  const performanceEvents = state.performanceRecords.map((record) => {
-    const academicYear = record.academicYear ?? (hasExactDate(record.date) ? getAcademicYearFromDate(record.date) : 'Undated');
-    const term = record.term ?? (hasExactDate(record.date) ? getTermFromDate(record.date) : 'Unsorted');
-    return {
-      id: `timeline-performance-${record.id}`,
-      date: getAcademicTimeLabel({ exactDate: record.date, academicYear, term, assessmentName: record.title }),
-      sortKey: getAcademicSortKey({ exactDate: record.date, academicYear, term, assessmentName: record.title, fallbackTime: record.createdAt }),
-      academicYear,
-      term,
-      type: 'Performance' as const,
-      title: record.title,
-      detail: [record.subject, record.grade, record.percentage !== undefined ? `${record.percentage}%` : undefined].filter(Boolean).join(' / '),
-      subjects: [record.subject],
-    };
-  });
-  const tutorEvents = state.tutorLessons.map((lesson: TutorLesson) => ({
-    id: `timeline-tutor-${lesson.id}`,
-    date: formatDateLabel(lesson.completedAt ?? lesson.createdAt),
-    sortKey: getAcademicSortKey({ exactDate: lesson.completedAt ?? lesson.createdAt }),
-    academicYear: getAcademicYearFromDate(lesson.completedAt ?? lesson.createdAt),
-    term: getTermFromDate(lesson.completedAt ?? lesson.createdAt),
-    type: 'Tutor' as const,
-    title: lesson.status === 'completed' ? `Completed ${lesson.topic}` : `Started ${lesson.topic}`,
-    detail: lesson.objective,
-    subjects: [lesson.topic],
-  }));
-  const attemptEvents = state.tutorAttempts.slice(0, 20).map((attempt: TutorAttempt) => ({
-    id: `timeline-study-${attempt.id}`,
-    date: formatDateLabel(attempt.createdAt),
-    sortKey: getAcademicSortKey({ exactDate: attempt.createdAt }),
-    academicYear: getAcademicYearFromDate(attempt.createdAt),
-    term: getTermFromDate(attempt.createdAt),
-    type: 'Study' as const,
-    title: `${attempt.mode} practice: ${attempt.topic}`,
-    detail: attempt.feedback,
-    subjects: [attempt.topic],
-  }));
-  const knowledgeEvents = state.documents
-    .filter((document) => document.status === 'Ready' || document.status === 'Indexed')
-    .map((document) => {
-      const metadata = getDocumentMetadata(document, state.performanceRecords);
-      const academicYear = metadata.academicYear ?? metadata.academicYears[0] ?? getAcademicYearFromDate(document.addedAt);
-      const term = metadata.term ?? metadata.terms[0] ?? getTermFromDate(document.addedAt);
-      const assessmentName = metadata.linkedAssessmentName ?? metadata.assessments[0] ?? document.title;
-      return {
-        id: `timeline-knowledge-${document.id}`,
-        date: getAcademicTimeLabel({ exactDate: metadata.sourceDate, academicYear, term, assessmentName }),
-        sortKey: getAcademicSortKey({ exactDate: metadata.sourceDate, academicYear, term, assessmentName, fallbackTime: document.addedAt }),
-        academicYear,
-        term,
-        type: 'Knowledge' as const,
-        title: `Mapped topics from ${document.title}`,
-        detail: metadata.topics.slice(0, 5).join(', ') || 'Ready for topic mapping',
-        subjects: metadata.subjects,
-      };
-    });
 
-  return [...documentEvents, ...performanceEvents, ...tutorEvents, ...attemptEvents, ...knowledgeEvents].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+  return documentEvents.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
 }

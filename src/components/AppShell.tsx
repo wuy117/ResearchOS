@@ -41,7 +41,7 @@ const secondaryTabs: Record<PillarId, Array<{ id: PageId; label: string; icon: t
 
 const sectionDescriptions: Record<PillarId, string> = {
   home: 'Recent changes, current focus, and the next useful step.',
-  sources: 'A quiet place for documents, context, and collections.',
+  sources: 'A quiet place for documents, reports, and academic filters.',
   learn: 'Source-aware chat and Tutor modes in one workspace.',
   progress: 'Trends, teacher evidence, and recommendations over time.',
 };
@@ -103,7 +103,7 @@ export function AppShell({
     const workspace = {
       id: `workspace-${Date.now()}`,
       name,
-      description: `Learning space for ${name}. Uploads can still belong to multiple subjects, collections, and performance records.`,
+      description: `Learning space for ${name}. Uploads can still belong to multiple subjects, reports, and performance records.`,
       documentCount: 0,
       color: ['bg-moss', 'bg-brass', 'bg-graphite'][state.workspaces.length % 3],
     };
@@ -491,7 +491,7 @@ function AccountDataControls({
             <div className="rounded-lg border border-brass/25 bg-brass/10 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/60">Local data found</p>
               <p className="mt-2 text-xs leading-5 text-graphite/72">
-                {summary.documents} documents, {summary.performanceRecords} performance records, {summary.tutorSessions} Tutor sessions, {summary.collections} collections.
+                {summary.documents} documents, {summary.performanceRecords} performance records, {summary.tutorSessions} Tutor sessions, {summary.collections} metadata labels.
               </p>
               <div className="mt-3 grid gap-2">
                 <button type="button" disabled={!hasCloud || isImporting} onClick={importLocalData} className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white disabled:bg-graphite/45">

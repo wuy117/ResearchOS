@@ -69,7 +69,13 @@ export type PerformanceAnalysisRecord = {
   percentage?: number | null;
   grade?: string | null;
   rank?: string | null;
+  teacher?: string | null;
   teacherComment?: string | null;
+  effort?: string | null;
+  attainment?: string | null;
+  predictedGrade?: string | null;
+  targetGrade?: string | null;
+  marksExtracted?: boolean | null;
   strengths?: string[];
   weaknesses?: string[];
   actionPoints?: string[];

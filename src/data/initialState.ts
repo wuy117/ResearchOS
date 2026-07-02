@@ -4,7 +4,7 @@ export const workspaces: Workspace[] = [
   {
     id: 'workspace-personal-research',
     name: 'Personal Research',
-    description: 'Create your own learning spaces and let uploads connect subjects, collections, performance, Tutor, and the timeline.',
+    description: 'Create your own learning spaces and let uploads connect subjects, reports, performance, Tutor, and the timeline.',
     documentCount: 0,
     color: 'bg-moss',
   },

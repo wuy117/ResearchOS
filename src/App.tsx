@@ -6,7 +6,6 @@ import {
   ClipboardList,
   Edit3,
   FilePlus2,
-  FolderKanban,
   LibraryBig,
   Lightbulb,
   LineChart,
@@ -32,12 +31,12 @@ import { useAuth } from './hooks/useAuth';
 import { useResearchState } from './hooks/useResearchState';
 import { isSupabaseEnabled } from './lib/supabase';
 import { deleteSupabaseRows, saveChunks, saveDocument, saveState } from './services/researchStore';
-import type { AcademicTerm, AssessmentType, ChatMessage, Collection, DocumentCategory, DocumentChunk, DocumentMetadata, MapEdge, MapNode, PageId, PerformanceDomain, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState, TutorAttempt, TutorLesson, TutorMemory } from './types/research';
+import type { AcademicTerm, AssessmentType, ChatMessage, DocumentCategory, DocumentChunk, DocumentMetadata, MapEdge, MapNode, PageId, PerformanceDomain, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState, TutorAttempt, TutorLesson, TutorMemory } from './types/research';
 import { analyseDocumentMetadata, analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, setApiAccessTokenProvider, type DocumentMetadataAnalysisResponse, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
 import { extractPdfText } from './utils/extractPdfText';
-import { buildDocumentMetadata, buildTimelineEvents, deriveCollections, getCollectionDocumentCount, getDocumentMetadata, type TimelineEvent } from './utils/learningModel';
+import { buildDocumentMetadata, buildTimelineEvents, deriveCollections, getDocumentMetadata, type TimelineEvent } from './utils/learningModel';
 import { retrieveChunks, type RetrievedChunk } from './utils/retrieveChunks';
 
 class AuthenticatedAppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -237,7 +236,6 @@ function Dashboard({
 }) {
   const readyCount = documents.filter((document) => document.status === 'Indexed' || document.status === 'Ready').length;
   const newestDocuments = [...documents].slice(0, 3);
-  const collections = deriveCollections(state);
   const timeline = buildTimelineEvents(state).slice(0, 5);
   const academicPerformanceRecords = getAcademicPerformanceRecords(state.performanceRecords);
   const subjects = [
@@ -251,6 +249,10 @@ function Dashboard({
     .filter((percentage): percentage is number => typeof percentage === 'number');
   const latestAverage = percentages.length ? Math.round(percentages.reduce((total, value) => total + value, 0) / percentages.length) : undefined;
   const activeLesson = state.tutorLessons.find((lesson) => lesson.status === 'in_progress') ?? state.tutorLessons[0];
+  const reportCount = documents.filter((document) => {
+    const category = getDocumentMetadata(document, state.performanceRecords).documentCategory;
+    return category === 'Report' || category === 'Exam result' || category === 'Mark sheet';
+  }).length;
   const weakTopics = [
     ...new Set(
       academicPerformanceRecords
@@ -261,13 +263,12 @@ function Dashboard({
   ].slice(0, 4);
   const hasDocuments = documents.length > 0;
   const hasReadySources = readyCount > 0;
-  const hasCollections = collections.length > 0;
   const hasTimeline = timeline.length > 0;
   const hasSubjects = subjects.length > 0;
   const hasPerformance = academicPerformanceRecords.length > 0;
   const metrics = [
     hasSubjects ? ['Subjects', subjects.length.toLocaleString()] : null,
-    hasCollections ? ['Collections', collections.length.toLocaleString()] : null,
+    reportCount ? ['Reports', reportCount.toLocaleString()] : null,
     hasDocuments ? ['Sources', documents.length.toLocaleString()] : null,
     latestAverage !== undefined ? ['Average', `${latestAverage}%`] : null,
   ].filter((item): item is [string, string] => Boolean(item));
@@ -314,25 +315,11 @@ function Dashboard({
         </div>
       </section>
 
-      {hasSubjects || hasCollections || hasTimeline ? <section className="grid gap-8 xl:grid-cols-[1fr_1fr_1fr]">
+      {hasSubjects || hasTimeline ? <section className="grid gap-8 xl:grid-cols-[1fr_1fr]">
         {hasSubjects ? <div>
           <SectionHeader eyebrow="Subjects" title="What am I studying?" />
           <div className="rounded-lg bg-white p-5 shadow-sm">
             <ChipCloud items={subjects} />
-          </div>
-        </div> : null}
-        {hasCollections ? <div>
-          <SectionHeader eyebrow="Collections" title="Virtual source sets" />
-          <div className="space-y-3">
-            {collections.slice(0, 4).map((collection) => (
-              <button key={collection.id} type="button" onClick={() => setActivePage('library')} className="flex w-full items-center justify-between gap-3 rounded-lg bg-white p-4 text-left shadow-sm hover:bg-paper/60">
-                <span>
-                  <span className="block font-semibold text-ink">{collection.name}</span>
-                  <span className="mt-1 block text-sm text-graphite/68">{getCollectionDocumentCount(collection, documents, state.performanceRecords)} source links</span>
-                </span>
-                <FolderKanban size={18} className="text-graphite/55" />
-              </button>
-            ))}
           </div>
         </div> : null}
         {hasTimeline ? <div>
@@ -347,7 +334,7 @@ function Dashboard({
         <div>
           <SectionHeader eyebrow="Recent uploads" title="Source intake" />
           <div className="space-y-4">
-            {newestDocuments.map((document) => <DocumentCard key={document.id} document={document} />)}
+            {newestDocuments.map((document) => <DocumentCard key={document.id} document={document} records={state.performanceRecords} />)}
           </div>
         </div>
 
@@ -380,47 +367,32 @@ function Library({
   userId?: string | null;
   setState: ReturnType<typeof useResearchState>['setState'];
 }) {
-  const collections = deriveCollections(state);
   const [message, setMessage] = useState('');
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [filters, setFilters] = useState({
+    subject: 'All',
+    academicYear: 'All',
+    term: 'All',
+    assessmentType: 'All',
+    teacher: 'All',
+    documentType: 'All',
+  });
+  const filterOptions = useMemo(() => buildSourceFilterOptions(documents, state.performanceRecords), [documents, state.performanceRecords]);
+  const filteredDocuments = useMemo(() => documents.filter((document) => documentMatchesSourceFilters(document, state.performanceRecords, filters)), [documents, filters, state.performanceRecords]);
 
-  function renameCollection(collection: Collection, name: string) {
-    const nextName = name.trim();
-    if (!nextName) return;
-
-    setState((current) =>
-      withDerivedCollections({
-        ...current,
-        collections: current.collections.map((item) => (item.id === collection.id ? { ...item, name: nextName, source: 'user' } : item)),
-        documents: current.documents.map((document) => {
-          const metadata = getDocumentMetadata(document, current.performanceRecords);
-          if (!metadata.collections.some((item) => item.toLowerCase() === collection.name.toLowerCase())) return document;
-          const nextCollections = metadata.collections.map((item) => (item.toLowerCase() === collection.name.toLowerCase() ? nextName : item));
-          return {
-            ...document,
-            metadata: { ...metadata, collections: nextCollections },
-            collectionIds: nextCollections.map(collectionIdFromName),
-          };
-        }),
-      }),
-    );
-    setMessage(`${collection.name} was renamed.`);
+  function updateFilter(field: keyof typeof filters, value: string) {
+    setFilters((current) => ({ ...current, [field]: value }));
   }
 
-  async function deleteCollection(collection: Collection) {
-    try {
-      await deleteRemoteRowsIfNeeded({ collections: [collection.id] }, storageStatus, userId);
-      setState((current) =>
-        withDerivedCollections({
-          ...current,
-          collections: current.collections.filter((item) => item.id !== collection.id),
-          documents: current.documents.map((document) => removeCollectionFromDocument(document, collection.name, current.performanceRecords)),
-        }),
-      );
-      setMessage(`${collection.name} was deleted. Documents were kept.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? `Collection was not deleted: ${error.message}` : 'Collection was not deleted because Supabase failed.');
-    }
+  function clearFilters() {
+    setFilters({
+      subject: 'All',
+      academicYear: 'All',
+      term: 'All',
+      assessmentType: 'All',
+      teacher: 'All',
+      documentType: 'All',
+    });
   }
 
   async function deleteDocument(document: ResearchDocument) {
@@ -438,30 +410,32 @@ function Library({
       <SectionHeader
         eyebrow="Document library"
         title="Sources"
-        copy="Reports, notes, papers, and assessments for this workspace."
+        copy="Reports, notes, papers, and assessments, filtered by the academic context around them."
       />
       {message ? <StatusNote message={message} /> : null}
-      {collections.length ? <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {collections.slice(0, 8).map((collection) => (
-          <ManagedCollectionCard
-            key={collection.id}
-            collection={collection}
-            documentCount={getCollectionDocumentCount(collection, documents, state.performanceRecords)}
-            onRename={renameCollection}
-            onDelete={(item) =>
-              setConfirmAction({
-                title: `Delete ${item.name}?`,
-                body: 'This removes the virtual collection label from documents. The documents themselves will not be deleted.',
-                confirmLabel: 'Delete collection',
-                onConfirm: () => deleteCollection(item),
-              })
-            }
-          />
-        ))}
-      </section> : null}
+      {documents.length ? (
+        <section className="rounded-lg bg-white p-4 shadow-sm">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <SourceFilter label="Subject" value={filters.subject} options={filterOptions.subjects} onChange={(value) => updateFilter('subject', value)} />
+            <SourceFilter label="Academic year" value={filters.academicYear} options={filterOptions.academicYears} onChange={(value) => updateFilter('academicYear', value)} />
+            <SourceFilter label="Term" value={filters.term} options={filterOptions.terms} onChange={(value) => updateFilter('term', value)} />
+            <SourceFilter label="Assessment type" value={filters.assessmentType} options={filterOptions.assessmentTypes} onChange={(value) => updateFilter('assessmentType', value)} />
+            <SourceFilter label="Teacher" value={filters.teacher} options={filterOptions.teachers} onChange={(value) => updateFilter('teacher', value)} />
+            <SourceFilter label="Document type" value={filters.documentType} options={filterOptions.documentTypes} onChange={(value) => updateFilter('documentType', value)} />
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/6 pt-4">
+            <p className="text-sm font-medium text-graphite/72">
+              Showing {filteredDocuments.length} of {documents.length} document{documents.length === 1 ? '' : 's'}.
+            </p>
+            <button type="button" onClick={clearFilters} className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+              Clear filters
+            </button>
+          </div>
+        </section>
+      ) : null}
       {documents.length ? (
         <div className="grid gap-5 xl:grid-cols-2">
-          {documents.map((document) => (
+          {filteredDocuments.map((document) => (
             <ManagedDocumentCard
               key={document.id}
               document={document}
@@ -470,15 +444,6 @@ function Library({
               onSave={(documentId, patch) => {
                 setState((current) => applyDocumentEdit(current, documentId, patch));
                 setMessage('Document details were updated.');
-              }}
-              onRemoveCollection={(documentId, collectionName) => {
-                setState((current) =>
-                  withDerivedCollections({
-                    ...current,
-                    documents: current.documents.map((item) => (item.id === documentId ? removeCollectionFromDocument(item, collectionName, current.performanceRecords) : item)),
-                  }),
-                );
-                setMessage(`${collectionName} was removed from the document.`);
               }}
               onDelete={(item) =>
                 setConfirmAction({
@@ -490,6 +455,11 @@ function Library({
               }
             />
           ))}
+          {filteredDocuments.length === 0 ? (
+            <div className="xl:col-span-2">
+              <EmptyState title="No documents match these filters" copy="Change a filter to bring reports and assessments back into view." action="Clear filters" onClick={clearFilters} />
+            </div>
+          ) : null}
         </div>
       ) : (
         <EmptyState title="Start with one source" copy="Add a report, note, paper, or assessment to build this workspace around real learning evidence." />
@@ -511,6 +481,88 @@ function StatusNote({ message }: { message: string }) {
     <div className="rounded-lg border border-ink/8 bg-paper/70 px-4 py-3 text-sm leading-6 text-graphite/76">
       {message}
     </div>
+  );
+}
+
+function SourceFilter({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
+  return (
+    <label className="text-sm font-semibold text-ink">
+      {label}
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm font-normal outline-none ring-ink/10 focus:ring-4">
+        <option value="All">All</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function buildSourceFilterOptions(documents: ResearchDocument[], records: PerformanceRecord[]) {
+  const subjects = new Set<string>();
+  const academicYears = new Set<string>();
+  const terms = new Set<string>();
+  const assessmentTypes = new Set<string>();
+  const teachers = new Set<string>();
+  const documentTypes = new Set<string>();
+
+  documents.forEach((document) => {
+    const metadata = getDocumentMetadata(document, records);
+    const linkedRecords = records.filter((record) => record.sourceDocumentId === document.id);
+
+    metadata.subjects.forEach((value) => subjects.add(value));
+    metadata.academicYears.forEach((value) => academicYears.add(value));
+    metadata.terms.forEach((value) => terms.add(value));
+    metadata.teacherNames.forEach((value) => teachers.add(value));
+    metadata.documentTypes.forEach((value) => documentTypes.add(value));
+    if (metadata.academicYear) academicYears.add(metadata.academicYear);
+    if (metadata.term) terms.add(metadata.term);
+    if (metadata.documentCategory) documentTypes.add(metadata.documentCategory);
+
+    linkedRecords.forEach((record) => {
+      subjects.add(record.subject);
+      if (record.academicYear) academicYears.add(record.academicYear);
+      if (record.term) terms.add(record.term);
+      assessmentTypes.add(record.assessmentType);
+      if (record.teacher) teachers.add(record.teacher);
+    });
+  });
+
+  return {
+    subjects: sortFilterOptions(subjects),
+    academicYears: sortFilterOptions(academicYears),
+    terms: sortFilterOptions(terms),
+    assessmentTypes: sortFilterOptions(assessmentTypes),
+    teachers: sortFilterOptions(teachers),
+    documentTypes: sortFilterOptions(documentTypes),
+  };
+}
+
+function sortFilterOptions(values: Set<string>) {
+  return [...values].map((value) => value.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b));
+}
+
+function documentMatchesSourceFilters(document: ResearchDocument, records: PerformanceRecord[], filters: { subject: string; academicYear: string; term: string; assessmentType: string; teacher: string; documentType: string }) {
+  const metadata = getDocumentMetadata(document, records);
+  const linkedRecords = records.filter((record) => record.sourceDocumentId === document.id);
+  const values = {
+    subjects: new Set([...metadata.subjects, ...linkedRecords.map((record) => record.subject)]),
+    academicYears: new Set([metadata.academicYear, ...metadata.academicYears, ...linkedRecords.map((record) => record.academicYear)].filter((value): value is string => Boolean(value))),
+    terms: new Set([metadata.term, ...metadata.terms, ...linkedRecords.map((record) => record.term)].filter((value): value is string => Boolean(value))),
+    assessmentTypes: new Set<string>(linkedRecords.map((record) => record.assessmentType)),
+    teachers: new Set([...metadata.teacherNames, ...linkedRecords.map((record) => record.teacher)].filter((value): value is string => Boolean(value))),
+    documentTypes: new Set([metadata.documentCategory, ...metadata.documentTypes].filter((value): value is string => Boolean(value))),
+  };
+
+  return (
+    (filters.subject === 'All' || values.subjects.has(filters.subject)) &&
+    (filters.academicYear === 'All' || values.academicYears.has(filters.academicYear)) &&
+    (filters.term === 'All' || values.terms.has(filters.term)) &&
+    (filters.assessmentType === 'All' || values.assessmentTypes.has(filters.assessmentType)) &&
+    (filters.teacher === 'All' || values.teachers.has(filters.teacher)) &&
+    (filters.documentType === 'All' || values.documentTypes.has(filters.documentType))
   );
 }
 
@@ -548,61 +600,17 @@ function ConfirmModal({ action, onClose }: { action: ConfirmAction | null; onClo
   );
 }
 
-function ManagedCollectionCard({
-  collection,
-  documentCount,
-  onRename,
-  onDelete,
-}: {
-  collection: Collection;
-  documentCount: number;
-  onRename: (collection: Collection, name: string) => void;
-  onDelete: (collection: Collection) => void;
-}) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(collection.name);
-
-  return (
-    <div className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
-        <FolderKanban size={14} />
-        Collection
-      </div>
-      {isEditing ? (
-        <div className="mt-3 space-y-3">
-          <input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-          <div className="flex gap-2">
-            <button type="button" onClick={() => { onRename(collection, name); setIsEditing(false); }} className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white">Save</button>
-            <button type="button" onClick={() => { setName(collection.name); setIsEditing(false); }} className="rounded-lg border border-ink/10 px-3 py-2 text-xs font-semibold text-ink">Cancel</button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <p className="mt-3 truncate text-lg font-semibold text-ink">{collection.name}</p>
-          <p className="mt-1 text-sm text-graphite/68">{documentCount} source links</p>
-          <div className="mt-4 flex gap-2">
-            <IconTextButton icon={Edit3} label="Rename" onClick={() => setIsEditing(true)} />
-            <IconTextButton icon={Trash2} label="Delete" onClick={() => onDelete(collection)} danger />
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 function ManagedDocumentCard({
   document,
   records,
   chunkCount,
   onSave,
-  onRemoveCollection,
   onDelete,
 }: {
   document: ResearchDocument;
   records: PerformanceRecord[];
   chunkCount: number;
   onSave: (documentId: string, patch: { title?: string; metadata?: Partial<DocumentMetadata> }) => void;
-  onRemoveCollection: (documentId: string, collectionName: string) => void;
   onDelete: (document: ResearchDocument) => void;
 }) {
   const metadata = getDocumentMetadata(document, records);
@@ -621,7 +629,6 @@ function ManagedDocumentCard({
   const [documentTypes, setDocumentTypes] = useState(metadata.documentTypes.join(', '));
   const [teacherNames, setTeacherNames] = useState(metadata.teacherNames.join(', '));
   const [skills, setSkills] = useState(metadata.skills.join(', '));
-  const [collections, setCollections] = useState(metadata.collections.join(', '));
   const [tags, setTags] = useState(metadata.tags.join(', '));
 
   function save() {
@@ -639,7 +646,7 @@ function ManagedDocumentCard({
       documentTypes: normalizeListInput(documentTypes),
       teacherNames: normalizeListInput(teacherNames),
       skills: normalizeListInput(skills),
-      collections: normalizeListInput(collections),
+      collections: metadata.collections,
       tags: normalizeListInput(tags),
     };
     onSave(document.id, { title, metadata: nextMetadata });
@@ -648,7 +655,7 @@ function ManagedDocumentCard({
 
   return (
     <div className="space-y-3">
-      <DocumentCard document={document} chunkCount={chunkCount} />
+      <DocumentCard document={document} records={records} chunkCount={chunkCount} />
       {isEditing ? (
         <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Edit source details</p>
@@ -673,7 +680,6 @@ function ManagedDocumentCard({
             <EditListField label="Document types" value={documentTypes} setValue={setDocumentTypes} />
             <EditListField label="Teacher names" value={teacherNames} setValue={setTeacherNames} />
             <EditListField label="Skills" value={skills} setValue={setSkills} />
-            <EditListField label="Collections" value={collections} setValue={setCollections} />
             <EditListField label="Tags" value={tags} setValue={setTags} />
             <label className="flex gap-3 rounded-lg border border-ink/8 bg-paper/70 p-3 text-sm leading-6 text-graphite/75 md:col-span-2">
               <input type="checkbox" checked={ignoreInstrumentalMusic} onChange={(event) => setIgnoreInstrumentalMusic(event.target.checked)} className="mt-1 size-4 shrink-0 accent-ink" />
@@ -691,18 +697,6 @@ function ManagedDocumentCard({
             <IconTextButton icon={Edit3} label="Edit" onClick={() => setIsEditing(true)} />
             <IconTextButton icon={Trash2} label="Delete" onClick={() => onDelete(document)} danger />
           </div>
-          {metadata.collections.length ? (
-            <div className="mt-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Remove from collection</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {metadata.collections.map((collection) => (
-                  <button key={collection} type="button" onClick={() => onRemoveCollection(document.id, collection)} className="rounded-full border border-ink/10 bg-paper px-3 py-1 text-xs font-semibold text-graphite/75">
-                    {collection}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
       )}
     </div>
@@ -824,7 +818,14 @@ function getSubjectGroups(records: PerformanceRecord[]) {
 function formatResult(record: PerformanceRecord) {
   const percentage = getRecordPercentage(record);
   const score = typeof record.score === 'number' && typeof record.maxScore === 'number' ? `${record.score}/${record.maxScore}` : undefined;
-  return [score, percentage !== undefined ? `${percentage}%` : undefined, record.grade].filter(Boolean).join(' / ') || 'No mark recorded';
+  return [
+    score,
+    percentage !== undefined ? `${percentage}%` : undefined,
+    record.grade,
+    record.attainment ? `Attainment ${record.attainment}` : undefined,
+    record.predictedGrade ? `Predicted ${record.predictedGrade}` : undefined,
+    record.targetGrade ? `Target ${record.targetGrade}` : undefined,
+  ].filter(Boolean).join(' / ') || (record.teacherComment ? 'Teacher comments only' : 'Marks not extracted');
 }
 
 function withDerivedCollections(state: ReturnType<typeof useResearchState>['state']) {
@@ -863,20 +864,6 @@ function makeMetadata(document: ResearchDocument, records: PerformanceRecord[], 
     inferredMetadata: safeStringArray(overrides.inferredMetadata ?? base.inferredMetadata),
     collections: safeStringArray(overrides.collections ?? base.collections),
     tags: safeStringArray(overrides.tags ?? base.tags),
-  };
-}
-
-function removeCollectionFromDocument(document: ResearchDocument, collectionName: string, records: PerformanceRecord[]) {
-  const metadata = getDocumentMetadata(document, records);
-  const nextCollections = metadata.collections.filter((name) => name.toLowerCase() !== collectionName.toLowerCase());
-
-  return {
-    ...document,
-    metadata: {
-      ...metadata,
-      collections: nextCollections,
-    },
-    collectionIds: nextCollections.map(collectionIdFromName),
   };
 }
 
@@ -950,6 +937,10 @@ function normalizeAssessmentType(value: unknown): AssessmentType {
   return typeof value === 'string' && assessmentTypes.includes(value as AssessmentType) ? (value as AssessmentType) : 'other';
 }
 
+function cleanOptionalString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
 function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocumentId: string, fallbackTitle: string, sourceMetadata?: DocumentMetadata): PerformanceRecord | null {
   const subject = typeof record.subject === 'string' ? record.subject.trim() : '';
   if (!subject) return null;
@@ -962,6 +953,20 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
       : typeof score === 'number' && typeof maxScore === 'number' && maxScore > 0
         ? Math.round((score / maxScore) * 100)
         : undefined;
+  const grade = cleanOptionalString(record.grade);
+  const attainment = cleanOptionalString(record.attainment);
+  const predictedGrade = cleanOptionalString(record.predictedGrade);
+  const targetGrade = cleanOptionalString(record.targetGrade);
+  const marksExtracted = Boolean(
+    record.marksExtracted ||
+    typeof score === 'number' ||
+    typeof maxScore === 'number' ||
+    typeof percentage === 'number' ||
+    grade ||
+    attainment ||
+    predictedGrade ||
+    targetGrade,
+  );
 
   const assessmentType = normalizeAssessmentType(record.assessmentType);
   const domain = getPerformanceDomain(subject, assessmentType);
@@ -980,9 +985,15 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     score,
     maxScore,
     percentage,
-    grade: typeof record.grade === 'string' && record.grade.trim() ? record.grade.trim() : undefined,
-    rank: typeof record.rank === 'string' && record.rank.trim() ? record.rank.trim() : undefined,
-    teacherComment: typeof record.teacherComment === 'string' && record.teacherComment.trim() ? record.teacherComment.trim() : undefined,
+    grade,
+    rank: cleanOptionalString(record.rank),
+    teacher: cleanOptionalString(record.teacher),
+    teacherComment: cleanOptionalString(record.teacherComment),
+    effort: cleanOptionalString(record.effort),
+    attainment,
+    predictedGrade,
+    targetGrade,
+    marksExtracted,
     strengths: Array.isArray(record.strengths) ? record.strengths.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
     weaknesses: Array.isArray(record.weaknesses) ? record.weaknesses.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
     actionPoints: Array.isArray(record.actionPoints) ? record.actionPoints.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
@@ -1058,7 +1069,11 @@ function metadataFromDocumentAnalysis(document: ResearchDocument, fallback: Docu
   const subjects = uniqueStrings([...safeStringArray(metadata.subjects), ...safeStringArray(fallback.subjects)]);
   const topics = uniqueStrings([...safeStringArray(metadata.topics), ...safeStringArray(fallback.topics)]);
   const skills = uniqueStrings([...safeStringArray(metadata.skills), ...safeStringArray(fallback.skills)]);
-  const teacherNames = uniqueStrings([...safeStringArray(metadata.teacherNames), ...safeStringArray(fallback.teacherNames)]);
+  const teacherNames = uniqueStrings([
+    ...safeStringArray(metadata.teacherNames),
+    ...safeStringArray(fallback.teacherNames),
+    ...analysis.performanceRecords.map((record) => cleanOptionalString(record.teacher)),
+  ]);
   const tags = uniqueStrings([...safeStringArray(metadata.tags), ...topics, ...subjects, ...safeStringArray(fallback.tags)]);
   const academicYears = uniqueStrings([metadata.academicYear, ...safeStringArray(fallback.academicYears)]);
   const terms = uniqueStrings([metadata.term, ...safeStringArray(fallback.terms)]);
@@ -1152,7 +1167,12 @@ function PerformancePage({
     percentage: '',
     grade: '',
     rank: '',
+    teacher: '',
     teacherComment: '',
+    effort: '',
+    attainment: '',
+    predictedGrade: '',
+    targetGrade: '',
     strengths: '',
     weaknesses: '',
     actionPoints: '',
@@ -1223,7 +1243,12 @@ function PerformancePage({
       percentage: record.percentage?.toString() ?? '',
       grade: record.grade ?? '',
       rank: record.rank ?? '',
+      teacher: record.teacher ?? '',
       teacherComment: record.teacherComment ?? '',
+      effort: record.effort ?? '',
+      attainment: record.attainment ?? '',
+      predictedGrade: record.predictedGrade ?? '',
+      targetGrade: record.targetGrade ?? '',
       strengths: record.strengths.join(', '),
       weaknesses: record.weaknesses.join(', '),
       actionPoints: record.actionPoints.join(', '),
@@ -1251,7 +1276,13 @@ function PerformancePage({
       percentage: computedPercentage,
       grade: form.grade.trim() || undefined,
       rank: form.rank.trim() || undefined,
+      teacher: form.teacher.trim() || undefined,
       teacherComment: form.teacherComment.trim() || undefined,
+      effort: form.effort.trim() || undefined,
+      attainment: form.attainment.trim() || undefined,
+      predictedGrade: form.predictedGrade.trim() || undefined,
+      targetGrade: form.targetGrade.trim() || undefined,
+      marksExtracted: Boolean(computedPercentage !== undefined || form.score.trim() || form.maxScore.trim() || form.grade.trim() || form.attainment.trim() || form.predictedGrade.trim() || form.targetGrade.trim()),
       strengths: splitList(form.strengths),
       weaknesses: splitList(form.weaknesses),
       actionPoints: splitList(form.actionPoints),
@@ -1296,7 +1327,12 @@ function PerformancePage({
       percentage: '',
       grade: '',
       rank: '',
+      teacher: '',
       teacherComment: '',
+      effort: '',
+      attainment: '',
+      predictedGrade: '',
+      targetGrade: '',
       strengths: '',
       weaknesses: '',
       actionPoints: '',
@@ -1450,7 +1486,7 @@ function PerformancePage({
 
       {records.length === 0 ? (
         <EmptyState
-          title="No performance records yet"
+          title="Add the first report or assessment"
           copy="Add exam results manually or analyse an uploaded report to begin building a private academic performance picture."
         />
       ) : null}
@@ -1592,7 +1628,12 @@ function PerformancePage({
             <input value={form.maxScore} onChange={(event) => updateForm('maxScore', event.target.value)} placeholder="Max score" inputMode="decimal" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
             <input value={form.percentage} onChange={(event) => updateForm('percentage', event.target.value)} placeholder={computedPercentage !== undefined ? `${computedPercentage}% calculated` : 'Percentage'} inputMode="decimal" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
             <input value={form.grade} onChange={(event) => updateForm('grade', event.target.value)} placeholder="Grade" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.rank} onChange={(event) => updateForm('rank', event.target.value)} placeholder="Rank or set" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
+            <input value={form.rank} onChange={(event) => updateForm('rank', event.target.value)} placeholder="Rank or set" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.teacher} onChange={(event) => updateForm('teacher', event.target.value)} placeholder="Teacher" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.effort} onChange={(event) => updateForm('effort', event.target.value)} placeholder="Effort" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.attainment} onChange={(event) => updateForm('attainment', event.target.value)} placeholder="Attainment" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.predictedGrade} onChange={(event) => updateForm('predictedGrade', event.target.value)} placeholder="Predicted grade" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <input value={form.targetGrade} onChange={(event) => updateForm('targetGrade', event.target.value)} placeholder="Target grade" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
             <textarea value={form.teacherComment} onChange={(event) => updateForm('teacherComment', event.target.value)} placeholder="Teacher comment" rows={3} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
             <textarea value={form.strengths} onChange={(event) => updateForm('strengths', event.target.value)} placeholder="Strengths, separated by commas or new lines" rows={2} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
             <textarea value={form.weaknesses} onChange={(event) => updateForm('weaknesses', event.target.value)} placeholder="Weaknesses, separated by commas or new lines" rows={2} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
@@ -1616,7 +1657,12 @@ function PerformancePage({
                   percentage: '',
                   grade: '',
                   rank: '',
+                  teacher: '',
                   teacherComment: '',
+                  effort: '',
+                  attainment: '',
+                  predictedGrade: '',
+                  targetGrade: '',
                   strengths: '',
                   weaknesses: '',
                   actionPoints: '',
@@ -1705,7 +1751,7 @@ function PerformancePage({
                       onClick={() =>
                         setConfirmAction({
                           title: `Delete ${record.title}?`,
-                          body: 'This removes the performance record and updates collections, timeline, Tutor recommendations, and source details.',
+                          body: 'This removes the performance record and updates metadata, timeline, Tutor recommendations, and source details.',
                           confirmLabel: 'Delete record',
                           onConfirm: () => deletePerformanceRecord(record),
                         })
@@ -1716,7 +1762,7 @@ function PerformancePage({
               </article>
             ))
           ) : (
-            <EmptyState title="No editable records yet" copy="Saved or extracted performance records will appear here." />
+            <EmptyState title="Add a record to edit" copy="Saved or extracted performance records will appear here." />
           )}
         </div>
       </details>
@@ -2163,6 +2209,7 @@ function ProgressTimeline({ records, selectedId, onSelect }: { records: Performa
           const average = percentages.length ? Math.round(percentages.reduce((total, percentage) => total + percentage, 0) / percentages.length) : undefined;
           const subjects = uniqueStrings(snapshot.records.map((record) => record.subject)).slice(0, 5);
           const comment = snapshot.records.find((record) => record.teacherComment)?.teacherComment;
+          const outcomeLabel = getSnapshotOutcomeLabel(snapshot.records, average);
 
           return (
           <button key={snapshot.key} type="button" onClick={() => onSelect(snapshot.records[0].id)} className={`block w-full rounded-lg border p-4 text-left transition ${selected ? 'border-ink/30 bg-paper' : 'border-ink/8 bg-white hover:border-ink/18'}`}>
@@ -2174,7 +2221,7 @@ function ProgressTimeline({ records, selectedId, onSelect }: { records: Performa
                 <span className="mt-1 block text-sm leading-6 text-graphite/65">{subjects.join(', ')}</span>
                 {comment ? <span className="mt-2 block line-clamp-2 text-sm leading-6 text-graphite/70">{comment}</span> : null}
               </span>
-              <span className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-ink shadow-sm">{average !== undefined ? `${average}% avg` : 'No mark'}</span>
+              <span className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-ink shadow-sm">{outcomeLabel}</span>
             </span>
           </button>
           );
@@ -2186,6 +2233,15 @@ function ProgressTimeline({ records, selectedId, onSelect }: { records: Performa
   );
 }
 
+function getSnapshotOutcomeLabel(records: PerformanceRecord[], average?: number) {
+  if (average !== undefined) return `${average}% avg`;
+  const explicitGrades = records.flatMap((record) => [record.grade, record.attainment, record.predictedGrade, record.targetGrade]).filter(Boolean);
+  if (explicitGrades.length) return explicitGrades.slice(0, 2).join(' / ');
+  if (records.some((record) => record.teacherComment)) return 'Teacher comments only';
+  if (records.some((record) => record.marksExtracted)) return 'Marks not extracted';
+  return 'Awaiting mark extraction';
+}
+
 function TimelineDetail({ record, documents }: { record: PerformanceRecord; documents: ResearchDocument[] }) {
   const source = documents.find((document) => document.id === record.sourceDocumentId);
   return (
@@ -2195,10 +2251,26 @@ function TimelineDetail({ record, documents }: { record: PerformanceRecord; docu
         <p className="mt-1 text-sm text-graphite/70">{[getRecordTimelineLabel(record), record.subject, record.term].filter(Boolean).join(' / ')}</p>
       </div>
       <p className="rounded-lg bg-paper/70 p-3 text-sm font-semibold text-ink">{formatResult(record)}</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {record.teacher ? <DetailPill label="Teacher" value={record.teacher} /> : null}
+        {record.effort ? <DetailPill label="Effort" value={record.effort} /> : null}
+        {record.attainment ? <DetailPill label="Attainment" value={record.attainment} /> : null}
+        {record.predictedGrade ? <DetailPill label="Predicted grade" value={record.predictedGrade} /> : null}
+        {record.targetGrade ? <DetailPill label="Target grade" value={record.targetGrade} /> : null}
+      </div>
       {record.teacherComment ? <p className="text-sm leading-7 text-graphite/74">{record.teacherComment}</p> : null}
       <TagList label="Strengths" items={record.strengths} />
       <TagList label="Needs work" items={record.weaknesses} />
       {source ? <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Source: {source.title}</p> : null}
+    </div>
+  );
+}
+
+function DetailPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-paper/70 p-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-ink">{value}</p>
     </div>
   );
 }
@@ -2558,6 +2630,8 @@ function ChipCloud({ items }: { items: string[] }) {
 }
 
 function TimelineRow({ event, compact = false }: { event: TimelineEvent; compact?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasSubjectRecords = event.subjectRecords.length > 0;
   return (
     <article className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
@@ -2571,8 +2645,41 @@ function TimelineRow({ event, compact = false }: { event: TimelineEvent; compact
         </div>
         <time className="shrink-0 whitespace-pre-line rounded-full bg-paper px-3 py-1 text-xs font-semibold text-graphite/70">{event.date || 'Undated'}</time>
       </div>
+      {!compact && hasSubjectRecords ? (
+        <>
+          <button type="button" onClick={() => setExpanded((current) => !current)} className="mt-4 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+            {expanded ? 'Hide subjects' : 'Show subjects'}
+          </button>
+          {expanded ? (
+            <div className="mt-4 space-y-3 border-t border-ink/6 pt-4">
+              {event.subjectRecords.map((record) => (
+                <div key={record.id} className="rounded-lg bg-paper/60 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-ink">{record.subject}</p>
+                      <p className="mt-1 text-sm text-graphite/68">{[record.teacher, record.effort ? `Effort ${record.effort}` : undefined, record.attainment ? `Attainment ${record.attainment}` : undefined].filter(Boolean).join(' / ')}</p>
+                    </div>
+                    <span className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-ink shadow-sm">{formatTimelineSubjectResult(record)}</span>
+                  </div>
+                  {record.teacherComment ? <p className="mt-3 text-sm leading-7 text-graphite/74">{record.teacherComment}</p> : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </article>
   );
+}
+
+function formatTimelineSubjectResult(record: TimelineEvent['subjectRecords'][number]) {
+  const values = [
+    record.percentage !== undefined ? `${record.percentage}%` : undefined,
+    record.grade,
+    record.predictedGrade ? `Predicted ${record.predictedGrade}` : undefined,
+    record.targetGrade ? `Target ${record.targetGrade}` : undefined,
+  ].filter(Boolean);
+  return values.length ? values.join(' / ') : record.teacherComment ? 'Teacher comments only' : 'Marks not extracted';
 }
 
 function TimelinePage({ events }: { events: TimelineEvent[] }) {
@@ -2588,8 +2695,8 @@ function TimelinePage({ events }: { events: TimelineEvent[] }) {
     <div className="space-y-7">
       <SectionHeader
         eyebrow="Timeline"
-        title="Everything in one learning history"
-        copy="Uploads, reports, exam results, Tutor work, study sessions, and knowledge milestones are grouped by academic year, term, and date."
+        title="Reports over time"
+        copy="Each uploaded report or assessment appears once. Open it to see the subjects inside."
       />
       {events.length ? (
         <div className="space-y-8">

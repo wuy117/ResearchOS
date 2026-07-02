@@ -151,7 +151,13 @@ export type PerformanceRecord = {
   percentage?: number;
   grade?: string;
   rank?: string;
+  teacher?: string;
   teacherComment?: string;
+  effort?: string;
+  attainment?: string;
+  predictedGrade?: string;
+  targetGrade?: string;
+  marksExtracted?: boolean;
   strengths: string[];
   weaknesses: string[];
   actionPoints: string[];
