@@ -31,7 +31,7 @@ import { useAuth } from './hooks/useAuth';
 import { useResearchState } from './hooks/useResearchState';
 import { isSupabaseEnabled } from './lib/supabase';
 import { deleteSupabaseRows, saveChunks, saveDocument, saveState } from './services/researchStore';
-import type { AcademicTerm, AssessmentType, ChatMessage, DocumentCategory, DocumentChunk, DocumentMetadata, MapEdge, MapNode, PageId, PerformanceDomain, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState, TutorAttempt, TutorLesson, TutorMemory } from './types/research';
+import type { AcademicTerm, AssessmentType, ChatMessage, DocumentCategory, DocumentChunk, DocumentMetadata, ExtractionConfidence, ExtractionFieldConfidence, ExtractionSummary, MapEdge, MapNode, OriginalDocumentSnapshot, PageId, PerformanceDomain, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState, TutorAttempt, TutorLesson, TutorMemory } from './types/research';
 import { analyseDocumentMetadata, analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, setApiAccessTokenProvider, type DocumentMetadataAnalysisResponse, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
@@ -446,6 +446,28 @@ function Library({
                 setState((current) => applyDocumentEdit(current, documentId, patch));
                 setMessage('Document details were updated.');
               }}
+              onSaveRecord={(record) => {
+                setState((current) => {
+                  const performanceRecords = current.performanceRecords.map((item) => (item.id === record.id ? record : item));
+
+                  return withDerivedCollections({
+                    ...current,
+                    performanceRecords,
+                    documents: current.documents.map((document) => {
+                      const metadata = buildDocumentMetadata(document, performanceRecords);
+                      const extractionSummary = buildExtractionSummary(document, metadata, performanceRecords);
+
+                      return {
+                        ...document,
+                        status: document.status === 'Needs review' && extractionSummary.needsReview === 0 ? 'Ready' : document.status,
+                        metadata,
+                        extractionSummary,
+                      };
+                    }),
+                  });
+                });
+                setMessage(`${record.subject} was confirmed and Progress was updated.`);
+              }}
               onDelete={(item) =>
                 setConfirmAction({
                   title: `Delete ${item.title}?`,
@@ -606,12 +628,14 @@ function ManagedDocumentCard({
   records,
   chunkCount,
   onSave,
+  onSaveRecord,
   onDelete,
 }: {
   document: ResearchDocument;
   records: PerformanceRecord[];
   chunkCount: number;
   onSave: (documentId: string, patch: { title?: string; metadata?: Partial<DocumentMetadata> }) => void;
+  onSaveRecord: (record: PerformanceRecord) => void;
   onDelete: (document: ResearchDocument) => void;
 }) {
   const metadata = getDocumentMetadata(document, records);
@@ -657,6 +681,7 @@ function ManagedDocumentCard({
   return (
     <div className="space-y-3">
       <DocumentCard document={document} records={records} chunkCount={chunkCount} />
+      <ExtractionReviewPanel document={document} records={records.filter((record) => record.sourceDocumentId === document.id)} onSaveRecord={onSaveRecord} />
       {isEditing ? (
         <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Edit source details</p>
@@ -701,6 +726,119 @@ function ManagedDocumentCard({
         </div>
       )}
     </div>
+  );
+}
+
+function ExtractionReviewPanel({ document, records, onSaveRecord }: { document: ResearchDocument; records: PerformanceRecord[]; onSaveRecord: (record: PerformanceRecord) => void }) {
+  const reviewRecords = records.filter(needsExtractionReview);
+
+  if (!reviewRecords.length) return null;
+
+  return (
+    <section className="rounded-lg border border-brass/25 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brass">Review extracted values</p>
+          <p className="mt-2 text-sm leading-6 text-graphite/74">
+            We understood most of this report. {reviewRecords.length} subject{reviewRecords.length === 1 ? '' : 's'} need review before uncertain values are trusted by Progress.
+          </p>
+        </div>
+        <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">{document.extractionSummary?.confidence ?? 'Medium'} confidence</span>
+      </div>
+      <div className="mt-4 space-y-3">
+        {reviewRecords.map((record) => (
+          <ExtractionRecordEditor key={record.id} record={record} onSaveRecord={onSaveRecord} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ExtractionRecordEditor({ record, onSaveRecord }: { record: PerformanceRecord; onSaveRecord: (record: PerformanceRecord) => void }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [subject, setSubject] = useState(record.subject);
+  const [teacher, setTeacher] = useState(record.teacher ?? '');
+  const [teacherComment, setTeacherComment] = useState(record.teacherComment ?? '');
+  const [percentage, setPercentage] = useState(record.percentage?.toString() ?? '');
+  const [grade, setGrade] = useState(record.grade ?? '');
+  const [predictedGrade, setPredictedGrade] = useState(record.predictedGrade ?? '');
+  const [targetGrade, setTargetGrade] = useState(record.targetGrade ?? '');
+  const [effort, setEffort] = useState(record.effort ?? '');
+  const [attainment, setAttainment] = useState(record.attainment ?? '');
+
+  function save() {
+    const cleanSubject = subject.trim() || record.subject;
+    const nextPercentage = parseOptionalNumber(percentage);
+    const nextRecord: PerformanceRecord = {
+      ...record,
+      subject: cleanSubject,
+      teacher: teacher.trim() || undefined,
+      teacherComment: teacherComment.trim() || undefined,
+      percentage: nextPercentage,
+      grade: grade.trim() || undefined,
+      predictedGrade: predictedGrade.trim() || undefined,
+      targetGrade: targetGrade.trim() || undefined,
+      effort: effort.trim() || undefined,
+      attainment: attainment.trim() || undefined,
+      marksExtracted: Boolean(nextPercentage !== undefined || grade.trim() || predictedGrade.trim() || targetGrade.trim() || attainment.trim()),
+      domain: getPerformanceDomain(cleanSubject, record.assessmentType),
+      excludeFromAcademicAnalysis: getPerformanceDomain(cleanSubject, record.assessmentType) !== 'academic',
+      extractionConfidence: 'High',
+      fieldConfidence: {
+        subject: 'High',
+        teacher: teacher.trim() ? 'High' : undefined,
+        teacherComment: teacherComment.trim() ? 'High' : undefined,
+        percentage: nextPercentage !== undefined ? 'High' : undefined,
+        grade: grade.trim() ? 'High' : undefined,
+        predictedGrade: predictedGrade.trim() ? 'High' : undefined,
+        targetGrade: targetGrade.trim() ? 'High' : undefined,
+        effort: effort.trim() ? 'High' : undefined,
+        attainment: attainment.trim() ? 'High' : undefined,
+      },
+      reviewStatus: 'confirmed',
+    };
+
+    onSaveRecord(nextRecord);
+    setIsEditing(false);
+  }
+
+  const confidence = getRecordExtractionConfidence(record);
+  const values = [
+    percentage.trim() ? `${percentage}%` : undefined,
+    grade.trim(),
+    predictedGrade.trim() ? `Predicted ${predictedGrade}` : undefined,
+    targetGrade.trim() ? `Target ${targetGrade}` : undefined,
+    teacher.trim(),
+  ].filter(Boolean);
+
+  return (
+    <article className={`rounded-lg border p-4 ${confidence === 'Low' ? 'border-red-200 bg-red-50/45' : 'border-brass/18 bg-paper/55'}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-ink">{record.subject}</p>
+          <p className="mt-1 text-sm leading-6 text-graphite/72">{values.length ? values.join(' / ') : 'Teacher comments only'}</p>
+        </div>
+        <button type="button" onClick={() => setIsEditing((value) => !value)} className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+          {isEditing ? 'Close' : 'Review'}
+        </button>
+      </div>
+      {isEditing ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Subject" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+          <input value={teacher} onChange={(event) => setTeacher(event.target.value)} placeholder="Teacher" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+          <input value={percentage} onChange={(event) => setPercentage(event.target.value)} placeholder="Percentage" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+          <input value={grade} onChange={(event) => setGrade(event.target.value)} placeholder="Grade" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+          <input value={predictedGrade} onChange={(event) => setPredictedGrade(event.target.value)} placeholder="Predicted grade" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+          <input value={targetGrade} onChange={(event) => setTargetGrade(event.target.value)} placeholder="Target grade" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+          <input value={effort} onChange={(event) => setEffort(event.target.value)} placeholder="Effort" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+          <input value={attainment} onChange={(event) => setAttainment(event.target.value)} placeholder="Attainment" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+          <textarea value={teacherComment} onChange={(event) => setTeacherComment(event.target.value)} rows={4} placeholder="Teacher comment" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4 md:col-span-2" />
+          <button type="button" onClick={save} className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white md:col-span-2">
+            Save reviewed values
+          </button>
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -799,7 +937,7 @@ function getPerformanceDomain(subject: string, assessmentType?: AssessmentType):
 }
 
 function isAcademicPerformanceRecord(record: PerformanceRecord) {
-  return !record.excludeFromAcademicAnalysis && (record.domain ?? getPerformanceDomain(record.subject, record.assessmentType)) === 'academic';
+  return !record.excludeFromAcademicAnalysis && !needsExtractionReview(record) && (record.domain ?? getPerformanceDomain(record.subject, record.assessmentType)) === 'academic';
 }
 
 function getAcademicPerformanceRecords(records: PerformanceRecord[]) {
@@ -878,11 +1016,13 @@ function applyDocumentEdit(state: ResearchState, documentId: string, patch: { ti
         title: patch.title?.trim() || document.title,
       };
       const metadata = makeMetadata(nextDocument, state.performanceRecords, patch.metadata);
+      const extractionSummary = buildExtractionSummary(nextDocument, metadata, state.performanceRecords);
       return {
         ...nextDocument,
         addedAt: metadata.sourceDate ?? nextDocument.addedAt,
         tags: metadata.tags.length ? metadata.tags : nextDocument.tags,
         metadata,
+        extractionSummary,
         collectionIds: metadata.collections.map(collectionIdFromName),
       };
     }),
@@ -942,6 +1082,101 @@ function cleanOptionalString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
+const markConfidenceFields: Array<keyof ExtractionFieldConfidence> = ['score', 'maxScore', 'percentage', 'grade', 'attainment', 'predictedGrade', 'targetGrade'];
+const originalPreviewLimit = 1_200_000;
+
+function normalizeExtractionConfidence(value: unknown): ExtractionConfidence | undefined {
+  return value === 'High' || value === 'Medium' || value === 'Low' ? value : undefined;
+}
+
+function getLowestConfidence(values: Array<ExtractionConfidence | undefined>) {
+  if (values.includes('Low')) return 'Low';
+  if (values.includes('Medium')) return 'Medium';
+  if (values.includes('High')) return 'High';
+  return undefined;
+}
+
+function getRecordExtractionConfidence(record: Pick<PerformanceRecord, 'extractionConfidence' | 'fieldConfidence'>): ExtractionConfidence {
+  return record.extractionConfidence ?? getLowestConfidence(Object.values(record.fieldConfidence ?? {})) ?? 'High';
+}
+
+function hasLowConfidenceMark(record: Pick<PerformanceRecord, 'marksExtracted' | 'fieldConfidence'>) {
+  if (!record.marksExtracted) return false;
+  return markConfidenceFields.some((field) => record.fieldConfidence?.[field] === 'Low');
+}
+
+function needsExtractionReview(record: Pick<PerformanceRecord, 'reviewStatus' | 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted'>) {
+  if (record.reviewStatus === 'confirmed') return false;
+  return getRecordExtractionConfidence(record) !== 'High' || hasLowConfidenceMark(record);
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error('File preview could not be prepared.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function createOriginalFileSnapshot(file: File, fallbackText?: string): Promise<OriginalDocumentSnapshot> {
+  const mimeType = file.type || 'application/octet-stream';
+  const base = {
+    fileName: file.name || 'Uploaded file',
+    mimeType,
+    size: file.size,
+    storedAt: new Date().toISOString(),
+  };
+
+  if (mimeType.startsWith('image/') && file.size <= originalPreviewLimit) {
+    return {
+      ...base,
+      previewKind: 'image',
+      previewData: await readFileAsDataUrl(file),
+      previewLabel: 'Original image preview',
+    };
+  }
+
+  if ((mimeType === 'text/plain' || file.name.toLowerCase().endsWith('.txt')) && fallbackText) {
+    return {
+      ...base,
+      previewKind: 'text',
+      previewData: fallbackText.slice(0, 8000),
+      previewLabel: 'Original text preview',
+    };
+  }
+
+  if (file.size <= originalPreviewLimit && (mimeType === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) {
+    return {
+      ...base,
+      previewKind: 'file',
+      previewData: await readFileAsDataUrl(file),
+      previewLabel: 'Original PDF preview',
+    };
+  }
+
+  return {
+    ...base,
+    previewKind: 'metadata',
+    previewLabel: file.size > originalPreviewLimit ? 'Original file metadata saved; preview skipped because the file is large.' : 'Original file metadata saved.',
+  };
+}
+
+async function createOriginalFileSnapshotSafe(file: File, fallbackText?: string): Promise<OriginalDocumentSnapshot> {
+  try {
+    return await createOriginalFileSnapshot(file, fallbackText);
+  } catch {
+    return {
+      fileName: file.name || 'Uploaded file',
+      mimeType: file.type || 'application/octet-stream',
+      size: file.size,
+      storedAt: new Date().toISOString(),
+      previewKind: 'metadata',
+      previewLabel: 'Original file metadata saved; preview could not be prepared.',
+    };
+  }
+}
+
 function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocumentId: string, fallbackTitle: string, sourceMetadata?: DocumentMetadata): PerformanceRecord | null {
   const subject = typeof record.subject === 'string' ? record.subject.trim() : '';
   if (!subject) return null;
@@ -958,6 +1193,13 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
   const attainment = cleanOptionalString(record.attainment);
   const predictedGrade = cleanOptionalString(record.predictedGrade);
   const targetGrade = cleanOptionalString(record.targetGrade);
+  const extractionConfidence = normalizeExtractionConfidence(record.extractionConfidence) ?? 'Medium';
+  const rawFieldConfidence = record.fieldConfidence && typeof record.fieldConfidence === 'object' ? record.fieldConfidence : {};
+  const fieldConfidence: ExtractionFieldConfidence = {};
+  (Object.entries(rawFieldConfidence) as Array<[keyof ExtractionFieldConfidence, unknown]>).forEach(([field, confidence]) => {
+    const normalized = normalizeExtractionConfidence(confidence);
+    if (normalized) fieldConfidence[field] = normalized;
+  });
   const marksExtracted = Boolean(
     record.marksExtracted ||
     typeof score === 'number' ||
@@ -971,6 +1213,7 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
 
   const assessmentType = normalizeAssessmentType(record.assessmentType);
   const domain = getPerformanceDomain(subject, assessmentType);
+  const lowConfidenceMark = marksExtracted && markConfidenceFields.some((field) => fieldConfidence[field] === 'Low');
 
   return {
     id: `performance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -982,7 +1225,7 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     subject,
     assessmentType,
     domain,
-    excludeFromAcademicAnalysis: Boolean(record.excludeFromAcademicAnalysis) || Boolean(sourceMetadata?.ignoreInstrumentalMusic && domain !== 'academic'),
+    excludeFromAcademicAnalysis: Boolean(record.excludeFromAcademicAnalysis) || lowConfidenceMark || Boolean(sourceMetadata?.ignoreInstrumentalMusic && domain !== 'academic'),
     score,
     maxScore,
     percentage,
@@ -995,6 +1238,9 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     predictedGrade,
     targetGrade,
     marksExtracted,
+    extractionConfidence,
+    fieldConfidence,
+    reviewStatus: getLowestConfidence([extractionConfidence, ...Object.values(fieldConfidence)]) === 'High' ? 'confirmed' : 'needs_review',
     strengths: Array.isArray(record.strengths) ? record.strengths.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
     weaknesses: Array.isArray(record.weaknesses) ? record.weaknesses.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
     actionPoints: Array.isArray(record.actionPoints) ? record.actionPoints.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
@@ -1045,6 +1291,37 @@ function buildEvidenceAwareSummary({
   ]
     .filter(Boolean)
     .join(' ');
+}
+
+function buildExtractionSummary(document: ResearchDocument, metadata: DocumentMetadata, records: PerformanceRecord[], analysis?: DocumentMetadataAnalysisResponse): ExtractionSummary {
+  const linkedRecords = records.filter((record) => record.sourceDocumentId === document.id);
+  const subjectsFound = uniqueStrings([...safeStringArray(metadata.subjects), ...linkedRecords.map((record) => record.subject)]).length;
+  const teacherComments = linkedRecords.filter((record) => Boolean(record.teacherComment)).length;
+  const marksExtracted = linkedRecords.filter((record) => record.marksExtracted).length;
+  const gradesExtracted = linkedRecords.filter((record) => Boolean(record.grade || record.attainment || record.predictedGrade)).length;
+  const targetsFound = linkedRecords.filter((record) => Boolean(record.targetGrade)).length;
+  const teachersIdentified = uniqueStrings([...safeStringArray(metadata.teacherNames), ...linkedRecords.map((record) => record.teacher)]).length;
+  const reviewRecords = linkedRecords.filter(needsExtractionReview);
+  const metadataConfidence = metadata.metadataConfidence ?? analysis?.metadata.metadataConfidence ?? 'Low';
+  const confidence = getLowestConfidence([metadataConfidence, ...linkedRecords.map(getRecordExtractionConfidence)]) ?? 'Low';
+  const reviewNotes = [
+    reviewRecords.length ? `${reviewRecords.length} subject${reviewRecords.length === 1 ? '' : 's'} need review before their uncertain values are trusted.` : '',
+    linkedRecords.some(hasLowConfidenceMark) ? 'Low-confidence marks are visible for review but do not affect Progress until confirmed.' : '',
+    !analysis ? 'AI extraction was unavailable, so this summary uses local fallback metadata.' : '',
+  ].filter(Boolean);
+
+  return {
+    confidence,
+    status: reviewRecords.length ? (confidence === 'Low' ? 'Partially understood' : 'Needs review') : 'Document understood',
+    subjectsFound,
+    teacherComments,
+    marksExtracted,
+    gradesExtracted,
+    targetsFound,
+    teachersIdentified,
+    needsReview: reviewRecords.length,
+    reviewNotes,
+  };
 }
 
 function metadataFromDocumentAnalysis(document: ResearchDocument, fallback: DocumentMetadata, analysis?: DocumentMetadataAnalysisResponse): DocumentMetadata {
@@ -1121,6 +1398,7 @@ function metadataFromDocumentAnalysis(document: ResearchDocument, fallback: Docu
 function applyAnalysedDocument(document: ResearchDocument, analysis?: DocumentMetadataAnalysisResponse) {
   const fallback = getDocumentMetadata(document);
   const metadata = metadataFromDocumentAnalysis(document, fallback, analysis);
+  const extractionSummary = buildExtractionSummary(document, metadata, [], analysis);
   return {
     ...document,
     summary: buildEvidenceAwareSummary({
@@ -1131,6 +1409,7 @@ function applyAnalysedDocument(document: ResearchDocument, analysis?: DocumentMe
     }),
     tags: metadata.tags.length ? metadata.tags : document.tags,
     metadata,
+    extractionSummary,
     collectionIds: metadata.collections.map(collectionIdFromName),
   };
 }
@@ -1284,6 +1563,22 @@ function PerformancePage({
       predictedGrade: form.predictedGrade.trim() || undefined,
       targetGrade: form.targetGrade.trim() || undefined,
       marksExtracted: Boolean(computedPercentage !== undefined || form.score.trim() || form.maxScore.trim() || form.grade.trim() || form.attainment.trim() || form.predictedGrade.trim() || form.targetGrade.trim()),
+      extractionConfidence: 'High',
+      fieldConfidence: {
+        subject: 'High',
+        teacher: form.teacher.trim() ? 'High' : undefined,
+        teacherComment: form.teacherComment.trim() ? 'High' : undefined,
+        effort: form.effort.trim() ? 'High' : undefined,
+        attainment: form.attainment.trim() ? 'High' : undefined,
+        score: form.score.trim() ? 'High' : undefined,
+        maxScore: form.maxScore.trim() ? 'High' : undefined,
+        percentage: computedPercentage !== undefined ? 'High' : undefined,
+        grade: form.grade.trim() ? 'High' : undefined,
+        predictedGrade: form.predictedGrade.trim() ? 'High' : undefined,
+        targetGrade: form.targetGrade.trim() ? 'High' : undefined,
+        rank: form.rank.trim() ? 'High' : undefined,
+      },
+      reviewStatus: 'confirmed',
       strengths: splitList(form.strengths),
       weaknesses: splitList(form.weaknesses),
       actionPoints: splitList(form.actionPoints),
@@ -1305,16 +1600,27 @@ function PerformancePage({
     if (!record) return;
 
     setState((current) =>
-      withDerivedCollections({
-        ...current,
-        performanceRecords: existing
+      (() => {
+        const performanceRecords = existing
           ? current.performanceRecords.map((item) => (item.id === existing.id ? record : item))
-          : [record, ...current.performanceRecords],
-        documents: current.documents.map((document) => ({
-          ...document,
-          metadata: buildDocumentMetadata(document, existing ? current.performanceRecords.map((item) => (item.id === existing.id ? record : item)) : [record, ...current.performanceRecords]),
-        })),
-      }),
+          : [record, ...current.performanceRecords];
+
+        return withDerivedCollections({
+          ...current,
+          performanceRecords,
+          documents: current.documents.map((document) => {
+            const metadata = buildDocumentMetadata(document, performanceRecords);
+            const extractionSummary = buildExtractionSummary(document, metadata, performanceRecords);
+
+            return {
+              ...document,
+              status: document.status === 'Needs review' && extractionSummary.needsReview === 0 ? 'Ready' : document.status,
+              metadata,
+              extractionSummary,
+            };
+          }),
+        });
+      })(),
     );
     setEditingRecordId('');
     setForm((current) => ({
@@ -2977,10 +3283,17 @@ function Upload({
           performanceRecords,
           documents: current.documents.map((item) =>
             item.id === document.id
-              ? {
-                  ...item,
-                  metadata: buildDocumentMetadata(item, performanceRecords),
-                }
+              ? (() => {
+                  const metadata = buildDocumentMetadata(item, performanceRecords);
+                  const extractionSummary = buildExtractionSummary(item, metadata, performanceRecords, metadataAnalysis);
+
+                  return {
+                    ...item,
+                    status: extractionSummary.needsReview ? 'Needs review' : item.status,
+                    metadata,
+                    extractionSummary,
+                  };
+                })()
               : item,
           ),
         });
@@ -3064,6 +3377,7 @@ function Upload({
       }
 
       const tags = extractTopics(extracted.text);
+      const originalFile = await createOriginalFileSnapshotSafe(file);
       let readyDocument: ResearchDocument = enrichDocument({
         ...processingDocument,
         status: 'Ready',
@@ -3073,6 +3387,7 @@ function Upload({
         pageCount: extracted.pages.length,
         wordCount: extracted.wordCount,
         chunkIds: chunks.map((chunk) => chunk.id),
+        originalFile,
       });
       setNote('Understanding teacher comments...');
       const metadataAnalysis = await analyseDocumentMetadataIfPossible(readyDocument);
@@ -3184,6 +3499,7 @@ function Upload({
       }
 
       const tags = extractTopics(extracted.text);
+      const originalFile = await createOriginalFileSnapshotSafe(file);
       let readyDocument: ResearchDocument = enrichDocument({
         ...processingDocument,
         status: 'Ready',
@@ -3192,6 +3508,7 @@ function Upload({
         extractedText: extracted.text,
         wordCount: extracted.wordCount,
         chunkIds: chunks.map((chunk) => chunk.id),
+        originalFile,
       });
       setNote('Understanding teacher comments...');
       const metadataAnalysis = await analyseDocumentMetadataIfPossible(readyDocument);
@@ -3299,6 +3616,7 @@ function Upload({
       }
 
       const tags = extractTopics(extracted.text);
+      const originalFile = await createOriginalFileSnapshotSafe(file);
       let readyDocument: ResearchDocument = enrichDocument({
         ...processingDocument,
         status: 'Ready',
@@ -3307,6 +3625,7 @@ function Upload({
         extractedText: extracted.text,
         wordCount: extracted.wordCount,
         chunkIds: chunks.map((chunk) => chunk.id),
+        originalFile,
       });
       const metadataAnalysis = await analyseDocumentMetadataIfPossible(readyDocument);
       readyDocument = applyAnalysedDocument(readyDocument, metadataAnalysis);
@@ -3386,6 +3705,7 @@ function Upload({
         }
 
         const tags = extractTopics(extractedText);
+        const originalFile = await createOriginalFileSnapshotSafe(selectedFile, extractedText);
 
         let newDocument: ResearchDocument = enrichDocument({
           id: documentId,
@@ -3401,6 +3721,7 @@ function Upload({
           extractedText,
           wordCount,
           chunkIds: chunks.map((chunk) => chunk.id),
+          originalFile,
         });
         setNote('Understanding teacher comments...');
         const metadataAnalysis = await analyseDocumentMetadataIfPossible(newDocument);
@@ -3604,7 +3925,11 @@ function buildResearchChatContext(
     performanceContext: performanceRecords
       .filter((record) => record.sourceDocumentId === result.document.id || result.document.tags.some((tag) => tag.toLowerCase() === record.subject.toLowerCase()))
       .slice(0, 8)
-      .map((record) => `${record.date}: ${record.subject} ${formatResult(record)}${record.teacherComment ? `; comment: ${record.teacherComment}` : ''}`)
+      .map((record) => {
+        const confidence = getRecordExtractionConfidence(record);
+        const reviewCopy = needsExtractionReview(record) ? `${confidence} confidence, needs review` : 'confirmed';
+        return `${record.date}: ${record.subject} ${formatResult(record)} (${reviewCopy})${record.teacherComment ? `; comment: ${record.teacherComment}` : ''}`;
+      })
       .concat(
         performanceSummaries.slice(0, 2).map((summary) => `Summary: ${summary.overallCommentary}`),
       ),

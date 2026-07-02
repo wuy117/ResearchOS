@@ -20,6 +20,23 @@ export type ResearchChatRequestDocument = {
   tutorContext?: string[];
 };
 
+export type ExtractionConfidence = 'High' | 'Medium' | 'Low';
+export type ExtractionFieldConfidence = Partial<Record<
+  | 'subject'
+  | 'teacher'
+  | 'teacherComment'
+  | 'effort'
+  | 'attainment'
+  | 'score'
+  | 'maxScore'
+  | 'percentage'
+  | 'grade'
+  | 'predictedGrade'
+  | 'targetGrade'
+  | 'rank',
+  ExtractionConfidence
+>>;
+
 export type ResearchChatSource = {
   documentTitle: string;
   location: string;
@@ -76,6 +93,8 @@ export type PerformanceAnalysisRecord = {
   predictedGrade?: string | null;
   targetGrade?: string | null;
   marksExtracted?: boolean | null;
+  extractionConfidence?: ExtractionConfidence | null;
+  fieldConfidence?: ExtractionFieldConfidence | null;
   strengths?: string[];
   weaknesses?: string[];
   actionPoints?: string[];
@@ -274,13 +293,50 @@ export async function analysePerformanceDocument({
   );
 
   return {
-    records: Array.isArray(data.records) ? data.records : [],
+    records: Array.isArray(data.records)
+      ? data.records.map((record) => ({
+          ...record,
+          extractionConfidence: normalizeConfidence(record?.extractionConfidence),
+          fieldConfidence: normalizeFieldConfidence(record?.fieldConfidence),
+        }))
+      : [],
     message: typeof data.message === 'string' ? data.message : undefined,
   };
 }
 
 function normalizeStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [];
+}
+
+function normalizeConfidence(value: unknown): ExtractionConfidence | undefined {
+  return value === 'High' || value === 'Medium' || value === 'Low' ? value : undefined;
+}
+
+const confidenceFieldKeys = [
+  'subject',
+  'teacher',
+  'teacherComment',
+  'effort',
+  'attainment',
+  'score',
+  'maxScore',
+  'percentage',
+  'grade',
+  'predictedGrade',
+  'targetGrade',
+  'rank',
+] as const;
+
+function normalizeFieldConfidence(value: unknown): ExtractionFieldConfidence | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+
+  const fieldConfidence: ExtractionFieldConfidence = {};
+  confidenceFieldKeys.forEach((key) => {
+    const confidence = normalizeConfidence((value as Record<string, unknown>)[key]);
+    if (confidence) fieldConfidence[key] = confidence;
+  });
+
+  return Object.keys(fieldConfidence).length ? fieldConfidence : undefined;
 }
 
 export async function analyseDocumentMetadata({
@@ -328,7 +384,13 @@ export async function analyseDocumentMetadata({
       suggestedUse: typeof summary.suggestedUse === 'string' ? summary.suggestedUse : undefined,
       summaryText: typeof summary.summaryText === 'string' ? summary.summaryText : undefined,
     },
-    performanceRecords: Array.isArray(data.performanceRecords) ? data.performanceRecords : [],
+    performanceRecords: Array.isArray(data.performanceRecords)
+      ? data.performanceRecords.map((record) => ({
+          ...record,
+          extractionConfidence: normalizeConfidence(record?.extractionConfidence),
+          fieldConfidence: normalizeFieldConfidence(record?.fieldConfidence),
+        }))
+      : [],
     message: typeof data.message === 'string' ? data.message : undefined,
   };
 }

@@ -2,6 +2,45 @@ export type PageId = 'dashboard' | 'settings' | 'library' | 'performance' | 'tim
 
 export type AcademicTerm = 'Michaelmas' | 'Lent' | 'Summer' | 'Custom' | 'Other';
 export type DocumentCategory = 'Report' | 'Exam result' | 'Mark sheet' | 'Notes' | 'Past paper' | 'Mark scheme' | 'Essay' | 'Other';
+export type ExtractionConfidence = 'High' | 'Medium' | 'Low';
+export type ExtractedFieldKey =
+  | 'subject'
+  | 'teacher'
+  | 'teacherComment'
+  | 'effort'
+  | 'attainment'
+  | 'score'
+  | 'maxScore'
+  | 'percentage'
+  | 'grade'
+  | 'predictedGrade'
+  | 'targetGrade'
+  | 'rank';
+
+export type ExtractionFieldConfidence = Partial<Record<ExtractedFieldKey, ExtractionConfidence>>;
+
+export type ExtractionSummary = {
+  confidence: ExtractionConfidence;
+  status: 'Document understood' | 'Needs review' | 'Partially understood';
+  subjectsFound: number;
+  teacherComments: number;
+  marksExtracted: number;
+  gradesExtracted: number;
+  targetsFound: number;
+  teachersIdentified: number;
+  needsReview: number;
+  reviewNotes: string[];
+};
+
+export type OriginalDocumentSnapshot = {
+  fileName: string;
+  mimeType: string;
+  size: number;
+  storedAt: string;
+  previewKind: 'text' | 'image' | 'file' | 'metadata';
+  previewData?: string;
+  previewLabel: string;
+};
 
 export type Workspace = {
   id: string;
@@ -32,6 +71,8 @@ export type ResearchDocument = {
   embeddingStatus?: 'not_embedded' | 'embedding' | 'embedded' | 'failed' | 'keyword_only';
   embeddingError?: string;
   metadata?: DocumentMetadata;
+  extractionSummary?: ExtractionSummary;
+  originalFile?: OriginalDocumentSnapshot;
   collectionIds?: string[];
 };
 
@@ -158,6 +199,9 @@ export type PerformanceRecord = {
   predictedGrade?: string;
   targetGrade?: string;
   marksExtracted?: boolean;
+  extractionConfidence?: ExtractionConfidence;
+  fieldConfidence?: ExtractionFieldConfidence;
+  reviewStatus?: 'confirmed' | 'needs_review';
   strengths: string[];
   weaknesses: string[];
   actionPoints: string[];

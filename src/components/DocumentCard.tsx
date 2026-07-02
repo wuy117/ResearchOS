@@ -9,6 +9,8 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
   const displaySubjects = subjects.length ? subjects : recordSubjects;
   const markedRecords = linkedRecords.filter((record) => getRecordPercentage(record) !== undefined || record.grade || record.attainment || record.predictedGrade || record.targetGrade);
   const commentRecords = linkedRecords.filter((record) => record.teacherComment);
+  const summary = document.extractionSummary;
+  const originalFile = document.originalFile;
   const statusClasses = {
     Indexed: 'bg-moss/10 text-moss',
     Ready: 'bg-moss/10 text-moss',
@@ -30,6 +32,32 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[document.status]}`}>{document.status}</span>
       </div>
       <p className="mt-4 line-clamp-3 text-sm leading-7 text-graphite/75">{document.summary}</p>
+      {summary ? (
+        <section className="mt-5 rounded-lg border border-ink/6 bg-paper/55 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Document understood</p>
+              <p className="mt-1 text-sm font-semibold text-ink">{summary.confidence} confidence</p>
+            </div>
+            {summary.needsReview ? (
+              <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">{summary.needsReview} needs review</span>
+            ) : (
+              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-semibold text-moss">No review needed</span>
+            )}
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
+            <ExtractionStat label="Subjects found" value={summary.subjectsFound} />
+            <ExtractionStat label="Teacher comments" value={summary.teacherComments} />
+            <ExtractionStat label="Marks extracted" value={summary.marksExtracted} />
+            <ExtractionStat label="Grades extracted" value={summary.gradesExtracted} />
+            <ExtractionStat label="Targets found" value={summary.targetsFound} />
+            <ExtractionStat label="Teachers identified" value={summary.teachersIdentified} />
+          </div>
+          {summary.reviewNotes.length ? (
+            <p className="mt-3 text-sm leading-6 text-graphite/72">{summary.reviewNotes[0]}</p>
+          ) : null}
+        </section>
+      ) : null}
       {metadata ? (
         <div className="mt-5 grid gap-x-6 gap-y-4 border-t border-ink/6 pt-4 lg:grid-cols-3">
           <MetadataBlock label="Subjects" items={displaySubjects} />
@@ -61,6 +89,23 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
           {document.pageCount ? <span className="rounded-full bg-paper/75 px-2.5 py-1 text-xs font-medium text-graphite/70">{document.pageCount.toLocaleString()} pages</span> : null}
           {chunkCount ? <span className="rounded-full bg-paper/75 px-2.5 py-1 text-xs font-medium text-graphite/70">Ready to study</span> : null}
         </div>
+        {originalFile ? (
+          <div className="mt-4 rounded-lg border border-ink/6 bg-paper/60 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Original document</p>
+            <p className="mt-2 text-sm leading-6 text-graphite/74">
+              {originalFile.fileName} / {formatBytes(originalFile.size)}
+            </p>
+            {originalFile.previewKind === 'image' && originalFile.previewData ? (
+              <img src={originalFile.previewData} alt={`Preview of ${originalFile.fileName}`} className="mt-3 max-h-72 w-full rounded-lg border border-ink/8 object-contain" />
+            ) : originalFile.previewKind === 'file' && originalFile.previewData ? (
+              <iframe title={`Preview of ${originalFile.fileName}`} src={originalFile.previewData} className="mt-3 h-72 w-full rounded-lg border border-ink/8 bg-white" />
+            ) : originalFile.previewKind === 'text' && originalFile.previewData ? (
+              <pre className="mt-3 max-h-72 overflow-auto rounded-lg border border-ink/8 bg-white p-3 text-xs leading-5 text-graphite/75">{originalFile.previewData}</pre>
+            ) : (
+              <p className="mt-2 text-sm leading-6 text-graphite/68">{originalFile.previewLabel}</p>
+            )}
+          </div>
+        ) : null}
       </details>
     </article>
   );
@@ -87,6 +132,21 @@ function formatRecordResult(record: PerformanceRecord) {
   const score = typeof record.score === 'number' && typeof record.maxScore === 'number' ? `${record.score}/${record.maxScore}` : undefined;
   const mark = [score, percentage !== undefined ? `${percentage}%` : undefined, record.grade, record.attainment].filter(Boolean).join(' ');
   return mark ? `${record.subject}: ${mark}` : record.subject;
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function ExtractionStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-lg font-semibold text-ink">{value.toLocaleString()}</p>
+      <p className="mt-1 text-xs leading-5 text-graphite/60">{label}</p>
+    </div>
+  );
 }
 
 function SummaryBlock({ label, value }: { label: string; value: string }) {
