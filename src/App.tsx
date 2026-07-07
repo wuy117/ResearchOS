@@ -939,7 +939,9 @@ function getPerformanceDomain(subject: string, assessmentType?: AssessmentType):
 }
 
 function isAcademicPerformanceRecord(record: PerformanceRecord) {
-  return !record.excludeFromAcademicAnalysis && !needsExtractionReview(record) && (record.domain ?? getPerformanceDomain(record.subject, record.assessmentType)) === 'academic';
+  const domain = record.domain ?? getPerformanceDomain(record.subject, record.assessmentType);
+  if (domain !== 'academic' || needsExtractionReview(record)) return false;
+  return !record.excludeFromAcademicAnalysis || hasReviewAvailable(record);
 }
 
 function getAcademicPerformanceRecords(records: PerformanceRecord[]) {
@@ -1102,23 +1104,96 @@ function getRecordExtractionConfidence(record: Pick<PerformanceRecord, 'extracti
   return record.extractionConfidence ?? getLowestConfidence(Object.values(record.fieldConfidence ?? {})) ?? 'High';
 }
 
-function hasLowConfidenceMark(record: Pick<PerformanceRecord, 'marksExtracted' | 'fieldConfidence'>) {
-  if (!record.marksExtracted) return false;
+function hasUsefulExtractedValue(record: Pick<PerformanceRecord, 'teacher' | 'teacherComment' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore'>) {
+  return Boolean(
+    typeof record.percentage === 'number' ||
+      typeof record.score === 'number' ||
+      typeof record.maxScore === 'number' ||
+      record.grade?.trim() ||
+      record.teacherComment?.trim() ||
+      record.teacher?.trim() ||
+      record.effort?.trim() ||
+      record.attainment?.trim() ||
+      record.predictedGrade?.trim() ||
+      record.targetGrade?.trim(),
+  );
+}
+
+function hasLowConfidenceMark(record: Pick<PerformanceRecord, 'marksExtracted' | 'fieldConfidence' | 'percentage' | 'score' | 'maxScore' | 'grade' | 'predictedGrade' | 'targetGrade' | 'attainment'>) {
+  const hasMarkValue = Boolean(
+    typeof record.percentage === 'number' ||
+      typeof record.score === 'number' ||
+      typeof record.maxScore === 'number' ||
+      record.grade?.trim() ||
+      record.predictedGrade?.trim() ||
+      record.targetGrade?.trim() ||
+      record.attainment?.trim(),
+  );
+  if (!record.marksExtracted && !hasMarkValue) return false;
   return markConfidenceFields.some((field) => record.fieldConfidence?.[field] === 'Low');
 }
 
-function needsExtractionReview(record: Pick<PerformanceRecord, 'reviewStatus' | 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted'>) {
+function hasLowConfidenceUsefulValue(record: Pick<PerformanceRecord, 'fieldConfidence' | 'teacher' | 'teacherComment' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore'>) {
+  const fieldConfidence = record.fieldConfidence ?? {};
+  return Boolean(
+    (record.teacher?.trim() && fieldConfidence.teacher === 'Low') ||
+      (record.teacherComment?.trim() && fieldConfidence.teacherComment === 'Low') ||
+      (record.effort?.trim() && fieldConfidence.effort === 'Low') ||
+      (record.attainment?.trim() && fieldConfidence.attainment === 'Low') ||
+      (typeof record.percentage === 'number' && fieldConfidence.percentage === 'Low') ||
+      (typeof record.score === 'number' && fieldConfidence.score === 'Low') ||
+      (typeof record.maxScore === 'number' && fieldConfidence.maxScore === 'Low') ||
+      (record.grade?.trim() && fieldConfidence.grade === 'Low') ||
+      (record.predictedGrade?.trim() && fieldConfidence.predictedGrade === 'Low') ||
+      (record.targetGrade?.trim() && fieldConfidence.targetGrade === 'Low'),
+  );
+}
+
+function hasMediumConfidenceUsefulValue(record: Pick<PerformanceRecord, 'fieldConfidence' | 'teacher' | 'teacherComment' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore'>) {
+  const fieldConfidence = record.fieldConfidence ?? {};
+  return Boolean(
+    (record.teacher?.trim() && fieldConfidence.teacher === 'Medium') ||
+      (record.teacherComment?.trim() && fieldConfidence.teacherComment === 'Medium') ||
+      (record.effort?.trim() && fieldConfidence.effort === 'Medium') ||
+      (record.attainment?.trim() && fieldConfidence.attainment === 'Medium') ||
+      (typeof record.percentage === 'number' && fieldConfidence.percentage === 'Medium') ||
+      (typeof record.score === 'number' && fieldConfidence.score === 'Medium') ||
+      (typeof record.maxScore === 'number' && fieldConfidence.maxScore === 'Medium') ||
+      (record.grade?.trim() && fieldConfidence.grade === 'Medium') ||
+      (record.predictedGrade?.trim() && fieldConfidence.predictedGrade === 'Medium') ||
+      (record.targetGrade?.trim() && fieldConfidence.targetGrade === 'Medium'),
+  );
+}
+
+function needsExtractionReview(record: Pick<PerformanceRecord, 'reviewStatus' | 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted' | 'subject' | 'teacher' | 'teacherComment' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore'>) {
   if (record.reviewStatus === 'confirmed') return false;
-  return record.extractionConfidence === 'Low' || Object.values(record.fieldConfidence ?? {}).includes('Low') || hasLowConfidenceMark(record);
+  const subjectIsUnclear = !record.subject.trim() || record.fieldConfidence?.subject === 'Low';
+  if (subjectIsUnclear) return true;
+  if (!hasUsefulExtractedValue(record)) return record.extractionConfidence === 'Low';
+  return hasLowConfidenceUsefulValue(record) || hasLowConfidenceMark(record);
 }
 
-function hasReviewAvailable(record: Pick<PerformanceRecord, 'reviewStatus' | 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted'>) {
-  return record.reviewStatus !== 'confirmed' && getRecordExtractionConfidence(record) === 'Medium' && !needsExtractionReview(record);
+function hasReviewAvailable(record: Pick<PerformanceRecord, 'reviewStatus' | 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted' | 'subject' | 'teacher' | 'teacherComment' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore'>) {
+  return record.reviewStatus !== 'confirmed' && !needsExtractionReview(record) && (record.extractionConfidence === 'Medium' || hasMediumConfidenceUsefulValue(record));
 }
 
-function getExtractionReviewReasons(record: Pick<PerformanceRecord, 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted' | 'subject' | 'teacher' | 'percentage' | 'grade'>) {
+function getExtractionReviewReasons(record: Pick<PerformanceRecord, 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted' | 'subject' | 'teacher' | 'teacherComment' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore'>) {
   const lowFields = Object.entries(record.fieldConfidence ?? {})
-    .filter(([, confidence]) => confidence === 'Low')
+    .filter(([field, confidence]) => {
+      if (confidence !== 'Low') return false;
+      if (field === 'subject') return true;
+      if (field === 'teacher') return Boolean(record.teacher?.trim());
+      if (field === 'teacherComment') return Boolean(record.teacherComment?.trim());
+      if (field === 'score') return typeof record.score === 'number';
+      if (field === 'maxScore') return typeof record.maxScore === 'number';
+      if (field === 'percentage') return typeof record.percentage === 'number';
+      if (field === 'grade') return Boolean(record.grade?.trim());
+      if (field === 'predictedGrade') return Boolean(record.predictedGrade?.trim());
+      if (field === 'targetGrade') return Boolean(record.targetGrade?.trim());
+      if (field === 'effort') return Boolean(record.effort?.trim());
+      if (field === 'attainment') return Boolean(record.attainment?.trim());
+      return false;
+    })
     .map(([field]) => field);
   const reasons: string[] = lowFields.map((field) => {
     if (field === 'subject') return 'Subject uncertain.';
@@ -1242,9 +1317,27 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
 
   const assessmentType = normalizeAssessmentType(record.assessmentType);
   const domain = getPerformanceDomain(subject, assessmentType);
-  const lowConfidenceExtraction = extractionConfidence === 'Low' || Object.values(fieldConfidence).includes('Low');
-  const lowConfidenceMark = marksExtracted && markConfidenceFields.some((field) => fieldConfidence[field] === 'Low');
-  const requiresReview = lowConfidenceExtraction || lowConfidenceMark;
+  const candidateRecord = {
+    reviewStatus: undefined,
+    extractionConfidence,
+    fieldConfidence,
+    marksExtracted,
+    subject,
+    teacher: cleanOptionalString(record.teacher),
+    teacherComment: cleanOptionalString(record.teacherComment),
+    effort: cleanOptionalString(record.effort),
+    attainment,
+    percentage,
+    grade,
+    predictedGrade,
+    targetGrade,
+    score,
+    maxScore,
+  };
+  const requiresReview = needsExtractionReview(candidateRecord);
+  const teacher = candidateRecord.teacher;
+  const teacherComment = candidateRecord.teacherComment;
+  const effort = candidateRecord.effort;
 
   return {
     id: `performance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1262,9 +1355,9 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     percentage,
     grade,
     rank: cleanOptionalString(record.rank),
-    teacher: cleanOptionalString(record.teacher),
-    teacherComment: cleanOptionalString(record.teacherComment),
-    effort: cleanOptionalString(record.effort),
+    teacher,
+    teacherComment,
+    effort,
     attainment,
     predictedGrade,
     targetGrade,
@@ -1841,31 +1934,32 @@ function PerformancePage({
 
       {records.length > 0 ? (
         <>
-      <section className="rounded-lg bg-white p-7 shadow-sm">
+      <section className="rounded-lg bg-white p-5 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Learning summary</p>
-        <div className="mt-5 grid gap-6 xl:grid-cols-[1fr_260px]">
-          <div>
+        <div className="mt-4 flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-graphite/62">{selectedSubject}</p>
             <h3 className="mt-2 font-serif text-3xl font-semibold leading-tight text-ink">{learningSummary.headline}</h3>
-            <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/76">{learningSummary.body}</p>
-            <p className="mt-3 max-w-3xl text-sm font-semibold leading-7 text-ink">{learningSummary.nextAction}</p>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-graphite/76">{learningSummary.body}</p>
+            <p className="mt-2 max-w-3xl text-sm font-semibold leading-7 text-ink">{learningSummary.nextAction}</p>
             <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Summary source: {learningSummary.source}</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <InsightBadge label="Confidence" value={learningSummary.confidence} />
-            <InsightBadge label="Direction" value={learningSummary.direction} />
-            <div className="rounded-lg border border-ink/8 bg-paper/70 p-4 sm:col-span-2 xl:col-span-1">
+          <aside className="w-full rounded-lg border border-ink/8 bg-paper/70 p-3 xl:w-[340px]">
+            <div className="grid grid-cols-2 gap-2">
+              <InsightBadge label="Confidence" value={learningSummary.confidence} />
+              <InsightBadge label="Direction" value={learningSummary.direction} />
+            </div>
+            <div className="mt-3">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Why</p>
-              <div className="mt-3 space-y-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 {learningSummary.confidenceSignals.map((signal) => (
-                  <div key={signal.label} className="grid grid-cols-[86px_1fr] gap-2 text-sm">
-                    <span className="font-semibold text-ink">{signal.label}</span>
-                    <span className="text-graphite/72">{signal.stars} {signal.detail}</span>
+                  <div key={signal.label} className="rounded-lg bg-white px-2.5 py-2 text-xs leading-5 text-graphite/72 shadow-sm">
+                    <span className="font-semibold text-ink">{signal.label}</span> {signal.stars}
                   </div>
                 ))}
               </div>
             </div>
-          </div>
+          </aside>
         </div>
       </section>
 
@@ -2517,13 +2611,35 @@ function describeEvidenceScope(records: PerformanceRecord[]) {
   return `${records.length} record${records.length === 1 ? '' : 's'} match this view.`;
 }
 
+function sentenceCaseAction(value: string) {
+  const trimmed = value.trim().replace(/[.]+$/, '');
+  if (!trimmed) return '';
+  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
+}
+
+function makeActionPhrase(value: string, fallbackVerb = 'Focus on') {
+  const clean = value.trim().replace(/[.]+$/, '');
+  const removedEnsure = /^(ensure|make sure to)\s+/i.test(clean);
+  const withoutLeadIn = clean.replace(/^(ensure|continue|remember to|make sure to)\s+/i, '');
+  if (/^(practise|practice|review|revise|maintain|focus|use|improve|develop|check|plan|learn)\b/i.test(withoutLeadIn)) {
+    return sentenceCaseAction(withoutLeadIn);
+  }
+  if (/^(using|writing|explaining|evaluating|planning|checking|applying)\b/i.test(withoutLeadIn)) {
+    return `${fallbackVerb} ${withoutLeadIn}`;
+  }
+  if (removedEnsure) {
+    return `${fallbackVerb} using ${withoutLeadIn.charAt(0).toLowerCase()}${withoutLeadIn.slice(1)}`;
+  }
+  return `${fallbackVerb} ${withoutLeadIn.charAt(0).toLowerCase()}${withoutLeadIn.slice(1)}`;
+}
+
 function firstUsefulAction(records: PerformanceRecord[], subject: string) {
   const actions = topEvidenceTerms(records, 'actionPoints');
   const weaknesses = topEvidenceTerms(records, 'weaknesses');
   const target = actions[0]?.term ?? weaknesses[0]?.term;
   const subjectName = subject === 'All Subjects' ? records.find((record) => record.subject)?.subject : subject;
-  if (target && subjectName) return `Next action: focus on ${target} in ${subjectName}.`;
-  if (target) return `Next action: turn ${target} into a short revision checklist before the next assessment.`;
+  if (target && subjectName) return `Next action: ${makeActionPhrase(target)} in ${subjectName}.`;
+  if (target) return `Next action: ${makeActionPhrase(target, 'Focus on')} before the next assessment.`;
   const strength = topEvidenceTerms(records, 'strengths')[0]?.term;
   if (strength && subjectName) return `Next action: maintain ${strength} in ${subjectName} while collecting the next piece of teacher feedback.`;
   return 'Next action: add the next report or teacher comment so this early observation can be checked against fresh evidence.';
@@ -2692,9 +2808,9 @@ function buildProgressRecommendations(records: PerformanceRecord[], tutorLessons
 
 function InsightBadge({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-ink/8 bg-paper/70 p-4">
+    <div className="rounded-lg border border-ink/8 bg-white p-3">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-ink">{value}</p>
+      <p className="mt-1 text-base font-semibold leading-6 text-ink">{value}</p>
     </div>
   );
 }
