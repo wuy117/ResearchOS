@@ -1486,7 +1486,10 @@ function PerformancePage({
   const breakdownRecords = useMemo(() => filterBreakdownRecords(filteredRecords, selectedBreakdown), [filteredRecords, selectedBreakdown]);
   const sortedRecords = useMemo(() => sortRecordsByAssessmentDate(filteredRecords), [filteredRecords]);
   const selectedTimelineRecord = sortedRecords.find((record) => record.id === selectedTimelineRecordId) ?? sortedRecords[sortedRecords.length - 1];
-  const learningSummary = useMemo(() => buildLearningSummary(filteredRecords, selectedSubject, summaries[0]), [filteredRecords, selectedSubject, summaries]);
+  const learningSummary = useMemo(
+    () => buildLearningSummary(filteredRecords, selectedSubject, summaries[0], tutorLessons, tutorAttempts, tutorMemory),
+    [filteredRecords, selectedSubject, summaries, tutorAttempts, tutorLessons, tutorMemory],
+  );
   const teacherInsights = useMemo(() => buildTeacherInsights(filteredRecords), [filteredRecords]);
   const strengths = useMemo(() => buildEvidenceItems(filteredRecords, 'strengths'), [filteredRecords]);
   const needsImprovement = useMemo(() => buildEvidenceItems(filteredRecords, 'weaknesses'), [filteredRecords]);
@@ -1793,8 +1796,8 @@ function PerformancePage({
 
       {records.length === 0 ? (
         <EmptyState
-          title="Add the first report or assessment"
-          copy="Add exam results manually or analyse an uploaded report to begin building a private academic performance picture."
+          title={documents.some((document) => document.extractedText?.trim()) ? 'Turn uploaded reports into evidence' : 'Add the first report or assessment'}
+          copy={documents.some((document) => document.extractedText?.trim()) ? 'Analyse an uploaded report so teacher comments, strengths, targets, grades, and recommendations can feed Progress.' : 'Add exam results manually or analyse an uploaded report to begin building a private academic performance picture.'}
         />
       ) : null}
 
@@ -1807,11 +1810,23 @@ function PerformancePage({
             <p className="text-sm font-semibold text-graphite/62">{selectedSubject}</p>
             <h3 className="mt-2 font-serif text-3xl font-semibold leading-tight text-ink">{learningSummary.headline}</h3>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/76">{learningSummary.body}</p>
+            <p className="mt-3 max-w-3xl text-sm font-semibold leading-7 text-ink">{learningSummary.nextAction}</p>
             <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Summary source: {learningSummary.source}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             <InsightBadge label="Confidence" value={learningSummary.confidence} />
             <InsightBadge label="Direction" value={learningSummary.direction} />
+            <div className="rounded-lg border border-ink/8 bg-paper/70 p-4 sm:col-span-2 xl:col-span-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Why</p>
+              <div className="mt-3 space-y-2">
+                {learningSummary.confidenceSignals.map((signal) => (
+                  <div key={signal.label} className="grid grid-cols-[86px_1fr] gap-2 text-sm">
+                    <span className="font-semibold text-ink">{signal.label}</span>
+                    <span className="text-graphite/72">{signal.stars} {signal.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -2381,48 +2396,194 @@ function topEvidenceTerms(records: PerformanceRecord[], field: 'strengths' | 'we
   return [...byTerm.values()].sort((a, b) => b.records.length - a.records.length || a.term.localeCompare(b.term));
 }
 
-function buildLearningSummary(records: PerformanceRecord[], subject: string, latestSummary?: PerformanceSummary) {
+type EvidenceSignal = {
+  label: string;
+  score: number;
+  stars: string;
+  detail: string;
+};
+
+function scoreToStars(score: number) {
+  const clamped = Math.max(0, Math.min(5, Math.round(score)));
+  return `${clamped}/5`;
+}
+
+function countGradeEvidence(record: PerformanceRecord) {
+  return [record.grade, record.effort, record.attainment, record.predictedGrade, record.targetGrade, record.rank].filter((value) => value?.trim()).length;
+}
+
+function getEvidenceSignals(records: PerformanceRecord[], tutorLessons: TutorLesson[], tutorAttempts: TutorAttempt[], tutorMemory: TutorMemory): EvidenceSignal[] {
+  const snapshots = getReportSnapshots(records);
+  const commentCount = records.filter((record) => record.teacherComment?.trim()).length;
+  const markedRecords = records.filter((record) => getRecordPercentage(record) !== undefined || record.score !== undefined || record.grade?.trim()).length;
+  const gradeRecords = records.filter((record) => countGradeEvidence(record) > 0).length;
+  const themeMentions = ['strengths', 'weaknesses', 'actionPoints'].reduce((total, field) => total + topEvidenceTerms(records, field as 'strengths' | 'weaknesses' | 'actionPoints').reduce((sum, item) => sum + item.records.length, 0), 0);
+  const repeatedThemes = ['strengths', 'weaknesses', 'actionPoints'].reduce((total, field) => total + topEvidenceTerms(records, field as 'strengths' | 'weaknesses' | 'actionPoints').filter((item) => item.records.length > 1).length, 0);
+  const relevantTutorTopics = tutorMemory.topicsStudied.filter((topic) => topic.lessonsCompleted > 0 || topic.attempts > 0).length;
+  const tutorEvidence = tutorLessons.length + tutorAttempts.length + relevantTutorTopics;
+
+  return [
+    {
+      label: 'Comments',
+      score: commentCount >= 5 ? 5 : commentCount >= 3 ? 4 : commentCount >= 2 ? 3 : commentCount === 1 ? 2 : 0,
+      stars: scoreToStars(commentCount >= 5 ? 5 : commentCount >= 3 ? 4 : commentCount >= 2 ? 3 : commentCount === 1 ? 2 : 0),
+      detail: commentCount ? `${commentCount} teacher comment${commentCount === 1 ? '' : 's'}` : 'no teacher comments yet',
+    },
+    {
+      label: 'Marks',
+      score: markedRecords >= 5 ? 5 : markedRecords >= 3 ? 4 : markedRecords >= 2 ? 3 : markedRecords === 1 ? 2 : 0,
+      stars: scoreToStars(markedRecords >= 5 ? 5 : markedRecords >= 3 ? 4 : markedRecords >= 2 ? 3 : markedRecords === 1 ? 2 : 0),
+      detail: markedRecords ? `${markedRecords} marked or graded record${markedRecords === 1 ? '' : 's'}` : 'not needed for comment-led analysis',
+    },
+    {
+      label: 'Targets',
+      score: gradeRecords >= 5 ? 5 : gradeRecords >= 3 ? 4 : gradeRecords >= 2 ? 3 : gradeRecords === 1 ? 2 : 0,
+      stars: scoreToStars(gradeRecords >= 5 ? 5 : gradeRecords >= 3 ? 4 : gradeRecords >= 2 ? 3 : gradeRecords === 1 ? 2 : 0),
+      detail: gradeRecords ? `${gradeRecords} record${gradeRecords === 1 ? '' : 's'} include effort, attainment, rank, target, or predicted grade` : 'no target or grade evidence yet',
+    },
+    {
+      label: 'Timeline',
+      score: snapshots.length >= 5 ? 5 : snapshots.length >= 3 ? 4 : snapshots.length === 2 ? 3 : snapshots.length === 1 ? 2 : 0,
+      stars: scoreToStars(snapshots.length >= 5 ? 5 : snapshots.length >= 3 ? 4 : snapshots.length === 2 ? 3 : snapshots.length === 1 ? 2 : 0),
+      detail: snapshots.length ? `${snapshots.length} report point${snapshots.length === 1 ? '' : 's'} in order` : 'no timeline evidence yet',
+    },
+    {
+      label: 'Themes',
+      score: repeatedThemes >= 4 ? 5 : repeatedThemes >= 2 ? 4 : themeMentions >= 4 ? 3 : themeMentions >= 1 ? 2 : 0,
+      stars: scoreToStars(repeatedThemes >= 4 ? 5 : repeatedThemes >= 2 ? 4 : themeMentions >= 4 ? 3 : themeMentions >= 1 ? 2 : 0),
+      detail: repeatedThemes ? `${repeatedThemes} repeated theme${repeatedThemes === 1 ? '' : 's'}` : themeMentions ? `${themeMentions} one-off theme mention${themeMentions === 1 ? '' : 's'}` : 'no extracted themes yet',
+    },
+    {
+      label: 'Revision',
+      score: tutorEvidence >= 8 ? 5 : tutorEvidence >= 5 ? 4 : tutorEvidence >= 2 ? 3 : tutorEvidence === 1 ? 2 : 0,
+      stars: scoreToStars(tutorEvidence >= 8 ? 5 : tutorEvidence >= 5 ? 4 : tutorEvidence >= 2 ? 3 : tutorEvidence === 1 ? 2 : 0),
+      detail: tutorEvidence ? `${tutorEvidence} Tutor or revision signal${tutorEvidence === 1 ? '' : 's'}` : 'no Tutor history in this view',
+    },
+  ];
+}
+
+function getOverallConfidence(signals: EvidenceSignal[]) {
+  const weighted = signals.reduce((total, signal) => total + signal.score, 0);
+  if (weighted >= 19) return 'High';
+  if (weighted >= 10) return 'Medium';
+  if (weighted >= 4) return 'Early';
+  return 'Thin';
+}
+
+function describeEvidenceScope(records: PerformanceRecord[]) {
+  const snapshots = getReportSnapshots(records).length;
+  if (snapshots >= 6) return `We have analysed ${snapshots} report points, enough to describe longer-term patterns.`;
+  if (snapshots >= 3) return `We have analysed ${snapshots} report points, so repeated observations are beginning to carry weight.`;
+  if (snapshots === 2) return 'We have analysed two reports. That is enough to identify early patterns, with confidence still building.';
+  if (snapshots === 1) return 'We have analysed one report. The observations below describe what is visible so far, without pretending it is a trend.';
+  return `${records.length} record${records.length === 1 ? '' : 's'} match this view.`;
+}
+
+function firstUsefulAction(records: PerformanceRecord[], subject: string) {
+  const actions = topEvidenceTerms(records, 'actionPoints');
+  const weaknesses = topEvidenceTerms(records, 'weaknesses');
+  const target = actions[0]?.term ?? weaknesses[0]?.term;
+  const subjectName = subject === 'All Subjects' ? records.find((record) => record.subject)?.subject : subject;
+  if (target && subjectName) return `Next action: focus on ${target} in ${subjectName}.`;
+  if (target) return `Next action: turn ${target} into a short revision checklist before the next assessment.`;
+  const strength = topEvidenceTerms(records, 'strengths')[0]?.term;
+  if (strength && subjectName) return `Next action: maintain ${strength} in ${subjectName} while collecting the next piece of teacher feedback.`;
+  return 'Next action: add the next report or teacher comment so this early observation can be checked against fresh evidence.';
+}
+
+function buildLearningSummary(records: PerformanceRecord[], subject: string, latestSummary: PerformanceSummary | undefined, tutorLessons: TutorLesson[], tutorAttempts: TutorAttempt[], tutorMemory: TutorMemory) {
   const delta = getTrendDelta(records);
   const comments = records.filter((record) => record.teacherComment).length;
   const strengths = topEvidenceTerms(records, 'strengths').slice(0, 2).map((item) => item.term);
   const weaknesses = topEvidenceTerms(records, 'weaknesses').slice(0, 2).map((item) => item.term);
-  const direction = delta === undefined ? 'More evidence needed' : delta > 4 ? 'Upward' : delta < -4 ? 'Downward' : 'Stable';
-  const confidence = records.length >= 4 && comments >= 2 ? 'High' : records.length >= 2 ? 'Medium' : 'Low';
+  const actionPoints = topEvidenceTerms(records, 'actionPoints').slice(0, 2).map((item) => item.term);
+  const evidenceSignals = getEvidenceSignals(records, tutorLessons, tutorAttempts, tutorMemory);
+  const confidence = getOverallConfidence(evidenceSignals);
+  const direction = delta === undefined ? (records.length > 1 ? 'Evidence-led' : 'Early observation') : delta > 4 ? 'Appears to be improving' : delta < -4 ? 'Needs attention' : 'Appears steady';
   const headline =
-    delta === undefined
-      ? 'Not enough dated results yet to describe a reliable direction.'
-      : delta > 4
-        ? `Improving by ${Math.round(delta)} percentage points across the selected period.`
+    delta !== undefined
+      ? delta > 4
+        ? `Results appear to be improving by ${Math.round(delta)} percentage points.`
         : delta < -4
-          ? `Results have fallen by ${Math.abs(Math.round(delta))} percentage points and need attention.`
-          : 'Progress looks broadly steady across the selected period.';
+          ? `Results have moved down by ${Math.abs(Math.round(delta))} percentage points and need attention.`
+          : 'The marked results look steady, so teacher evidence matters most now.'
+      : strengths.length || weaknesses.length || comments
+        ? 'Early observations are already visible from teacher evidence.'
+        : 'This view has evidence, but the useful pattern is still emerging.';
+  const teacherEvidence =
+    strengths.length || weaknesses.length || actionPoints.length
+      ? [
+          strengths.length ? `Repeated strengths include ${strengths.join(' and ')}.` : undefined,
+          weaknesses.length ? `Areas needing attention include ${weaknesses.join(' and ')}.` : undefined,
+          actionPoints.length ? `Teacher recommendations point toward ${actionPoints.join(' and ')}.` : undefined,
+        ]
+          .filter(Boolean)
+          .join(' ')
+      : comments
+        ? `${comments} teacher comment${comments === 1 ? '' : 's'} are available, but repeated themes are still settling.`
+        : 'There are no teacher comments in this filtered view yet.';
   const body =
     latestSummary?.overallCommentary && subject === 'All Subjects'
-      ? latestSummary.overallCommentary
-      : [
-          strengths.length ? `Teachers and records repeatedly point to ${strengths.join(' and ')} as strengths.` : 'There is not yet a strong repeated-strength pattern.',
-          weaknesses.length ? `The main lost-mark themes appear to be ${weaknesses.join(' and ')}.` : 'Weakness patterns are still thin, so the system is cautious.',
-          comments ? `${comments} teacher comment${comments === 1 ? '' : 's'} support this summary.` : 'Add report comments to make this more teacher-led.',
-        ].join(' ');
+      ? `${describeEvidenceScope(records)} ${latestSummary.overallCommentary}`
+      : `${describeEvidenceScope(records)} ${teacherEvidence}`;
 
-  return { headline, body, confidence, direction, source: latestSummary?.overallCommentary && subject === 'All Subjects' ? 'Saved coaching note' : 'Filtered records and teacher evidence' };
+  return {
+    headline,
+    body,
+    nextAction: firstUsefulAction(records, subject),
+    confidence,
+    confidenceSignals: evidenceSignals,
+    direction,
+    source: latestSummary?.overallCommentary && subject === 'All Subjects' ? 'Saved coaching note plus current evidence profile' : 'Filtered records, teacher evidence, marks, targets, timeline, and Tutor history',
+  };
+}
+
+function getImprovementSignals(records: PerformanceRecord[]) {
+  const sorted = sortRecordsByAssessmentDate(records);
+  const midpoint = Math.max(1, Math.floor(sorted.length / 2));
+  const earlier = sorted.slice(0, midpoint);
+  const later = sorted.slice(midpoint);
+  const earlierWeaknesses = new Set(topEvidenceTerms(earlier, 'weaknesses').map((item) => item.term.toLowerCase()));
+  const laterStrengths = topEvidenceTerms(later.length ? later : sorted, 'strengths');
+  const movedToStrength = laterStrengths.filter((item) => earlierWeaknesses.has(item.term.toLowerCase())).map((item) => `${item.term} appears to have improved since earlier feedback.`);
+  const explicitImprovement = sorted
+    .filter((record) => /\b(improv|progress|better|stronger|developed|clearer)\b/i.test(record.teacherComment ?? ''))
+    .slice(-3)
+    .map((record) => `${record.subject}: teacher evidence suggests improvement in ${record.title}.`);
+  const delta = getTrendDelta(records);
+  const markSignal = delta !== undefined && delta > 4 ? [`Marks have risen by about ${Math.round(delta)} percentage points in same-subject comparisons.`] : [];
+  return uniqueStrings([...movedToStrength, ...explicitImprovement, ...markSignal]).slice(0, 4);
 }
 
 function buildTeacherInsights(records: PerformanceRecord[]) {
-  const strengths = topEvidenceTerms(records, 'strengths').slice(0, 4).map((item) => `${item.term} (${item.records.length} report${item.records.length === 1 ? '' : 's'})`);
-  const weaknesses = topEvidenceTerms(records, 'weaknesses').slice(0, 4).map((item) => `${item.term} (${item.records.length} record${item.records.length === 1 ? '' : 's'})`);
-  const actionPoints = topEvidenceTerms(records, 'actionPoints').slice(0, 4).map((item) => `${item.term} is repeatedly recommended`);
+  const strengths = topEvidenceTerms(records, 'strengths')
+    .slice(0, 4)
+    .map((item) => `${item.term} (${item.records.length > 1 ? 'repeated across' : 'seen in'} ${item.records.length} report${item.records.length === 1 ? '' : 's'})`);
+  const weaknesses = topEvidenceTerms(records, 'weaknesses')
+    .slice(0, 4)
+    .map((item) => `${item.term} (${item.records.length > 1 ? 'repeated across' : 'seen in'} ${item.records.length} record${item.records.length === 1 ? '' : 's'})`);
+  const actionPoints = topEvidenceTerms(records, 'actionPoints').slice(0, 4).map((item) => `${item.term} is ${item.records.length > 1 ? 'repeatedly' : 'currently'} recommended`);
+  const improvements = getImprovementSignals(records);
   const delta = getTrendDelta(records);
+  const comments = records.filter((record) => record.teacherComment).length;
+  const gradeEvidence = records.filter((record) => countGradeEvidence(record) > 0).length;
   const patterns = [
-    delta !== undefined ? (delta > 4 ? 'Marks and comments suggest improvement is converting into results.' : delta < -4 ? 'Results are moving down despite the available feedback; revisit the repeated weaknesses.' : 'Results are stable, so improvement depends on resolving repeated feedback themes.') : undefined,
-    records.filter((record) => record.teacherComment).length > 1 ? 'Teacher comments are available across multiple records, so repeated phrasing has more weight.' : undefined,
+    delta !== undefined
+      ? delta > 4
+        ? 'Marks and comments suggest improvement is starting to convert into results.'
+        : delta < -4
+          ? 'Same-subject marks are moving down, so repeated weaknesses need priority.'
+          : 'Marks are stable; teacher evidence should guide the next improvement step.'
+      : 'No same-subject mark trend is available, so teacher evidence carries the pattern.',
+    comments ? `${comments} teacher comment${comments === 1 ? '' : 's'} contribute to the narrative.` : undefined,
+    gradeEvidence ? `${gradeEvidence} record${gradeEvidence === 1 ? '' : 's'} include effort, attainment, target, predicted grade, rank, or grade evidence.` : undefined,
   ].filter((item): item is string => Boolean(item));
 
   return {
-    strengths: strengths.length ? strengths : ['No repeated teacher strength has emerged yet.'],
-    weaknesses: weaknesses.length ? weaknesses : ['No repeated teacher weakness has emerged yet.'],
-    improvements: actionPoints.length ? actionPoints : ['More action-point history is needed before naming improvements.'],
-    patterns: patterns.length ? patterns : ['Add more dated reports to reveal patterns across time.'],
+    strengths: strengths.length ? strengths : ['No explicit strength has been extracted yet.'],
+    weaknesses: weaknesses.length ? weaknesses : ['No explicit weakness has been extracted yet.'],
+    improvements: improvements.length ? improvements : actionPoints.length ? actionPoints : ['Improvement evidence is not clear yet; treat this as an early observation.'],
+    patterns: patterns.length ? patterns : ['Evidence exists, but repeated patterns are still emerging.'],
   };
 }
 
@@ -2439,13 +2600,13 @@ function buildProgressRecommendations(records: PerformanceRecord[], tutorLessons
     const readableSources = documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed').length;
     return [
       {
-        title: 'Upload a marked report',
-        reason: 'Progress becomes useful once Research OS has at least one report, exam result, or mark sheet with teacher evidence.',
+        title: 'Analyse a report',
+        reason: 'Progress becomes useful once Research OS has at least one report, exam result, mark sheet, or teacher comment to reason from.',
         evidence: `${readableSources} readable source${readableSources === 1 ? '' : 's'} available for analysis.`,
       },
       {
         title: 'Add the first assessment record',
-        reason: 'A single dated result starts the timeline; two or more dated results turn it into a trend.',
+        reason: 'A single report starts the timeline; two reports allow early comparison; later reports make the pattern stronger.',
         evidence: 'No academic performance records match the current view yet.',
       },
       {
@@ -2506,8 +2667,8 @@ function ProgressTimeline({ records, selectedId, onSelect }: { records: Performa
   return snapshots.length ? (
     <div className="mt-6">
       <div className="mb-3 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
-        <span>Assessment date</span>
-        <span>Percentage / grade</span>
+        <span>Report evidence</span>
+        <span>Outcome</span>
       </div>
       <div className="relative space-y-4 border-l border-ink/12 pl-5">
         {snapshots.map((snapshot) => {
