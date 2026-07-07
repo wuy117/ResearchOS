@@ -738,9 +738,9 @@ function ExtractionReviewPanel({ document, records, onSaveRecord }: { document: 
     <section className="rounded-lg border border-brass/25 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brass">Review extracted values</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brass">May need a quick check</p>
           <p className="mt-2 text-sm leading-6 text-graphite/74">
-            We understood most of this report. {reviewRecords.length} subject{reviewRecords.length === 1 ? '' : 's'} need review before uncertain values are trusted by Progress.
+            Research OS understood this report. {reviewRecords.length} subject{reviewRecords.length === 1 ? ' has' : 's have'} one possible ambiguity before it affects Progress.
           </p>
         </div>
         <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">{document.extractionSummary?.confidence ?? 'Medium'} confidence</span>
@@ -803,6 +803,7 @@ function ExtractionRecordEditor({ record, onSaveRecord }: { record: PerformanceR
   }
 
   const confidence = getRecordExtractionConfidence(record);
+  const reviewReasons = getExtractionReviewReasons(record);
   const values = [
     percentage.trim() ? `${percentage}%` : undefined,
     grade.trim(),
@@ -817,8 +818,9 @@ function ExtractionRecordEditor({ record, onSaveRecord }: { record: PerformanceR
         <div>
           <p className="font-semibold text-ink">{record.subject}</p>
           <p className="mt-1 text-sm leading-6 text-graphite/72">{values.length ? values.join(' / ') : 'Teacher comments only'}</p>
+          {reviewReasons.length ? <p className="mt-2 text-sm font-semibold leading-6 text-brass">{reviewReasons.join(' ')}</p> : null}
         </div>
-        <button type="button" onClick={() => setIsEditing((value) => !value)} className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+        <button type="button" onClick={() => setIsEditing((value) => !value)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${confidence === 'Low' ? 'bg-ink text-white' : 'border border-ink/10 bg-white text-ink'}`}>
           {isEditing ? 'Close' : 'Review'}
         </button>
       </div>
@@ -1107,7 +1109,34 @@ function hasLowConfidenceMark(record: Pick<PerformanceRecord, 'marksExtracted' |
 
 function needsExtractionReview(record: Pick<PerformanceRecord, 'reviewStatus' | 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted'>) {
   if (record.reviewStatus === 'confirmed') return false;
-  return getRecordExtractionConfidence(record) !== 'High' || hasLowConfidenceMark(record);
+  return record.extractionConfidence === 'Low' || Object.values(record.fieldConfidence ?? {}).includes('Low') || hasLowConfidenceMark(record);
+}
+
+function hasReviewAvailable(record: Pick<PerformanceRecord, 'reviewStatus' | 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted'>) {
+  return record.reviewStatus !== 'confirmed' && getRecordExtractionConfidence(record) === 'Medium' && !needsExtractionReview(record);
+}
+
+function getExtractionReviewReasons(record: Pick<PerformanceRecord, 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted' | 'subject' | 'teacher' | 'percentage' | 'grade'>) {
+  const lowFields = Object.entries(record.fieldConfidence ?? {})
+    .filter(([, confidence]) => confidence === 'Low')
+    .map(([field]) => field);
+  const reasons: string[] = lowFields.map((field) => {
+    if (field === 'subject') return 'Subject uncertain.';
+    if (field === 'teacher') return 'Teacher name may need a quick check.';
+    if (field === 'teacherComment') return 'Teacher comment was difficult to read.';
+    if (field === 'score' || field === 'maxScore' || field === 'percentage') return 'Possible mark mismatch.';
+    if (field === 'grade' || field === 'predictedGrade' || field === 'targetGrade') return 'Possible grade mismatch.';
+    if (field === 'effort' || field === 'attainment') return 'Effort or attainment value may be ambiguous.';
+    if (field === 'rank') return 'Rank or set value may be ambiguous.';
+    return 'One extracted field may need a quick check.';
+  });
+  if (record.extractionConfidence === 'Low' && reasons.length === 0) {
+    reasons.push('OCR or table structure made this row uncertain.');
+  }
+  if (record.marksExtracted && hasLowConfidenceMark(record)) {
+    reasons.push('Progress is waiting because one mark field is low confidence.');
+  }
+  return uniqueStrings(reasons).slice(0, 3);
 }
 
 function readFileAsDataUrl(file: File) {
@@ -1213,7 +1242,9 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
 
   const assessmentType = normalizeAssessmentType(record.assessmentType);
   const domain = getPerformanceDomain(subject, assessmentType);
+  const lowConfidenceExtraction = extractionConfidence === 'Low' || Object.values(fieldConfidence).includes('Low');
   const lowConfidenceMark = marksExtracted && markConfidenceFields.some((field) => fieldConfidence[field] === 'Low');
+  const requiresReview = lowConfidenceExtraction || lowConfidenceMark;
 
   return {
     id: `performance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1225,7 +1256,7 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     subject,
     assessmentType,
     domain,
-    excludeFromAcademicAnalysis: Boolean(record.excludeFromAcademicAnalysis) || lowConfidenceMark || Boolean(sourceMetadata?.ignoreInstrumentalMusic && domain !== 'academic'),
+    excludeFromAcademicAnalysis: Boolean(record.excludeFromAcademicAnalysis) || requiresReview || Boolean(sourceMetadata?.ignoreInstrumentalMusic && domain !== 'academic'),
     score,
     maxScore,
     percentage,
@@ -1240,7 +1271,7 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     marksExtracted,
     extractionConfidence,
     fieldConfidence,
-    reviewStatus: getLowestConfidence([extractionConfidence, ...Object.values(fieldConfidence)]) === 'High' ? 'confirmed' : 'needs_review',
+    reviewStatus: requiresReview ? 'needs_review' : 'confirmed',
     strengths: Array.isArray(record.strengths) ? record.strengths.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
     weaknesses: Array.isArray(record.weaknesses) ? record.weaknesses.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
     actionPoints: Array.isArray(record.actionPoints) ? record.actionPoints.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
@@ -1302,17 +1333,21 @@ function buildExtractionSummary(document: ResearchDocument, metadata: DocumentMe
   const targetsFound = linkedRecords.filter((record) => Boolean(record.targetGrade)).length;
   const teachersIdentified = uniqueStrings([...safeStringArray(metadata.teacherNames), ...linkedRecords.map((record) => record.teacher)]).length;
   const reviewRecords = linkedRecords.filter(needsExtractionReview);
+  const reviewSuggestedRecords = linkedRecords.filter(hasReviewAvailable);
+  const confirmedRecords = linkedRecords.filter((record) => !needsExtractionReview(record));
   const metadataConfidence = metadata.metadataConfidence ?? analysis?.metadata.metadataConfidence ?? 'Low';
   const confidence = getLowestConfidence([metadataConfidence, ...linkedRecords.map(getRecordExtractionConfidence)]) ?? 'Low';
   const reviewNotes = [
-    reviewRecords.length ? `${reviewRecords.length} subject${reviewRecords.length === 1 ? '' : 's'} need review before their uncertain values are trusted.` : '',
-    linkedRecords.some(hasLowConfidenceMark) ? 'Low-confidence marks are visible for review but do not affect Progress until confirmed.' : '',
+    linkedRecords.length ? `Research OS understood this report. ${confirmedRecords.length} subject${confirmedRecords.length === 1 ? '' : 's'} confirmed automatically.` : '',
+    reviewSuggestedRecords.length ? `${reviewSuggestedRecords.length} subject${reviewSuggestedRecords.length === 1 ? '' : 's'} may need a quick check later.` : '',
+    reviewRecords.length ? `${reviewRecords.length} subject${reviewRecords.length === 1 ? ' is' : 's are'} waiting for confirmation before affecting Progress.` : '',
+    linkedRecords.some(hasLowConfidenceMark) ? 'One possible mark ambiguity is visible for review and is not counted in Progress yet.' : '',
     !analysis ? 'AI extraction was unavailable, so this summary uses local fallback metadata.' : '',
   ].filter(Boolean);
 
   return {
     confidence,
-    status: reviewRecords.length ? (confidence === 'Low' ? 'Partially understood' : 'Needs review') : 'Document understood',
+    status: reviewRecords.length ? 'Partially understood' : 'Document understood',
     subjectsFound,
     teacherComments,
     marksExtracted,
@@ -1320,6 +1355,9 @@ function buildExtractionSummary(document: ResearchDocument, metadata: DocumentMe
     targetsFound,
     teachersIdentified,
     needsReview: reviewRecords.length,
+    confirmedAutomatically: confirmedRecords.length,
+    reviewSuggested: reviewSuggestedRecords.length,
+    waitingForConfirmation: reviewRecords.length,
     reviewNotes,
   };
 }
@@ -4088,7 +4126,7 @@ function buildResearchChatContext(
       .slice(0, 8)
       .map((record) => {
         const confidence = getRecordExtractionConfidence(record);
-        const reviewCopy = needsExtractionReview(record) ? `${confidence} confidence, needs review` : 'confirmed';
+        const reviewCopy = needsExtractionReview(record) ? `${confidence} confidence, waiting for confirmation` : hasReviewAvailable(record) ? `${confidence} confidence, review available` : 'confirmed';
         return `${record.date}: ${record.subject} ${formatResult(record)} (${reviewCopy})${record.teacherComment ? `; comment: ${record.teacherComment}` : ''}`;
       })
       .concat(

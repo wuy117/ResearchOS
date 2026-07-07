@@ -10,6 +10,9 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
   const markedRecords = linkedRecords.filter((record) => getRecordPercentage(record) !== undefined || record.grade || record.attainment || record.predictedGrade || record.targetGrade);
   const commentRecords = linkedRecords.filter((record) => record.teacherComment);
   const summary = document.extractionSummary;
+  const confirmedAutomatically = summary?.confirmedAutomatically ?? Math.max(0, linkedRecords.length - (summary?.needsReview ?? 0));
+  const reviewSuggested = summary?.reviewSuggested ?? 0;
+  const waitingForConfirmation = summary?.waitingForConfirmation ?? summary?.needsReview ?? 0;
   const originalFile = document.originalFile;
   const statusClasses = {
     Indexed: 'bg-moss/10 text-moss',
@@ -40,10 +43,17 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
               <p className="mt-1 text-sm font-semibold text-ink">{summary.confidence} confidence</p>
             </div>
             {summary.needsReview ? (
-              <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">{summary.needsReview} needs review</span>
+              <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">{summary.needsReview} quick check{summary.needsReview === 1 ? '' : 's'}</span>
+            ) : reviewSuggested ? (
+              <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">Review available</span>
             ) : (
-              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-semibold text-moss">No review needed</span>
+              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-semibold text-moss">Looks good</span>
             )}
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+            <ExtractionStat label="Automatically confirmed" value={confirmedAutomatically} />
+            <ExtractionStat label="Review suggested" value={reviewSuggested} />
+            <ExtractionStat label="Waiting for confirmation" value={waitingForConfirmation} />
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
             <ExtractionStat label="Subjects found" value={summary.subjectsFound} />

@@ -29,6 +29,9 @@ export type ExtractionSummary = {
   targetsFound: number;
   teachersIdentified: number;
   needsReview: number;
+  confirmedAutomatically: number;
+  reviewSuggested: number;
+  waitingForConfirmation: number;
   reviewNotes: string[];
 };
 
