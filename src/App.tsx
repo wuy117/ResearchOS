@@ -941,7 +941,7 @@ function getPerformanceDomain(subject: string, assessmentType?: AssessmentType):
 function isAcademicPerformanceRecord(record: PerformanceRecord) {
   const domain = record.domain ?? getPerformanceDomain(record.subject, record.assessmentType);
   if (domain !== 'academic' || needsExtractionReview(record)) return false;
-  return !record.excludeFromAcademicAnalysis || hasReviewAvailable(record);
+  return !record.excludeFromAcademicAnalysis || hasReviewAvailable(record) || hasProgressUsableEvidence(record);
 }
 
 function getAcademicPerformanceRecords(records: PerformanceRecord[]) {
@@ -961,9 +961,11 @@ function getSubjectGroups(records: PerformanceRecord[]) {
 function formatResult(record: PerformanceRecord) {
   const percentage = getRecordPercentage(record);
   const score = typeof record.score === 'number' && typeof record.maxScore === 'number' ? `${record.score}/${record.maxScore}` : undefined;
+  const estimatedGrade = getEstimatedGradeFromPercentage(percentage);
   return [
     score,
     percentage !== undefined ? `${percentage}%` : undefined,
+    estimatedGrade ? `Estimated from percentage: ${estimatedGrade}` : undefined,
     record.grade,
     record.attainment ? `Attainment ${record.attainment}` : undefined,
     record.predictedGrade ? `Predicted ${record.predictedGrade}` : undefined,
@@ -1086,8 +1088,19 @@ function cleanOptionalString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
-const markConfidenceFields: Array<keyof ExtractionFieldConfidence> = ['score', 'maxScore', 'percentage', 'grade', 'attainment', 'predictedGrade', 'targetGrade'];
 const originalPreviewLimit = 1_200_000;
+const percentageEstimateBands = [
+  { min: 90, label: 'exceptional' },
+  { min: 80, label: 'strong' },
+  { min: 70, label: 'secure' },
+  { min: 60, label: 'developing' },
+  { min: 0, label: 'building' },
+];
+
+function getEstimatedGradeFromPercentage(percentage?: number) {
+  if (percentage === undefined || percentage < 0 || percentage > 100) return undefined;
+  return percentageEstimateBands.find((band) => percentage >= band.min)?.label;
+}
 
 function normalizeExtractionConfidence(value: unknown): ExtractionConfidence | undefined {
   return value === 'High' || value === 'Medium' || value === 'Low' ? value : undefined;
@@ -1119,18 +1132,49 @@ function hasUsefulExtractedValue(record: Pick<PerformanceRecord, 'teacher' | 'te
   );
 }
 
-function hasLowConfidenceMark(record: Pick<PerformanceRecord, 'marksExtracted' | 'fieldConfidence' | 'percentage' | 'score' | 'maxScore' | 'grade' | 'predictedGrade' | 'targetGrade' | 'attainment'>) {
-  const hasMarkValue = Boolean(
-    typeof record.percentage === 'number' ||
-      typeof record.score === 'number' ||
-      typeof record.maxScore === 'number' ||
-      record.grade?.trim() ||
-      record.predictedGrade?.trim() ||
-      record.targetGrade?.trim() ||
-      record.attainment?.trim(),
+function hasImpossibleMarkValue(record: Pick<PerformanceRecord, 'percentage' | 'score' | 'maxScore'>) {
+  return Boolean(
+    (typeof record.percentage === 'number' && (record.percentage < 0 || record.percentage > 100)) ||
+      (typeof record.score === 'number' && record.score < 0) ||
+      (typeof record.maxScore === 'number' && record.maxScore <= 0) ||
+      (typeof record.score === 'number' && typeof record.maxScore === 'number' && record.score > record.maxScore),
   );
-  if (!record.marksExtracted && !hasMarkValue) return false;
-  return markConfidenceFields.some((field) => record.fieldConfidence?.[field] === 'Low');
+}
+
+function hasContradictoryMarkValue(record: Pick<PerformanceRecord, 'percentage' | 'score' | 'maxScore'>) {
+  if (typeof record.percentage !== 'number' || typeof record.score !== 'number' || typeof record.maxScore !== 'number' || record.maxScore <= 0) return false;
+  const calculated = Math.round((record.score / record.maxScore) * 100);
+  return Math.abs(calculated - record.percentage) > 1;
+}
+
+function hasClearPercentage(record: Pick<PerformanceRecord, 'percentage' | 'fieldConfidence'>) {
+  return typeof record.percentage === 'number' && record.percentage >= 0 && record.percentage <= 100 && record.fieldConfidence?.percentage !== 'Low';
+}
+
+function hasProgressUsableEvidence(record: Pick<PerformanceRecord, 'fieldConfidence' | 'teacherComment' | 'teacher' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore'>) {
+  return Boolean(
+    hasClearPercentage(record) ||
+      (record.teacherComment?.trim() && record.fieldConfidence?.teacherComment !== 'Low') ||
+      (record.grade?.trim() && record.fieldConfidence?.grade !== 'Low') ||
+      (record.teacher?.trim() && record.fieldConfidence?.teacher !== 'Low') ||
+      (record.effort?.trim() && record.fieldConfidence?.effort !== 'Low') ||
+      (record.attainment?.trim() && record.fieldConfidence?.attainment !== 'Low') ||
+      (record.predictedGrade?.trim() && record.fieldConfidence?.predictedGrade !== 'Low') ||
+      (record.targetGrade?.trim() && record.fieldConfidence?.targetGrade !== 'Low') ||
+      (typeof record.score === 'number' && record.fieldConfidence?.score !== 'Low') ||
+      (typeof record.maxScore === 'number' && record.fieldConfidence?.maxScore !== 'Low'),
+  );
+}
+
+function hasLowConfidenceMark(record: Pick<PerformanceRecord, 'marksExtracted' | 'fieldConfidence' | 'percentage' | 'score' | 'maxScore' | 'grade' | 'predictedGrade' | 'targetGrade' | 'attainment'>) {
+  const fieldConfidence = record.fieldConfidence ?? {};
+  return Boolean(
+    (typeof record.percentage === 'number' && fieldConfidence.percentage === 'Low') ||
+      (typeof record.score === 'number' && fieldConfidence.score === 'Low') ||
+      (typeof record.maxScore === 'number' && fieldConfidence.maxScore === 'Low') ||
+      (record.grade?.trim() && fieldConfidence.grade === 'Low') ||
+      (record.attainment?.trim() && fieldConfidence.attainment === 'Low'),
+  );
 }
 
 function hasLowConfidenceUsefulValue(record: Pick<PerformanceRecord, 'fieldConfidence' | 'teacher' | 'teacherComment' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore'>) {
@@ -1169,6 +1213,9 @@ function needsExtractionReview(record: Pick<PerformanceRecord, 'reviewStatus' | 
   if (record.reviewStatus === 'confirmed') return false;
   const subjectIsUnclear = !record.subject.trim() || record.fieldConfidence?.subject === 'Low';
   if (subjectIsUnclear) return true;
+  if (hasImpossibleMarkValue(record) || hasContradictoryMarkValue(record)) return true;
+  if (hasClearPercentage(record)) return false;
+  if (record.teacherComment?.trim() && record.fieldConfidence?.teacherComment !== 'Low') return false;
   if (!hasUsefulExtractedValue(record)) return record.extractionConfidence === 'Low';
   return hasLowConfidenceUsefulValue(record) || hasLowConfidenceMark(record);
 }
@@ -1208,8 +1255,14 @@ function getExtractionReviewReasons(record: Pick<PerformanceRecord, 'extractionC
   if (record.extractionConfidence === 'Low' && reasons.length === 0) {
     reasons.push('OCR or table structure made this row uncertain.');
   }
-  if (record.marksExtracted && hasLowConfidenceMark(record)) {
-    reasons.push('Progress is waiting because one mark field is low confidence.');
+  if (hasImpossibleMarkValue(record)) {
+    reasons.push('Mark value looks impossible.');
+  }
+  if (hasContradictoryMarkValue(record)) {
+    reasons.push('Score and percentage may not match.');
+  }
+  if (hasLowConfidenceMark(record)) {
+    reasons.push('Possible mark mismatch.');
   }
   return uniqueStrings(reasons).slice(0, 3);
 }
@@ -2856,7 +2909,10 @@ function ProgressTimeline({ records, selectedId, onSelect }: { records: Performa
 }
 
 function getSnapshotOutcomeLabel(records: PerformanceRecord[], average?: number) {
-  if (average !== undefined) return `${average}% avg`;
+  if (average !== undefined) {
+    const estimate = getEstimatedGradeFromPercentage(average);
+    return [`${average}% avg`, estimate ? `Estimated from percentage: ${estimate}` : undefined].filter(Boolean).join(' / ');
+  }
   const explicitGrades = records.flatMap((record) => [record.grade, record.attainment, record.predictedGrade, record.targetGrade]).filter(Boolean);
   if (explicitGrades.length) return explicitGrades.slice(0, 2).join(' / ');
   if (records.some((record) => record.teacherComment)) return 'Teacher comments only';
@@ -3295,8 +3351,10 @@ function TimelineRow({ event, compact = false }: { event: TimelineEvent; compact
 }
 
 function formatTimelineSubjectResult(record: TimelineEvent['subjectRecords'][number]) {
+  const estimatedGrade = getEstimatedGradeFromPercentage(record.percentage);
   const values = [
     record.percentage !== undefined ? `${record.percentage}%` : undefined,
+    estimatedGrade ? `Estimated from percentage: ${estimatedGrade}` : undefined,
     record.grade,
     record.predictedGrade ? `Predicted ${record.predictedGrade}` : undefined,
     record.targetGrade ? `Target ${record.targetGrade}` : undefined,

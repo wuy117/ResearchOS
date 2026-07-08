@@ -13,6 +13,7 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
   const confirmedAutomatically = summary?.confirmedAutomatically ?? Math.max(0, linkedRecords.length - (summary?.needsReview ?? 0));
   const reviewSuggested = summary?.reviewSuggested ?? 0;
   const waitingForConfirmation = summary?.waitingForConfirmation ?? summary?.needsReview ?? 0;
+  const cleanStatusLabel = markedRecords.length ? 'Mark confirmed' : commentRecords.length ? 'Teacher comments only' : 'Looks good';
   const originalFile = document.originalFile;
   const statusClasses = {
     Indexed: 'bg-moss/10 text-moss',
@@ -47,7 +48,7 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
             ) : reviewSuggested ? (
               <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">Review available</span>
             ) : (
-              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-semibold text-moss">Looks good</span>
+              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-semibold text-moss">{cleanStatusLabel}</span>
             )}
           </div>
           <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
