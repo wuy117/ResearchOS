@@ -1652,7 +1652,7 @@ function PerformancePage({
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [selectedBreakdown, setSelectedBreakdown] = useState<PerformanceBreakdown>('Overall');
-  const [selectedTimelineRecordId, setSelectedTimelineRecordId] = useState('');
+  const [selectedTimelineSnapshotKey, setSelectedTimelineSnapshotKey] = useState('');
   const [showMovingAverage, setShowMovingAverage] = useState(true);
   const [showTeacherConfidence, setShowTeacherConfidence] = useState(true);
   const [showAiConfidence, setShowAiConfidence] = useState(true);
@@ -1669,7 +1669,8 @@ function PerformancePage({
   );
   const breakdownRecords = useMemo(() => filterBreakdownRecords(filteredRecords, selectedBreakdown), [filteredRecords, selectedBreakdown]);
   const sortedRecords = useMemo(() => sortRecordsByAssessmentDate(filteredRecords), [filteredRecords]);
-  const selectedTimelineRecord = sortedRecords.find((record) => record.id === selectedTimelineRecordId) ?? sortedRecords[sortedRecords.length - 1];
+  const timelineSnapshots = useMemo(() => getReportSnapshots(sortedRecords), [sortedRecords]);
+  const selectedTimelineSnapshot = timelineSnapshots.find((snapshot) => snapshot.key === selectedTimelineSnapshotKey) ?? timelineSnapshots[timelineSnapshots.length - 1];
   const learningSummary = useMemo(
     () => buildLearningSummary(filteredRecords, selectedSubject, summaries[0], tutorLessons, tutorAttempts, tutorMemory),
     [filteredRecords, selectedSubject, summaries, tutorAttempts, tutorLessons, tutorMemory],
@@ -2019,12 +2020,12 @@ function PerformancePage({
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_380px]">
         <div className="rounded-lg bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Progress timeline</p>
-          <ProgressTimeline records={sortedRecords} selectedId={selectedTimelineRecord?.id} onSelect={setSelectedTimelineRecordId} />
+          <ProgressTimeline snapshots={timelineSnapshots} documents={documents} selectedKey={selectedTimelineSnapshot?.key} onSelect={setSelectedTimelineSnapshotKey} />
         </div>
 
         <div className="rounded-lg bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Selected point</p>
-          {selectedTimelineRecord ? <TimelineDetail record={selectedTimelineRecord} documents={documents} /> : <p className="mt-4 text-sm leading-7 text-graphite/70">Choose a timeline point to inspect the evidence behind it.</p>}
+          {selectedTimelineSnapshot ? <TimelineDetail snapshot={selectedTimelineSnapshot} documents={documents} /> : <p className="mt-4 text-sm leading-7 text-graphite/70">Choose a report to inspect the evidence behind it.</p>}
         </div>
       </section>
 
@@ -2071,11 +2072,13 @@ function PerformancePage({
             <LineChart size={15} />
             Trend analysis
           </div>
-          <div className="flex flex-wrap gap-3 text-xs font-semibold text-graphite/70">
-            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showTeacherConfidence} onChange={(event) => setShowTeacherConfidence(event.target.checked)} /> Teacher confidence</label>
-            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showAiConfidence} onChange={(event) => setShowAiConfidence(event.target.checked)} /> AI confidence</label>
-            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showMovingAverage} onChange={(event) => setShowMovingAverage(event.target.checked)} /> Moving average</label>
-          </div>
+          {selectedSubject !== 'All Subjects' ? (
+            <div className="flex flex-wrap gap-3 text-xs font-semibold text-graphite/70">
+              <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showTeacherConfidence} onChange={(event) => setShowTeacherConfidence(event.target.checked)} /> Teacher confidence</label>
+              <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showAiConfidence} onChange={(event) => setShowAiConfidence(event.target.checked)} /> AI confidence</label>
+              <label className="inline-flex items-center gap-2"><input type="checkbox" checked={showMovingAverage} onChange={(event) => setShowMovingAverage(event.target.checked)} /> Moving average</label>
+            </div>
+          ) : null}
         </div>
         <TrendChart records={sortedRecords} documents={documents} selectedSubject={selectedSubject} showTeacherConfidence={showTeacherConfidence} showAiConfidence={showAiConfidence} showMovingAverage={showMovingAverage} />
         <SubjectDistributionChart documents={documents} records={filteredRecords} selectedSubject={selectedSubject} />
@@ -2416,8 +2419,16 @@ function sortRecordsByAssessmentDate(records: PerformanceRecord[]) {
 }
 
 function getReportSnapshotKey(record: PerformanceRecord) {
+  if (record.sourceDocumentId) {
+    return [
+      record.sourceDocumentId,
+      hasExactAssessmentDate(record.date) ? getAssessmentDateKey(record.date) : record.academicYear ?? '',
+      record.term ?? '',
+    ].join('|');
+  }
+
   return [
-    record.sourceDocumentId || getRecordAssessmentName(record),
+    getRecordAssessmentName(record),
     hasExactAssessmentDate(record.date) ? getAssessmentDateKey(record.date) : record.academicYear ?? '',
     record.term ?? '',
     getRecordAssessmentName(record),
@@ -2579,6 +2590,89 @@ function topEvidenceTerms(records: PerformanceRecord[], field: 'strengths' | 'we
     });
   });
   return [...byTerm.values()].sort((a, b) => b.records.length - a.records.length || a.term.localeCompare(b.term));
+}
+
+const teacherThemePatterns = [
+  { theme: 'effort', pattern: /\beffort|hard[- ]working|works hard|diligent\b/i },
+  { theme: 'engagement', pattern: /\bengagement|engaged|enthusiasm|interested|attentive\b/i },
+  { theme: 'precision', pattern: /\bprecision|precise|accuracy|accurate\b/i },
+  { theme: 'evaluation', pattern: /\bevaluation|evaluate|evaluating|judgement|judgment\b/i },
+  { theme: 'analysis', pattern: /\banalysis|analytical|analyse|analyze|interpret\b/i },
+  { theme: 'organisation', pattern: /\borganisation|organization|organised|organized|structure|structured\b/i },
+  { theme: 'confidence', pattern: /\bconfidence|confident\b/i },
+  { theme: 'participation', pattern: /\bparticipation|contributes|contribution|discussion|oral\b/i },
+  { theme: 'independence', pattern: /\bindependence|independent|initiative\b/i },
+  { theme: 'written expression', pattern: /\bwritten expression|writing|written work|essay|expression\b/i },
+  { theme: 'calculation accuracy', pattern: /\bcalculation|calculations|numeric|numerical|arithmetic\b/i },
+  { theme: 'exam technique', pattern: /\bexam technique|timing|time management|question technique|marks\b/i },
+  { theme: 'attention to detail', pattern: /\battention to detail|detail|careless|careful|checking\b/i },
+  { theme: 'consistency', pattern: /\bconsistency|consistent|consistently|regularly\b/i },
+  { theme: 'practical work', pattern: /\bpractical|experiment|laboratory|lab work\b/i },
+  { theme: 'vocabulary', pattern: /\bvocabulary|terminology|terms\b/i },
+  { theme: 'significant figures', pattern: /\bsignificant figures|sig\.? figs?\b/i },
+];
+
+const positiveThemeWords = /\b(strong|excellent|good|very good|impressive|confident|clear|secure|effective|well|praise|pleased|engaged|enthusiastic|consistent|improved|better|progress)\b/i;
+const needsWorkThemeWords = /\b(needs?|should|must|target|focus|improve|develop|work on|weak|weaker|inconsistent|lack|careless|limited|struggle|difficulty|more|further)\b/i;
+const improvementThemeWords = /\b(improved|improving|progress|better|developed|stronger|clearer|increasing|now able)\b/i;
+
+type CommentThemeMention = {
+  theme: string;
+  kind: 'strength' | 'weakness' | 'improvement';
+  record: PerformanceRecord;
+  snippet: string;
+};
+
+function splitCommentSentences(comment: string) {
+  return comment
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function classifyThemeSentence(sentence: string): CommentThemeMention['kind'] {
+  if (improvementThemeWords.test(sentence)) return 'improvement';
+  if (needsWorkThemeWords.test(sentence)) return 'weakness';
+  if (positiveThemeWords.test(sentence)) return 'strength';
+  return 'strength';
+}
+
+function extractTeacherCommentThemes(records: PerformanceRecord[]) {
+  const mentions: CommentThemeMention[] = [];
+  records.forEach((record) => {
+    if (!record.teacherComment?.trim()) return;
+    splitCommentSentences(record.teacherComment).forEach((sentence) => {
+      teacherThemePatterns.forEach(({ theme, pattern }) => {
+        if (!pattern.test(sentence)) return;
+        mentions.push({
+          theme,
+          kind: classifyThemeSentence(sentence),
+          record,
+          snippet: sentence.length > 150 ? `${sentence.slice(0, 147)}...` : sentence,
+        });
+      });
+    });
+  });
+  return mentions;
+}
+
+function summarizeCommentThemes(mentions: CommentThemeMention[], kind: CommentThemeMention['kind'], limit = 4) {
+  const byTheme = new Map<string, CommentThemeMention[]>();
+  mentions
+    .filter((mention) => mention.kind === kind)
+    .forEach((mention) => {
+      byTheme.set(mention.theme, [...(byTheme.get(mention.theme) ?? []), mention]);
+    });
+
+  return [...byTheme.entries()]
+    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([theme, themeMentions]) => {
+      const subjects = uniqueStrings(themeMentions.map((mention) => mention.record.subject)).slice(0, 3).join(', ');
+      const evidence = themeMentions[0]?.snippet;
+      const frequency = themeMentions.length > 1 ? `mentioned ${themeMentions.length} times` : 'seen once';
+      return `${theme} (${frequency}${subjects ? ` in ${subjects}` : ''})${evidence ? ` - "${evidence}"` : ''}`;
+    });
 }
 
 type EvidenceSignal = {
@@ -2763,12 +2857,16 @@ function getImprovementSignals(records: PerformanceRecord[]) {
 }
 
 function buildTeacherInsights(records: PerformanceRecord[]) {
+  const commentThemes = extractTeacherCommentThemes(records);
   const strengths = topEvidenceTerms(records, 'strengths')
     .slice(0, 4)
     .map((item) => `${item.term} (${item.records.length > 1 ? 'repeated across' : 'seen in'} ${item.records.length} report${item.records.length === 1 ? '' : 's'})`);
   const weaknesses = topEvidenceTerms(records, 'weaknesses')
     .slice(0, 4)
     .map((item) => `${item.term} (${item.records.length > 1 ? 'repeated across' : 'seen in'} ${item.records.length} record${item.records.length === 1 ? '' : 's'})`);
+  const inferredStrengths = summarizeCommentThemes(commentThemes, 'strength');
+  const inferredWeaknesses = summarizeCommentThemes(commentThemes, 'weakness');
+  const inferredImprovements = summarizeCommentThemes(commentThemes, 'improvement');
   const actionPoints = topEvidenceTerms(records, 'actionPoints').slice(0, 4).map((item) => `${item.term} is ${item.records.length > 1 ? 'repeatedly' : 'currently'} recommended`);
   const improvements = getImprovementSignals(records);
   const delta = getTrendDelta(records);
@@ -2785,20 +2883,37 @@ function buildTeacherInsights(records: PerformanceRecord[]) {
     comments ? `${comments} teacher comment${comments === 1 ? '' : 's'} contribute to the narrative.` : undefined,
     gradeEvidence ? `${gradeEvidence} record${gradeEvidence === 1 ? '' : 's'} include effort, attainment, target, predicted grade, rank, or grade evidence.` : undefined,
   ].filter((item): item is string => Boolean(item));
+  const earlyStrengthCopy = comments
+    ? `Teacher comments mention ${inferredStrengths[0]?.split(' (')[0] ?? 'positive learning habits'}, but repeated long-term patterns are still emerging.`
+    : 'Add teacher comments to infer strengths across subjects.';
+  const earlyWeaknessCopy = comments
+    ? `Teacher comments point to ${inferredWeaknesses[0]?.split(' (')[0] ?? 'a few development areas'}, but this is still an early pattern.`
+    : 'Add teacher comments to infer development areas across subjects.';
 
   return {
-    strengths: strengths.length ? strengths : ['No explicit strength has been extracted yet.'],
-    weaknesses: weaknesses.length ? weaknesses : ['No explicit weakness has been extracted yet.'],
-    improvements: improvements.length ? improvements : actionPoints.length ? actionPoints : ['Improvement evidence is not clear yet; treat this as an early observation.'],
+    strengths: uniqueStrings([...strengths, ...inferredStrengths]).slice(0, 4).length ? uniqueStrings([...strengths, ...inferredStrengths]).slice(0, 4) : [earlyStrengthCopy],
+    weaknesses: uniqueStrings([...weaknesses, ...inferredWeaknesses]).slice(0, 4).length ? uniqueStrings([...weaknesses, ...inferredWeaknesses]).slice(0, 4) : [earlyWeaknessCopy],
+    improvements: uniqueStrings([...improvements, ...inferredImprovements, ...actionPoints]).slice(0, 4).length ? uniqueStrings([...improvements, ...inferredImprovements, ...actionPoints]).slice(0, 4) : [comments ? 'Teacher comments are available, but improvement over time is still emerging.' : 'Add at least two reports or comments to infer improvement over time.'],
     patterns: patterns.length ? patterns : ['Evidence exists, but repeated patterns are still emerging.'],
   };
 }
 
 function buildEvidenceItems(records: PerformanceRecord[], field: 'strengths' | 'weaknesses') {
-  return topEvidenceTerms(records, field).slice(0, 5).map((item) => ({
+  const explicitItems = topEvidenceTerms(records, field).slice(0, 5).map((item) => ({
     title: item.term,
     reason: `${item.records.length} record${item.records.length === 1 ? '' : 's'} mention this theme, including ${item.records.slice(0, 2).map((record) => record.title).join(' and ')}.`,
     references: item.records.slice(0, 3).map((record) => [record.title, record.term, record.academicYear].filter(Boolean).join(' / ')),
+  }));
+  if (explicitItems.length) return explicitItems;
+
+  const commentKind = field === 'strengths' ? 'strength' : 'weakness';
+  const mentions = extractTeacherCommentThemes(records).filter((mention) => mention.kind === commentKind);
+  const byTheme = new Map<string, CommentThemeMention[]>();
+  mentions.forEach((mention) => byTheme.set(mention.theme, [...(byTheme.get(mention.theme) ?? []), mention]));
+  return [...byTheme.entries()].slice(0, 5).map(([theme, themeMentions]) => ({
+    title: theme,
+    reason: `Teacher comments ${themeMentions.length > 1 ? 'repeatedly mention' : 'mention'} ${theme}.`,
+    references: themeMentions.slice(0, 3).map((mention) => `${mention.record.subject}: ${mention.snippet}`),
   }));
 }
 
@@ -2868,37 +2983,49 @@ function InsightBadge({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ProgressTimeline({ records, selectedId, onSelect }: { records: PerformanceRecord[]; selectedId?: string; onSelect: (id: string) => void }) {
-  const snapshots = getReportSnapshots(records);
-
+function ProgressTimeline({ snapshots, documents, selectedKey, onSelect }: { snapshots: ReportSnapshot[]; documents: ResearchDocument[]; selectedKey?: string; onSelect: (key: string) => void }) {
   return snapshots.length ? (
     <div className="mt-6">
       <div className="mb-3 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
-        <span>Report evidence</span>
-        <span>Outcome</span>
+        <span>Report or assessment</span>
+        <span>Summary</span>
       </div>
       <div className="relative space-y-4 border-l border-ink/12 pl-5">
         {snapshots.map((snapshot) => {
-          const selected = snapshot.records.some((record) => record.id === selectedId);
+          const selected = snapshot.key === selectedKey;
           const percentages = snapshot.records.map(getRecordPercentage).filter((value): value is number => typeof value === 'number');
-          const average = percentages.length ? Math.round(percentages.reduce((total, percentage) => total + percentage, 0) / percentages.length) : undefined;
-          const subjects = uniqueStrings(snapshot.records.map((record) => record.subject)).slice(0, 5);
-          const comment = snapshot.records.find((record) => record.teacherComment)?.teacherComment;
-          const outcomeLabel = getSnapshotOutcomeLabel(snapshot.records, average);
+          const subjects = uniqueStrings(snapshot.records.map((record) => record.subject));
+          const teacherComments = snapshot.records.filter((record) => record.teacherComment?.trim());
+          const reportLabel = getSnapshotReportLabel(snapshot);
+          const sourceTitle = documents.find((document) => document.id === snapshot.records[0]?.sourceDocumentId)?.title;
 
           return (
-          <button key={snapshot.key} type="button" onClick={() => onSelect(snapshot.records[0].id)} className={`block w-full rounded-lg border p-4 text-left transition ${selected ? 'border-ink/30 bg-paper' : 'border-ink/8 bg-white hover:border-ink/18'}`}>
+          <article key={snapshot.key} className={`rounded-lg border p-4 transition ${selected ? 'border-ink/30 bg-paper' : 'border-ink/8 bg-white hover:border-ink/18'}`}>
             <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full bg-moss ring-4 ring-white" />
-            <span className="flex flex-wrap items-start justify-between gap-3">
-              <span>
-                <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{getRecordTimelineLabel(snapshot.records[0])} / {snapshot.records.length} record{snapshot.records.length === 1 ? '' : 's'}</span>
-                <span className="mt-1 block font-semibold text-ink">{snapshot.title}</span>
-                <span className="mt-1 block text-sm leading-6 text-graphite/65">{subjects.join(', ')}</span>
-                {comment ? <span className="mt-2 block line-clamp-2 text-sm leading-6 text-graphite/70">{comment}</span> : null}
+            <button type="button" onClick={() => onSelect(snapshot.key)} className="block w-full text-left">
+              <span className="flex flex-wrap items-start justify-between gap-3">
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{reportLabel}</span>
+                  <span className="mt-1 block font-semibold text-ink">{sourceTitle || snapshot.title}</span>
+                  <span className="mt-1 block text-sm leading-6 text-graphite/65">
+                    {subjects.length} subject{subjects.length === 1 ? '' : 's'} · {percentages.length} mark{percentages.length === 1 ? '' : 's'} · {teacherComments.length} teacher comment{teacherComments.length === 1 ? '' : 's'}
+                  </span>
+                </span>
+                <span className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-ink shadow-sm">{getSnapshotOutcomeLabel(snapshot.records)}</span>
               </span>
-              <span className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-ink shadow-sm">{outcomeLabel}</span>
-            </span>
-          </button>
+            </button>
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Subject details</summary>
+              <div className="mt-3 grid gap-2">
+                {snapshot.records.slice(0, 12).map((record) => (
+                  <div key={record.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm">
+                    <span className="font-semibold text-ink">{record.subject}</span>
+                    <span className="text-graphite/70">{[formatCompactMark(record), record.teacher].filter(Boolean).join(' · ') || 'Teacher comments only'}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </article>
           );
         })}
       </div>
@@ -2908,7 +3035,22 @@ function ProgressTimeline({ records, selectedId, onSelect }: { records: Performa
   );
 }
 
-function getSnapshotOutcomeLabel(records: PerformanceRecord[], average?: number) {
+function getSnapshotReportLabel(snapshot: ReportSnapshot) {
+  const record = snapshot.records[0];
+  return [snapshot.title, record.academicYear, record.term].filter(Boolean).join(' · ') || getRecordTimelineLabel(record);
+}
+
+function formatCompactMark(record: PerformanceRecord) {
+  const percentage = getRecordPercentage(record);
+  if (percentage !== undefined) return `${percentage}%`;
+  if (record.grade) return record.grade;
+  if (record.attainment) return `Attainment ${record.attainment}`;
+  return '';
+}
+
+function getSnapshotOutcomeLabel(records: PerformanceRecord[]) {
+  const percentages = records.map(getRecordPercentage).filter((value): value is number => typeof value === 'number');
+  const average = percentages.length ? Math.round(percentages.reduce((total, percentage) => total + percentage, 0) / percentages.length) : undefined;
   if (average !== undefined) {
     const estimate = getEstimatedGradeFromPercentage(average);
     return [`${average}% avg`, estimate ? `Estimated from percentage: ${estimate}` : undefined].filter(Boolean).join(' / ');
@@ -2920,25 +3062,41 @@ function getSnapshotOutcomeLabel(records: PerformanceRecord[], average?: number)
   return 'Awaiting mark extraction';
 }
 
-function TimelineDetail({ record, documents }: { record: PerformanceRecord; documents: ResearchDocument[] }) {
-  const source = documents.find((document) => document.id === record.sourceDocumentId);
+function TimelineDetail({ snapshot, documents }: { snapshot: ReportSnapshot; documents: ResearchDocument[] }) {
+  const source = documents.find((document) => document.id === snapshot.records[0]?.sourceDocumentId);
+  const subjects = uniqueStrings(snapshot.records.map((record) => record.subject));
+  const marks = snapshot.records.map(getRecordPercentage).filter((value): value is number => typeof value === 'number');
+  const average = marks.length ? Math.round(marks.reduce((total, mark) => total + mark, 0) / marks.length) : undefined;
+  const commentHighlights = snapshot.records.filter((record) => record.teacherComment?.trim()).slice(0, 4);
   return (
     <div className="mt-4 space-y-4">
       <div>
-        <h3 className="text-xl font-semibold text-ink">{record.title}</h3>
-        <p className="mt-1 text-sm text-graphite/70">{[getRecordTimelineLabel(record), record.subject, record.term].filter(Boolean).join(' / ')}</p>
+        <h3 className="text-xl font-semibold text-ink">{source?.title || snapshot.title}</h3>
+        <p className="mt-1 text-sm text-graphite/70">{[snapshot.records[0]?.academicYear, snapshot.records[0]?.term, getRecordTimelineLabel(snapshot.records[0])].filter(Boolean).join(' / ')}</p>
       </div>
-      <p className="rounded-lg bg-paper/70 p-3 text-sm font-semibold text-ink">{formatResult(record)}</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {record.teacher ? <DetailPill label="Teacher" value={record.teacher} /> : null}
-        {record.effort ? <DetailPill label="Effort" value={record.effort} /> : null}
-        {record.attainment ? <DetailPill label="Attainment" value={record.attainment} /> : null}
-        {record.predictedGrade ? <DetailPill label="Predicted grade" value={record.predictedGrade} /> : null}
-        {record.targetGrade ? <DetailPill label="Target grade" value={record.targetGrade} /> : null}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <DetailPill label="Subjects" value={String(subjects.length)} />
+        <DetailPill label="Marks" value={marks.length ? `${marks.length} marks` : 'No marks'} />
+        <DetailPill label="Average" value={average !== undefined ? `${average}%` : 'Comments only'} />
       </div>
-      {record.teacherComment ? <p className="text-sm leading-7 text-graphite/74">{record.teacherComment}</p> : null}
-      <TagList label="Strengths" items={record.strengths} />
-      <TagList label="Needs work" items={record.weaknesses} />
+      <TagList label="Subjects included" items={subjects} />
+      <div className="space-y-2">
+        {snapshot.records.slice(0, 12).map((record) => (
+          <div key={record.id} className="rounded-lg bg-paper/70 p-3 text-sm">
+            <p className="font-semibold text-ink">{record.subject} · {[formatCompactMark(record), record.teacher].filter(Boolean).join(' · ') || 'Teacher comments only'}</p>
+          </div>
+        ))}
+      </div>
+      {commentHighlights.length ? (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Teacher comment highlights</p>
+          <div className="mt-2 space-y-2">
+            {commentHighlights.map((record) => (
+              <p key={record.id} className="rounded-lg bg-paper/70 p-3 text-sm leading-6 text-graphite/74"><span className="font-semibold text-ink">{record.subject}:</span> {record.teacherComment}</p>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {source ? <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Source: {source.title}</p> : null}
     </div>
   );
@@ -3005,6 +3163,10 @@ function TrendChart({
   showAiConfidence?: boolean;
   showMovingAverage?: boolean;
 }) {
+  if (selectedSubject === 'All Subjects') {
+    return <SubjectMovementComparison records={records} />;
+  }
+
   const snapshots = getReportSnapshots(records);
   const trendSeries = getTrendEligibleSeries(records);
   const seriesEntries = Object.entries(trendSeries);
@@ -3033,7 +3195,7 @@ function TrendChart({
     <div className="mt-5">
       {seriesEntries.length ? (
         <>
-          <p className="mb-4 text-sm font-semibold text-ink">Trend over time</p>
+          <p className="mb-4 text-sm font-semibold text-ink">{selectedSubject} over time</p>
           <svg className="h-[320px] w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Progression over time by assessment date and percentage">
             {[0, 25, 50, 75, 100].map((tick) => (
               <g key={tick}>
@@ -3044,7 +3206,7 @@ function TrendChart({
             <line x1={pad.left} x2={pad.left} y1={pad.top} y2={height - pad.bottom} stroke="rgba(31,41,51,0.25)" />
             <line x1={pad.left} x2={width - pad.right} y1={height - pad.bottom} y2={height - pad.bottom} stroke="rgba(31,41,51,0.25)" />
             <text x={18} y={pad.top + plotHeight / 2} transform={`rotate(-90 18 ${pad.top + plotHeight / 2})`} className="fill-graphite text-[12px] font-semibold">Percentage</text>
-            <text x={pad.left + plotWidth / 2} y={height - 10} textAnchor="middle" className="fill-graphite text-[12px] font-semibold">Assessment date</text>
+            <text x={pad.left + plotWidth / 2} y={height - 10} textAnchor="middle" className="fill-graphite text-[12px] font-semibold">Report</text>
             {seriesEntries.map(([subject, points], seriesIndex) => {
               const color = colors[seriesIndex % colors.length];
               const line = points.map((point) => `${xForPoint(point)},${yFor(point.percentage)}`).join(' ');
@@ -3072,7 +3234,7 @@ function TrendChart({
               );
             })}
             {axisSlots.map((point) => (
-              <text key={getReportSnapshotKey(point.records[0])} x={xForPoint(point)} y={height - pad.bottom + 20} textAnchor="middle" className="fill-graphite text-[10px]">{getRecordAxisLabel(point.records[0])}</text>
+              <text key={getReportSnapshotKey(point.records[0])} x={xForPoint(point)} y={height - pad.bottom + 20} textAnchor="middle" className="fill-graphite text-[10px]">{getShortReportAxisLabel(point.records[0])}</text>
             ))}
           </svg>
           <div className="grid gap-3 md:grid-cols-2">
@@ -3097,6 +3259,72 @@ function TrendChart({
         </>
       ) : (
         <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">No records match this subject and time period yet.</p>
+      )}
+    </div>
+  );
+}
+
+function getShortReportAxisLabel(record: PerformanceRecord) {
+  if (record.term) return record.term;
+  if (hasExactAssessmentDate(record.date)) return formatDisplayDate(record.date, { month: 'short', year: '2-digit' });
+  return getRecordAssessmentName(record).slice(0, 18);
+}
+
+function getSubjectMovementRows(records: PerformanceRecord[]) {
+  return Object.entries(getSubjectTrendSeries(records))
+    .map(([subject, points]) => {
+      const sorted = [...points].sort((a, b) => getRecordAcademicSortKey(a.records[0]).localeCompare(getRecordAcademicSortKey(b.records[0])));
+      const first = sorted[0];
+      const latest = sorted[sorted.length - 1];
+      return {
+        subject,
+        first,
+        latest,
+        delta: first && latest && sorted.length > 1 ? latest.percentage - first.percentage : undefined,
+      };
+    })
+    .filter((row) => row.first && row.latest)
+    .sort((a, b) => (b.delta ?? -999) - (a.delta ?? -999) || a.subject.localeCompare(b.subject));
+}
+
+function SubjectMovementComparison({ records }: { records: PerformanceRecord[] }) {
+  const rows = getSubjectMovementRows(records);
+  const maxDelta = Math.max(12, ...rows.map((row) => Math.abs(row.delta ?? 0)));
+
+  return (
+    <div className="mt-5">
+      <p className="mb-2 text-sm font-semibold text-ink">Subject movement from first to latest report</p>
+      <p className="mb-4 text-sm leading-6 text-graphite/70">All Subjects is shown as a comparison so lines and labels do not overlap. Each row compares the first and latest marked report for that same subject.</p>
+      {rows.length ? (
+        <div className="space-y-3">
+          {rows.map((row) => {
+            const delta = row.delta;
+            const width = delta === undefined ? 0 : Math.min(100, Math.round((Math.abs(delta) / maxDelta) * 100));
+            return (
+              <div key={row.subject} className="rounded-lg border border-ink/8 bg-paper/55 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-ink">{row.subject}</p>
+                    <p className="mt-1 text-xs text-graphite/62">
+                      {row.first && row.latest ? `${getShortReportAxisLabel(row.first.records[0])}: ${row.first.percentage}% · ${getShortReportAxisLabel(row.latest.records[0])}: ${row.latest.percentage}%` : 'One marked report'}
+                    </p>
+                  </div>
+                  <p className={`text-lg font-semibold ${delta === undefined ? 'text-graphite/60' : delta >= 0 ? 'text-moss' : 'text-red-700'}`}>{delta === undefined ? 'New' : `${delta > 0 ? '+' : ''}${Math.round(delta)}`}</p>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                  <div className={`h-full rounded-full ${delta === undefined ? 'bg-graphite/25' : delta >= 0 ? 'bg-moss' : 'bg-red-500'}`} style={{ width: `${delta === undefined ? 18 : Math.max(8, width)}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : records.length ? (
+        <>
+          <SubjectSnapshotChart records={records} />
+          <div className="mt-4"><TrendDataNotice /></div>
+        </>
+      ) : (
+        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">No marked academic records match this view yet.</p>
       )}
     </div>
   );
