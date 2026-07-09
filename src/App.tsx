@@ -1671,6 +1671,7 @@ function PerformancePage({
   const atAGlance = useMemo(() => buildProgressAtAGlance(filteredRecords), [filteredRecords]);
   const teacherInsights = useMemo(() => buildTeacherInsights(filteredRecords), [filteredRecords]);
   const repeatedThemes = useMemo(() => buildRepeatedThemes(filteredRecords), [filteredRecords]);
+  const hasSupportingEvidence = useMemo(() => getSupportingEvidenceItems(filteredRecords, selectedSubject).length > 0, [filteredRecords, selectedSubject]);
   const recommendations = useMemo(
     () => buildProgressRecommendations(filteredRecords, tutorLessons, tutorAttempts, tutorMemory, documents, selectedSubject),
     [documents, filteredRecords, selectedSubject, tutorAttempts, tutorLessons, tutorMemory],
@@ -2070,16 +2071,14 @@ function PerformancePage({
         <ProgressTimeline snapshots={timelineSnapshots} documents={documents} selectedKey={selectedTimelineSnapshot?.key} onSelect={setSelectedTimelineSnapshotKey} />
       </section>
 
-      <section className="rounded-lg bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Supporting Evidence</p>
-        <div className="mt-5 grid gap-6 xl:grid-cols-3">
-          <TermComparisonChart records={filteredRecords} />
-          <ReportExamComparisonChart records={filteredRecords} />
-          <EvidenceFrequencyChart records={filteredRecords} />
-        </div>
-      </section>
+      {hasSupportingEvidence ? (
+        <section className="rounded-lg bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Supporting Evidence</p>
+          <SupportingEvidence records={filteredRecords} selectedSubject={selectedSubject} />
+        </section>
+      ) : null}
 
-      <section className="rounded-lg bg-white p-6 shadow-sm">
+      {musicRecords.length ? <section className="rounded-lg bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
           <Music2 size={15} />
           Music and Instrumental Progress
@@ -2087,7 +2086,7 @@ function PerformancePage({
         <p className="mt-3 text-sm leading-7 text-graphite/72">
           Academic Progress ignores records marked excludeFromAcademicAnalysis. Select Music or a music subject above to view instrumental records without mixing them into academic trends.
         </p>
-      </section>
+      </section> : null}
         </>
       ) : null}
 
@@ -3256,8 +3255,8 @@ function getSubjectMovementRows(records: PerformanceRecord[]) {
         delta: first && latest && sorted.length > 1 ? latest.percentage - first.percentage : undefined,
       };
     })
-    .filter((row) => row.first && row.latest)
-    .sort((a, b) => (b.delta ?? -999) - (a.delta ?? -999) || a.subject.localeCompare(b.subject));
+    .filter((row): row is { subject: string; first: TrendPoint; latest: TrendPoint; delta: number } => Boolean(row.first && row.latest && row.delta !== undefined))
+    .sort((a, b) => b.delta - a.delta || a.subject.localeCompare(b.subject));
 }
 
 function SubjectMovementComparison({ records }: { records: PerformanceRecord[] }) {
@@ -3282,38 +3281,22 @@ function SubjectMovementComparison({ records }: { records: PerformanceRecord[] }
                       {row.first && row.latest ? `${getShortReportAxisLabel(row.first.records[0])}: ${row.first.percentage}% · ${getShortReportAxisLabel(row.latest.records[0])}: ${row.latest.percentage}%` : 'One marked report'}
                     </p>
                   </div>
-                  <p className={`text-lg font-semibold ${delta === undefined ? 'text-graphite/60' : delta >= 0 ? 'text-moss' : 'text-red-700'}`}>{delta === undefined ? 'New' : `${delta > 0 ? '+' : ''}${Math.round(delta)}`}</p>
+                  <p className={`text-lg font-semibold ${delta >= 0 ? 'text-moss' : 'text-red-700'}`}>{delta > 0 ? '+' : ''}{Math.round(delta)}</p>
                 </div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
-                  <div className={`h-full rounded-full ${delta === undefined ? 'bg-graphite/25' : delta >= 0 ? 'bg-moss' : 'bg-red-500'}`} style={{ width: `${delta === undefined ? 18 : Math.max(8, width)}%` }} />
+                  <div className={`h-full rounded-full ${delta >= 0 ? 'bg-moss' : 'bg-red-500'}`} style={{ width: `${Math.max(8, width)}%` }} />
                 </div>
               </div>
             );
           })}
         </div>
       ) : records.length ? (
-        <>
-          <SubjectSnapshotChart records={records} />
-          <div className="mt-4"><TrendDataNotice /></div>
-        </>
+        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Add a later report for the same subject to see subject movement.</p>
       ) : (
         <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">No marked academic records match this view yet.</p>
       )}
     </div>
   );
-}
-
-function SubjectSnapshotChart({ records }: { records: PerformanceRecord[] }) {
-  const bySubject = Object.entries(getSubjectTrendSeries(records)).map(([subject, points]) => {
-    const percentages = points.map((point) => point.percentage);
-    return {
-      label: subject,
-      value: percentages.length ? Math.round(percentages.reduce((total, percentage) => total + percentage, 0) / percentages.length) : undefined,
-      count: points.reduce((total, point) => total + point.records.length, 0),
-    };
-  });
-
-  return <MiniBarChart title="Report snapshot" axisLabel="Average percentage by subject" rows={bySubject} empty="Add marked subject records to see this report snapshot." explanation="Snapshot bars compare subjects inside the selected evidence. They are not connected as progress over time." />;
 }
 
 function TrendDataNotice() {
@@ -3333,88 +3316,138 @@ function TrendCallout({ label, change }: { label: string; change?: TrendChange }
   );
 }
 
-function TermComparisonChart({ records }: { records: PerformanceRecord[] }) {
-  const termRows = ['Michaelmas', 'Lent', 'Summer', 'Custom'].map((term) => {
-    const points = records
-      .filter((record) => (record.term ?? 'Other').toLowerCase().includes(term.toLowerCase()) || (!record.term && term === 'Other'))
-      .map(getRecordPercentage)
-      .filter((value): value is number => typeof value === 'number');
-    return {
-      label: term,
-      value: points.length ? Math.round(points.reduce((total, point) => total + point, 0) / points.length) : undefined,
-      count: points.length,
-    };
-  });
-  return <MiniBarChart title="Comparison between terms" axisLabel="Average percentage" rows={termRows} empty="Add dated marks across terms to compare progress." explanation="Use this to see whether results are improving from term to term, rather than judging one isolated assessment." />;
+function getSubjectEvidenceRows(records: PerformanceRecord[]) {
+  return Object.entries(getSubjectTrendSeries(records))
+    .map(([subject, points]) => {
+      const reportCount = new Set(points.map((point) => getReportSnapshotKey(point.records[0]))).size;
+      const markedCount = points.length;
+      const commentCount = points.reduce((total, point) => total + point.records.filter((record) => record.teacherComment?.trim()).length, 0);
+      return { subject, reportCount, markedCount, commentCount, total: reportCount + commentCount };
+    })
+    .filter((row) => row.reportCount > 1 || row.commentCount > 0)
+    .sort((a, b) => b.total - a.total || a.subject.localeCompare(b.subject));
 }
 
-function ReportExamComparisonChart({ records }: { records: PerformanceRecord[] }) {
-  const rows = [
-    { label: 'Reports', types: ['report'] },
-    { label: 'Mocks', types: ['mock'] },
-    { label: 'Exams', types: ['exam'] },
-    { label: 'Coursework', types: ['coursework'] },
-  ].map((group) => {
-    const points = records
-      .filter((record) => group.types.includes(record.assessmentType))
-      .map(getRecordPercentage)
-      .filter((value): value is number => typeof value === 'number');
-    return {
-      label: group.label,
-      value: points.length ? Math.round(points.reduce((total, point) => total + point, 0) / points.length) : undefined,
-      count: points.length,
-    };
-  });
-  return <MiniBarChart title="Report vs exam performance" axisLabel="Average percentage" rows={rows} empty="Add report and exam marks to compare feedback with measured outcomes." explanation="This separates teacher-report evidence from formal assessment results so the chart has a clear meaning." />;
+function getSingleSubjectTrendPoints(records: PerformanceRecord[]) {
+  return Object.values(getTrendEligibleSeries(records))[0] ?? [];
 }
 
-function EvidenceFrequencyChart({ records }: { records: PerformanceRecord[] }) {
-  const rows = [
-    ...topEvidenceTerms(records, 'strengths').slice(0, 3).map((item) => ({ label: `Strength: ${item.term}`, value: item.records.length, count: item.records.length })),
-    ...topEvidenceTerms(records, 'weaknesses').slice(0, 3).map((item) => ({ label: `Need: ${item.term}`, value: item.records.length, count: item.records.length })),
-  ];
-  return <MiniBarChart title="Strengths/weaknesses frequency" axisLabel="Mentions in evidence" rows={rows} empty="Strengths and weaknesses will appear after reports or feedback are analysed." explanation="Repeated themes carry more weight than one-off comments; this chart counts evidence mentions." />;
+function getSupportingEvidenceItems(records: PerformanceRecord[], selectedSubject: string) {
+  const items: string[] = [];
+  const movementRows = getSubjectMovementRows(records);
+  const evidenceRows = getSubjectEvidenceRows(records);
+  if (selectedSubject === 'All Subjects') {
+    if (movementRows.length) items.push('movement');
+    if (evidenceRows.length > 1) items.push('support');
+    return items;
+  }
+
+  if (getSingleSubjectTrendPoints(records).length >= 2) items.push('consistency');
+  if (evidenceRows.length) items.push('support');
+  return items;
 }
 
-function MiniBarChart({
-  title,
-  axisLabel,
-  rows,
-  empty,
-  explanation,
-}: {
-  title: string;
-  axisLabel: string;
-  rows: Array<{ label: string; value?: number; count: number }>;
-  empty: string;
-  explanation: string;
-}) {
-  const visibleRows = rows.filter((row) => typeof row.value === 'number' && row.value > 0);
-  const max = Math.max(1, ...visibleRows.map((row) => row.value ?? 0));
+function SupportingEvidence({ records, selectedSubject }: { records: PerformanceRecord[]; selectedSubject: string }) {
+  const items = getSupportingEvidenceItems(records, selectedSubject);
+  if (!items.length) return null;
 
   return (
-    <div className="rounded-lg border border-ink/8 bg-paper/50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{title}</p>
-      <p className="mt-2 text-xs font-semibold text-graphite/65">Axis: {axisLabel}</p>
-      {visibleRows.length ? (
-        <div className="mt-4 space-y-3">
-          {visibleRows.map((row) => (
-            <div key={row.label}>
-              <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                <span className="line-clamp-1 font-semibold text-ink">{row.label}</span>
-                <span className="shrink-0 text-graphite/70">{row.value}</span>
+    <div className="mt-5 grid gap-6 xl:grid-cols-2">
+      {items.includes('movement') ? <SubjectChangeChart records={records} /> : null}
+      {items.includes('consistency') ? <MarkConsistencyChart records={records} selectedSubject={selectedSubject} /> : null}
+      {items.includes('support') ? <EvidenceSupportChart records={records} /> : null}
+    </div>
+  );
+}
+
+function SubjectChangeChart({ records }: { records: PerformanceRecord[] }) {
+  const rows = getSubjectMovementRows(records).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 8);
+  const maxDelta = Math.max(8, ...rows.map((row) => Math.abs(row.delta)));
+  if (!rows.length) return null;
+
+  return (
+    <article className="rounded-lg border border-ink/8 bg-paper/50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Which Subjects Changed Most?</p>
+      <div className="mt-5 space-y-3">
+        {rows.map((row) => {
+          const width = Math.max(8, Math.round((Math.abs(row.delta) / maxDelta) * 100));
+          return (
+            <div key={row.subject}>
+              <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                <span className="font-semibold text-ink">{row.subject}</span>
+                <span className={`shrink-0 font-semibold ${row.delta >= 0 ? 'text-moss' : 'text-red-700'}`}>{row.delta > 0 ? '+' : ''}{Math.round(row.delta)}</span>
               </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-white">
-                <div className="h-full rounded-full bg-brass" style={{ width: `${Math.max(8, ((row.value ?? 0) / max) * 100)}%` }} />
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <div className="h-2 rounded-full bg-white">
+                  {row.delta < 0 ? <div className="ml-auto h-full rounded-full bg-red-500" style={{ width: `${width}%` }} /> : null}
+                </div>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-graphite/45">0</span>
+                <div className="h-2 rounded-full bg-white">
+                  {row.delta >= 0 ? <div className="h-full rounded-full bg-moss" style={{ width: `${width}%` }} /> : null}
+                </div>
               </div>
+              <p className="mt-1 text-xs text-graphite/62">{row.first.percentage}% to {row.latest.percentage}%</p>
             </div>
+          );
+        })}
+      </div>
+    </article>
+  );
+}
+
+function MarkConsistencyChart({ records, selectedSubject }: { records: PerformanceRecord[]; selectedSubject: string }) {
+  const points = getSingleSubjectTrendPoints(records);
+  if (points.length < 2) return null;
+  const percentages = points.map((point) => point.percentage);
+  const min = Math.min(...percentages);
+  const max = Math.max(...percentages);
+  const range = Math.max(1, max - min);
+  const clampedMin = Math.max(0, Math.min(100, min));
+  const clampedMax = Math.max(0, Math.min(100, max));
+
+  return (
+    <article className="rounded-lg border border-ink/8 bg-paper/50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">How Consistent Are My Marks?</p>
+      <h3 className="mt-2 text-lg font-semibold text-ink">{selectedSubject}</h3>
+      <div className="mt-5 rounded-lg bg-white p-4">
+        <div className="relative h-8 rounded-full bg-paper">
+          <div className="absolute top-0 h-8 rounded-full bg-moss/20" style={{ left: `${clampedMin}%`, width: `${Math.max(1, clampedMax - clampedMin)}%` }} />
+          {points.map((point) => (
+            <span key={getReportSnapshotKey(point.records[0])} className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-ink shadow-sm" style={{ left: `${Math.max(0, Math.min(100, point.percentage))}%` }} />
           ))}
         </div>
-      ) : (
-        <p className="mt-4 rounded-lg bg-white p-3 text-sm leading-6 text-graphite/70">{empty}</p>
-      )}
-      <p className="mt-4 text-xs leading-5 text-graphite/65">{explanation}</p>
-    </div>
+        <div className="mt-3 flex items-center justify-between text-xs font-semibold text-graphite/65">
+          <span>{min}% low</span>
+          <span>{max}% high</span>
+        </div>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-graphite/72">The marks span {range} point{range === 1 ? '' : 's'} across {points.length} reports.</p>
+    </article>
+  );
+}
+
+function EvidenceSupportChart({ records }: { records: PerformanceRecord[] }) {
+  const rows = getSubjectEvidenceRows(records).slice(0, 8);
+  const max = Math.max(1, ...rows.map((row) => row.total));
+  if (!rows.length) return null;
+
+  return (
+    <article className="rounded-lg border border-ink/8 bg-paper/50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">How Much Evidence Supports This?</p>
+      <div className="mt-5 space-y-3">
+        {rows.map((row) => (
+          <div key={row.subject}>
+            <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+              <span className="font-semibold text-ink">{row.subject}</span>
+              <span className="shrink-0 text-xs font-semibold text-graphite/65">{row.reportCount} report{row.reportCount === 1 ? '' : 's'} / {row.commentCount} comment{row.commentCount === 1 ? '' : 's'}</span>
+            </div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-white">
+              <div className="h-full rounded-full bg-brass" style={{ width: `${Math.max(10, (row.total / max) * 100)}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }
 
