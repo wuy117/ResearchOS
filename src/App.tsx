@@ -15,7 +15,6 @@ import {
   Trash2,
   Send,
   Sparkles,
-  Tags,
   UploadCloud,
 } from 'lucide-react';
 import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
@@ -56,13 +55,13 @@ class AuthenticatedAppErrorBoundary extends Component<{ children: ReactNode }, {
       return (
         <div className="grid min-h-screen place-items-center bg-ivory px-4 text-ink">
           <section className="w-full max-w-lg rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Research OS needs a refresh</p>
-            <h1 className="mt-3 font-serif text-3xl font-semibold text-ink">Something went wrong after sign-in.</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Unable to open workspace</p>
+            <h1 className="mt-3 font-serif text-3xl font-semibold text-ink">Research OS could not open this workspace.</h1>
             <p className="mt-4 text-sm leading-7 text-graphite/72">
-              Your data has not been cleared. Refresh the page to reload the workspace, or sign out and back in if the problem continues.
+              Your data is safe. Reload the workspace, or sign out and back in if the problem continues.
             </p>
             <button type="button" onClick={() => window.location.reload()} className="mt-6 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
-              Refresh Research OS
+              Reload workspace
             </button>
             {import.meta.env.DEV ? <pre className="mt-4 max-h-40 overflow-auto rounded-lg bg-paper p-3 text-xs text-graphite/75">{this.state.error.message}</pre> : null}
           </section>
@@ -94,7 +93,10 @@ function App() {
   if (isSupabaseEnabled && (auth.authLoading || storageStatus === 'client-created')) {
     return (
       <div className="grid min-h-screen place-items-center bg-ivory px-4 text-ink">
-        <p className="rounded-lg border border-ink/8 bg-white px-4 py-3 text-sm font-semibold shadow-sm">Checking your Research OS session...</p>
+        <div role="status" className="inline-flex items-center gap-3 rounded-lg border border-ink/8 bg-white px-4 py-3 text-sm font-semibold shadow-sm">
+          <span className="size-2 animate-pulse rounded-full bg-moss" />
+          Opening your workspace…
+        </div>
       </div>
     );
   }
@@ -281,7 +283,7 @@ function Dashboard({
 
   return (
     <div className="space-y-7">
-      <section className="grid gap-8 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+      <section className={`grid gap-8 ${metrics.length ? 'xl:grid-cols-[minmax(0,1.25fr)_360px]' : ''}`}>
         <div className="py-3 sm:py-6">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Academic profile</p>
           <h2 className="mt-4 max-w-3xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-5xl">
@@ -304,12 +306,14 @@ function Dashboard({
             </button> : null}
           </div>
         </div>
-        <div className="rounded-lg bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workspace at a glance</p>
-          {metrics.length ? <div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4">
-            {metrics.map(([label, value]) => <MetricCard key={label} label={label} value={value} />)}
-          </div> : <p className="mt-3 text-sm leading-7 text-graphite/72">Your source, subject, and progress totals will appear here.</p>}
-        </div>
+        {metrics.length ? (
+          <div className="rounded-lg bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workspace at a glance</p>
+            <div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4">
+              {metrics.map(([label, value]) => <MetricCard key={label} label={label} value={value} />)}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {hasSubjects || hasTimeline ? <section className="grid gap-8 xl:grid-cols-[1fr_1fr]">
@@ -398,7 +402,7 @@ function Library({
       setState((current) => removeDocumentFromState(current, document.id));
       setMessage(`${document.title} was deleted.`);
     } catch (error) {
-      setMessage(error instanceof Error ? `Document was not deleted: ${error.message}` : 'Document was not deleted because cloud sync failed.');
+      setMessage('Document was not deleted. Check your connection and try again.');
     }
   }
 
@@ -497,7 +501,7 @@ type ConfirmAction = {
 
 function StatusNote({ message }: { message: string }) {
   return (
-    <div className="rounded-lg border border-ink/8 bg-paper/70 px-4 py-3 text-sm leading-6 text-graphite/76">
+    <div className="status-enter rounded-lg border border-ink/8 bg-paper/70 px-4 py-3 text-sm leading-6 text-graphite/76">
       {message}
     </div>
   );
@@ -1941,7 +1945,7 @@ function PerformancePage({
       weaknesses: '',
       actionPoints: '',
     }));
-    setStatusMessage(`${record.title} was ${existing ? 'updated' : 'saved'} locally.`);
+    setStatusMessage(`${record.title} was ${existing ? 'updated' : 'saved'}.`);
   }
 
   async function deletePerformanceRecord(record: PerformanceRecord) {
@@ -1960,7 +1964,7 @@ function PerformancePage({
       });
       setStatusMessage(`${record.title} was deleted.`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? `Performance record was not deleted: ${error.message}` : 'Performance record was not deleted because cloud sync failed.');
+      setStatusMessage('Progress record was not deleted. Check your connection and try again.');
     }
   }
 
@@ -2015,8 +2019,7 @@ function PerformancePage({
       });
       setStatusMessage(`Added ${newRecords.length} performance record${newRecords.length === 1 ? '' : 's'} from ${document.title}.`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Performance analysis failed. Please try again.';
-      setStatusMessage(message);
+      setStatusMessage('This report could not be analysed. Try again.');
     } finally {
       setIsAnalysing(false);
     }
@@ -2030,7 +2033,7 @@ function PerformancePage({
     }
 
     setIsGeneratingAdvice(true);
-    setStatusMessage(`Generating academic coaching advice for ${selectedSubject} / ${selectedPeriod}...`);
+    setStatusMessage(`Updating the summary for ${selectedSubject} / ${selectedPeriod}…`);
 
     try {
       const advice = await generatePerformanceAdvice(adviceRecords);
@@ -2039,10 +2042,9 @@ function PerformancePage({
         ...current,
         performanceSummaries: [summary, ...current.performanceSummaries],
       }));
-      setStatusMessage('Coaching advice was saved locally.');
+      setStatusMessage('Progress summary updated.');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Performance advice failed. Please try again.';
-      setStatusMessage(message);
+      setStatusMessage('The progress summary could not be updated. Try again.');
     } finally {
       setIsGeneratingAdvice(false);
     }
@@ -2076,7 +2078,7 @@ function PerformancePage({
             </select>
           </label>
           <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || filteredRecords.filter(isAcademicPerformanceRecord).length === 0} className="self-end rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
-            {isGeneratingAdvice ? 'Generating...' : 'Refresh summary'}
+            {isGeneratingAdvice ? 'Updating…' : 'Refresh summary'}
           </button>
         </div>
         {selectedPeriod === 'Custom Range' ? (
@@ -2085,13 +2087,13 @@ function PerformancePage({
             <FormField label="To"><input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
           </div>
         ) : null}
-        {statusMessage ? <p role="status" className="mt-3 text-sm leading-7 text-graphite/74">{statusMessage}</p> : null}
+        {statusMessage ? <p key={statusMessage} role="status" className="status-enter mt-3 text-sm leading-7 text-graphite/74">{statusMessage}</p> : null}
       </div> : null}
 
       {records.length === 0 ? (
         <EmptyState
           title={documents.some((document) => document.extractedText?.trim()) ? 'Turn uploaded reports into evidence' : 'Add the first report or assessment'}
-          copy={documents.some((document) => document.extractedText?.trim()) ? 'Analyse an uploaded report so teacher comments, strengths, targets, grades, and recommendations can feed Progress.' : 'Add exam results manually or analyse an uploaded report to begin building a private academic performance picture.'}
+          copy={documents.some((document) => document.extractedText?.trim()) ? 'Analyse an uploaded report so teacher comments, strengths, targets, grades, and recommendations can feed Progress.' : 'Upload a report, or add a progress record below.'}
         />
       ) : null}
 
@@ -2105,20 +2107,7 @@ function PerformancePage({
           <p className="mt-4 text-base leading-8 text-graphite/78">{learningSummary.body}</p>
           <p className="mt-3 text-base font-semibold leading-8 text-ink">{learningSummary.nextAction}</p>
         </div>
-        <details className="mt-5 rounded-lg border border-ink/8 bg-paper/55 p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-ink">Why this summary</summary>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <InsightBadge label="Direction" value={learningSummary.direction} />
-            <InsightBadge label="Confidence" value={learningSummary.confidence} />
-            <InsightBadge label="Evidence" value={learningSummary.source} />
-            {learningSummary.confidenceSignals.map((signal) => (
-              <div key={signal.label} className="rounded-lg bg-white p-3 text-sm leading-6 text-graphite/72">
-                <p className="font-semibold text-ink">{signal.label} {signal.stars}</p>
-                <p className="mt-1">{signal.detail}</p>
-              </div>
-            ))}
-          </div>
-        </details>
+        <p className="mt-5 border-t border-ink/6 pt-4 text-sm leading-6 text-graphite/62">Based on saved reports, teacher feedback, results, and Tutor history.</p>
       </section>
 
       <section className="rounded-lg bg-white p-6 shadow-sm">
@@ -2143,25 +2132,20 @@ function PerformancePage({
       </section>
 
       <section className="rounded-lg bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Teacher insights</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Teacher feedback</p>
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
           {teacherInsights.length ? (
             teacherInsights.map((insight) => <TeacherInsightCard key={`${insight.theme}-${insight.classification}`} insight={insight} />)
-          ) : (
-            <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70 lg:col-span-3">More reports will allow stronger long-term conclusions.</p>
-          )}
+          ) : !repeatedThemes.length ? (
+            <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70 lg:col-span-3">No recurring teacher feedback yet.</p>
+          ) : null}
         </div>
-      </section>
-
-      <section className="rounded-lg bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Repeated themes</p>
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          {repeatedThemes.length ? (
-            repeatedThemes.map((theme) => <TeacherInsightCard key={`${theme.theme}-${theme.classification}`} insight={theme} compact />)
-          ) : (
-            <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70 lg:col-span-3">More reports will allow stronger long-term conclusions.</p>
-          )}
-        </div>
+        {repeatedThemes.length ? <div className="mt-6 border-t border-ink/6 pt-5">
+          <p className="text-sm font-semibold text-ink">Repeated across reports</p>
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+            {repeatedThemes.map((theme) => <TeacherInsightCard key={`${theme.theme}-${theme.classification}`} insight={theme} compact />)}
+          </div>
+        </div> : null}
       </section>
 
       <section className="rounded-lg bg-white p-6 shadow-sm">
@@ -2201,7 +2185,7 @@ function PerformancePage({
       ) : null}
 
       <details className="rounded-lg bg-white p-6 shadow-sm">
-        <summary className="cursor-pointer text-sm font-semibold text-ink">Manage progress data</summary>
+        <summary className="cursor-pointer text-sm font-semibold text-ink">{records.length ? 'Manage progress data' : 'Add a progress record'}</summary>
         <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <form onSubmit={handleManualSubmit} className="rounded-lg border border-ink/8 bg-paper/50 p-5">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
@@ -2843,10 +2827,10 @@ function getOverallConfidence(signals: EvidenceSignal[]) {
 
 function describeEvidenceScope(records: PerformanceRecord[]) {
   const snapshots = getReportSnapshots(records).length;
-  if (snapshots >= 6) return `We have analysed ${snapshots} report points, enough to describe longer-term patterns.`;
-  if (snapshots >= 3) return `We have analysed ${snapshots} report points, so repeated observations are beginning to carry weight.`;
-  if (snapshots === 2) return 'We have analysed two reports. That is enough to identify early patterns, with confidence still building.';
-  if (snapshots === 1) return 'We have analysed one report. The observations below describe what is visible so far, without pretending it is a trend.';
+  if (snapshots >= 6) return `${snapshots} reports show a longer-term pattern.`;
+  if (snapshots >= 3) return `${snapshots} reports reveal several repeated observations.`;
+  if (snapshots === 2) return 'Two reports show early patterns, but not yet a long-term trend.';
+  if (snapshots === 1) return 'This first report is a starting point, not yet a trend.';
   return `${records.length} record${records.length === 1 ? '' : 's'} match this view.`;
 }
 
@@ -2858,7 +2842,7 @@ function firstUsefulAction(records: PerformanceRecord[], subject: string) {
   if (target) return `The clearest next step is to practise ${target.toLowerCase()} before the next assessment.`;
   const strength = topEvidenceTerms(records, 'strengths')[0]?.term;
   if (strength && subjectName) return `Keep protecting ${strength.toLowerCase()} in ${subjectName}, then compare it with the next report.`;
-  return 'More reports will allow stronger long-term conclusions.';
+  return 'Add another report to compare changes over time.';
 }
 
 function buildLearningSummary(records: PerformanceRecord[], subject: string, latestSummary: PerformanceSummary | undefined, tutorLessons: TutorLesson[], tutorAttempts: TutorAttempt[], tutorMemory: TutorMemory) {
@@ -2978,7 +2962,7 @@ function buildProgressAtAGlance(records: PerformanceRecord[]) {
     {
       label: 'Biggest Concern',
       value: biggestConcern ? `${biggestConcern.subject} ${Math.round(biggestConcern.delta)}` : fallbackConcern ? fallbackConcern.record.subject : 'No Clear Concern',
-      reason: biggestConcern ? 'This is the largest same-subject fall in the current view.' : fallbackConcern ? `${fallbackConcern.record.title} is the lowest marked result in this view.` : 'More reports will allow stronger long-term conclusions.',
+      reason: biggestConcern ? 'This is the largest same-subject fall in the current view.' : fallbackConcern ? `${fallbackConcern.record.title} is the lowest marked result in this view.` : 'Add another report before comparing changes over time.',
     },
     {
       label: 'Recurring Teacher Message',
@@ -3055,19 +3039,10 @@ export function buildProgressRecommendations(records: PerformanceRecord[], tutor
         ? `${improvementChange.subject} rose from ${improvementChange.from.percentage}% to ${improvementChange.to.percentage}%; keep the habit that produced that gain.`
         : strength
           ? `Teachers already praise ${strength.theme.toLowerCase()}, so the aim is to keep it while working on the priority theme.`
-          : 'The selected view needs another report before stronger long-term conclusions are possible.',
+          : 'Add another report before comparing changes over time.',
       evidence: improvement?.quote ?? strength?.quote ?? `${sourceCount} uploaded source${sourceCount === 1 ? '' : 's'} and ${tutorAttempts.length} Tutor attempt${tutorAttempts.length === 1 ? '' : 's'} are available as context.`,
     },
   ];
-}
-
-function InsightBadge({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-ink/8 bg-white p-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</p>
-      <p className="mt-1 text-base font-semibold leading-6 text-ink">{value}</p>
-    </div>
-  );
 }
 
 function ProgressTimeline({ snapshots, documents, selectedKey, onSelect }: { snapshots: ReportSnapshot[]; documents: ResearchDocument[]; selectedKey?: string; onSelect: (key: string) => void }) {
@@ -3206,10 +3181,7 @@ function TeacherInsightCard({ insight, compact = false }: { insight: TeacherInsi
 
   return (
     <article className={`rounded-lg border p-4 ${tone}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</p>
-        <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-graphite/70">{insight.confidence} confidence</span>
-      </div>
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</p>
       <h3 className="mt-2 text-lg font-semibold text-ink">{insight.theme}</h3>
       <p className="mt-2 text-sm leading-6 text-graphite/74">{insight.why}</p>
       {insight.subjects.length ? (
@@ -3675,7 +3647,7 @@ function TimelinePage({ events }: { events: TimelineEvent[] }) {
 
 function EmptyState({ title, copy, action, onClick }: { title: string; copy: string; action?: string; onClick?: () => void }) {
   return (
-    <div className="rounded-lg border border-dashed border-ink/12 bg-white/55 p-8 text-center">
+    <div className="rounded-lg bg-paper/45 p-10 text-center">
       <p className="font-serif text-2xl font-semibold text-ink">{title}</p>
       <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-graphite/70">{copy}</p>
       {action && onClick ? (
@@ -4526,7 +4498,7 @@ function Upload({
                 <FilePlus2 size={18} />
                 {isReading ? 'Importing...' : 'Import document'}
               </button>
-              {isReading || note !== 'Choose a document to add to this workspace.' ? <p role="status" className="mt-4 text-center text-sm font-medium text-graphite/74">{note}</p> : null}
+              {isReading || note !== 'Choose a document to add to this workspace.' ? <p key={note} role="status" className="status-enter mt-4 text-center text-sm font-medium text-graphite/74">{note}</p> : null}
               {failedUpload ? (
                 <button
                   type="button"
@@ -4580,8 +4552,7 @@ function buildResearchChatContext(
       .filter((record) => record.sourceDocumentId === result.document.id || result.document.tags.some((tag) => tag.toLowerCase() === record.subject.toLowerCase()))
       .slice(0, 8)
       .map((record) => {
-        const confidence = getRecordExtractionConfidence(record);
-        const reviewCopy = needsExtractionReview(record) ? `${confidence} confidence, waiting for confirmation` : hasReviewAvailable(record) ? `${confidence} confidence, review available` : 'confirmed';
+        const reviewCopy = needsExtractionReview(record) ? 'waiting for review' : hasReviewAvailable(record) ? 'review available' : 'confirmed';
         return `${record.date}: ${record.subject} ${formatResult(record)} (${reviewCopy})${record.teacherComment ? `; comment: ${record.teacherComment}` : ''}`;
       })
       .concat(
@@ -4776,8 +4747,7 @@ function ResearchChat({
 
       setState((current) => ({ ...current, chat: [...current.chat, assistantMessage] }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Research chat failed. Please try again.';
-      setErrorMessage(message);
+      setErrorMessage('Try again in a moment.');
     } finally {
       setIsLoading(false);
     }
@@ -4788,7 +4758,7 @@ function ResearchChat({
       await deleteRemoteRowsIfNeeded({ chat_messages: [message.id] }, storageStatus, userId);
       setState((current) => ({ ...current, chat: current.chat.filter((item) => item.id !== message.id) }));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? `Message was not deleted: ${error.message}` : 'Message was not deleted because cloud sync failed.');
+      setErrorMessage('Message was not deleted. Check your connection and try again.');
     }
   }
 
@@ -4797,16 +4767,16 @@ function ResearchChat({
       await deleteRemoteRowsIfNeeded({ chat_messages: chat.map((message) => message.id) }, storageStatus, userId);
       setState((current) => ({ ...current, chat: [] }));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? `Chat history was not cleared: ${error.message}` : 'Chat history was not cleared because cloud sync failed.');
+      setErrorMessage('Chat history was not cleared. Check your connection and try again.');
     }
   }
 
   return (
-    <div className="mx-auto grid min-h-[620px] max-w-7xl gap-5 sm:h-[calc(100vh-12rem)] sm:min-h-[480px] xl:grid-cols-[minmax(0,1fr)_360px]">
+    <div className={`mx-auto grid gap-5 ${searchableDocuments.length ? 'min-h-[620px] max-w-7xl sm:h-[calc(100vh-12rem)] sm:min-h-[480px] xl:grid-cols-[minmax(0,1fr)_360px]' : 'max-w-5xl'}`}>
       <section className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-white shadow-sm">
         <div className="shrink-0 border-b border-ink/6 p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <SectionHeader eyebrow="Archive" title="Ask your workspace" copy="Use reports, notes, teacher comments, and saved sources as the basis for each answer." />
+            <SectionHeader eyebrow="Chat" title="Ask your sources" copy="Ask about a report, teacher feedback, a weak topic, or a contradiction." />
             {chat.length ? (
               <IconTextButton
                 icon={Trash2}
@@ -4861,8 +4831,8 @@ function ResearchChat({
             ))
           ) : (
             <EmptyState
-              title="Ask once your archive has a source"
-              copy="Add a report, note, paper, or assessment, then ask about themes, teacher comments, weak topics, or contradictions."
+              title="Start with a source"
+              copy="Add a report, note, paper, or assessment before asking a question."
             />
           )}
           {isLoading ? (
@@ -4879,9 +4849,9 @@ function ResearchChat({
           ) : null}
           <div ref={bottomRef} />
         </div>
-        <div className="shrink-0 border-t border-ink/6 bg-white p-4">
+        {searchableDocuments.length ? <div className="shrink-0 border-t border-ink/6 bg-white p-4">
           {errorMessage ? (
-            <div className="mb-3 rounded-lg border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
+            <div role="status" className="status-enter mb-3 rounded-lg border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
               Research chat could not answer right now. {errorMessage}
             </div>
           ) : null}
@@ -4908,30 +4878,24 @@ function ResearchChat({
               <Send size={18} />
             </button>
           </div>
-        </div>
+        </div> : null}
       </section>
 
-      <aside className="hidden min-h-0 overflow-hidden rounded-lg bg-white shadow-sm xl:flex xl:flex-col">
+      {searchableDocuments.length ? <aside className="hidden min-h-0 overflow-hidden rounded-lg bg-white shadow-sm xl:flex xl:flex-col">
         <div className="shrink-0 border-b border-ink/6 p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Evidence</p>
           <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">Related sources</h3>
         </div>
         <div className="scrollbar-soft min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          {documents.length ? (
-            latestCitations.length ? (
+          {latestCitations.length ? (
             latestCitations.map((citation) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} />)
-            ) : (
+          ) : (
             <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
               Related sources appear here after an answer.
             </p>
-            )
-          ) : (
-            <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
-              Add a source to begin asking your archive.
-            </p>
           )}
         </div>
-      </aside>
+      </aside> : null}
       <ConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
     </div>
   );
@@ -4952,8 +4916,8 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
     <div className="mx-auto max-w-6xl">
       <SectionHeader
         eyebrow="Study tools"
-        title="Turn sources into learning assets"
-        copy="Choose a study format and review the uploaded source context that would support it."
+        title="Prepare from your sources"
+        copy="Choose a study format and see which sources are ready to support it."
       />
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <div className="space-y-4">
@@ -4990,11 +4954,11 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
           })}
         </div>
         <div className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workflow preview</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Selected format</p>
           <h3 className="mt-3 font-serif text-4xl font-semibold text-ink">{activeTool}</h3>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
             {sourceDocuments.length
-              ? `${sourceDocuments.length} readable source${sourceDocuments.length === 1 ? '' : 's'} are available for ${activeTool.toLowerCase()} work. Use Chat or Tutor for generated help from these sources.`
+              ? `${sourceDocuments.length} readable source${sourceDocuments.length === 1 ? ' is' : 's are'} ready for ${activeTool.toLowerCase()} work.`
               : 'Upload readable documents before using study workflows. Summaries, flashcards, essay plans, quizzes, and timelines should be based on real workspace sources.'}
           </p>
           <div className="mt-7 space-y-3">
@@ -5038,9 +5002,7 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
     });
   }, [documents]);
   const mapEdges = useMemo<MapEdge[]>(() => mapNodes.slice(1).map((node) => ({ from: mapNodes[0].id, to: node.id })), [mapNodes]);
-  const [selectedNodeId, setSelectedNodeId] = useState('');
   const nodeById = Object.fromEntries(mapNodes.map((node) => [node.id, node]));
-  const selectedNode = nodeById[selectedNodeId] ?? mapNodes[0];
   const toneClasses = {
     moss: 'bg-white text-ink border-moss/35',
     brass: 'bg-white text-ink border-brass/35',
@@ -5053,12 +5015,12 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
       <SectionHeader
         eyebrow="Knowledge map"
         title="Connected topic graph"
-        copy="A quieter map of relationships across the active research area. Topic nodes appear after documents have been extracted."
+        copy="Topics found across your sources, connected by shared context."
       />
       {mapNodes.length === 0 ? (
         <EmptyState title="Create a topic map" copy="Upload documents and Research OS will use their topics to start a workspace map." />
       ) : (
-      <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
+      <div>
         <div className="relative min-h-[460px] overflow-hidden rounded-lg border border-ink/8 bg-white shadow-sm sm:min-h-[560px]">
           <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             {mapEdges.map((edge) => {
@@ -5077,13 +5039,9 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
             </div>
           </div>
           {mapNodes.map((node) => (
-            <button
+            <div
               key={node.id}
-              type="button"
-              onClick={() => setSelectedNodeId(node.id)}
-              className={`absolute z-20 grid place-items-center overflow-hidden rounded-full border px-3 text-center text-xs font-semibold leading-tight shadow-sm transition hover:scale-[1.02] sm:px-4 sm:text-sm ${toneClasses[node.tone]} ${
-                selectedNodeId === node.id ? 'ring-4 ring-ink/8' : ''
-              }`}
+              className={`absolute z-20 grid place-items-center overflow-hidden rounded-full border px-3 text-center text-xs font-semibold leading-tight shadow-sm sm:px-4 sm:text-sm ${toneClasses[node.tone]}`}
               style={{
                 left: `${node.x}%`,
                 top: `${node.y}%`,
@@ -5093,30 +5051,9 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
               }}
             >
               <span className="max-w-full break-words">{node.label}</span>
-            </button>
+            </div>
           ))}
         </div>
-        <aside className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
-            <Tags size={14} />
-            Selected node
-          </p>
-          <h3 className="mt-3 font-serif text-3xl font-semibold text-ink">{selectedNode?.label}</h3>
-          <div className="mt-6 space-y-5">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Cluster</p>
-              <p className="mt-2 text-sm font-semibold text-ink">Workspace topics</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Strongest bridge</p>
-              <p className="mt-2 text-sm leading-7 text-graphite/72">Shared themes across sources</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Next useful action</p>
-              <p className="mt-2 text-sm leading-7 text-graphite/72">Ask research chat for evidence connected to this topic.</p>
-            </div>
-          </div>
-        </aside>
       </div>
       )}
     </div>

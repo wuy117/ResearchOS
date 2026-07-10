@@ -33,8 +33,8 @@ export function AuthGate({ authLoading, authError, onSignIn, onSignUp }: AuthGat
         await onSignUp(nextEmail, password);
         setMessage('Account created. If email confirmation is enabled, check your inbox before signing in.');
       }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Authentication failed. Please try again.');
+    } catch {
+      setMessage(mode === 'sign-in' ? 'Sign-in failed. Check your email and password.' : 'Account could not be created. Try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -54,8 +54,7 @@ export function AuthGate({ authLoading, authError, onSignIn, onSignUp }: AuthGat
         </div>
 
         <div className="mt-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Private workspace</p>
-          <h1 className="mt-3 font-serif text-3xl font-semibold leading-tight text-ink">Continue to Research OS</h1>
+          <h1 className="font-serif text-3xl font-semibold leading-tight text-ink">Continue to Research OS</h1>
           <p className="mt-4 text-sm leading-7 text-graphite/72">
             Your documents, study history, Tutor memory, and progress records stay with your account.
           </p>
@@ -93,7 +92,7 @@ export function AuthGate({ authLoading, authError, onSignIn, onSignUp }: AuthGat
           </label>
 
           {message || authError ? (
-            <p role="status" className="rounded-lg border border-brass/25 bg-brass/10 px-3 py-2 text-sm leading-6 text-graphite/78">{message || authError}</p>
+            <p key={message || authError} role="status" className="status-enter rounded-lg border border-brass/25 bg-brass/10 px-3 py-2 text-sm leading-6 text-graphite/78">{message || authError}</p>
           ) : null}
 
           <button type="submit" disabled={authLoading || isSubmitting} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white disabled:bg-graphite/45">

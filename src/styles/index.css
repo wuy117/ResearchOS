@@ -59,6 +59,12 @@ button:active:not(:disabled) {
   transform: translateY(1px);
 }
 
+@media (hover: hover) {
+  button:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+}
+
 ::selection {
   background: rgba(88, 111, 95, 0.2);
 }
@@ -81,6 +87,29 @@ button:active:not(:disabled) {
   background-clip: content-box;
 }
 
+.page-enter {
+  animation: page-enter 180ms ease-out both;
+}
+
+.status-enter,
+details[open] > :not(summary) {
+  animation: disclosure-enter 160ms ease-out both;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+@keyframes disclosure-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -89,5 +118,10 @@ button:active:not(:disabled) {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  button:hover:not(:disabled),
+  button:active:not(:disabled) {
+    transform: none;
   }
 }

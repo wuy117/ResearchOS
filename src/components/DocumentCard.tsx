@@ -10,12 +10,8 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
   const markedRecords = linkedRecords.filter((record) => getRecordPercentage(record) !== undefined || record.grade || record.attainment || record.predictedGrade || record.targetGrade);
   const commentRecords = linkedRecords.filter((record) => record.teacherComment);
   const summary = document.extractionSummary;
-  const diagnostics = summary?.diagnostics;
   const showDeveloperDiagnostics = import.meta.env.DEV || new URLSearchParams(window.location.search).get('dev') === '1';
-  const confirmedAutomatically = summary?.confirmedAutomatically ?? Math.max(0, linkedRecords.length - (summary?.needsReview ?? 0));
-  const reviewSuggested = summary?.reviewSuggested ?? 0;
-  const waitingForConfirmation = summary?.waitingForConfirmation ?? summary?.needsReview ?? 0;
-  const cleanStatusLabel = markedRecords.length ? 'Mark confirmed' : commentRecords.length ? 'Teacher comments only' : 'Looks good';
+  const displaySummary = document.summary.replace(/^\[(?:AI generated|Local fallback)[^\]]*\]\s*/i, '');
   const originalFile = document.originalFile;
   const statusClasses = {
     Indexed: 'bg-moss/10 text-moss',
@@ -24,6 +20,14 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
     Analysing: 'bg-brass/12 text-brass',
     Failed: 'bg-red-50 text-red-700',
     'Needs review': 'bg-ink/8 text-graphite',
+  };
+  const statusLabels = {
+    Indexed: 'Ready',
+    Ready: 'Ready',
+    Extracting: 'Importing',
+    Analysing: 'Reading',
+    Failed: 'Failed',
+    'Needs review': 'Needs review',
   };
 
   return (
@@ -35,54 +39,9 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
             {[metadata?.linkedAssessmentName, metadata?.academicYear ?? metadata?.academicYears?.[0], metadata?.term ?? metadata?.terms?.[0]].filter(Boolean).join(' / ') || document.type}
           </p>
         </div>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[document.status]}`}>{document.status}</span>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[document.status]}`}>{statusLabels[document.status]}</span>
       </div>
-      <p className="mt-4 line-clamp-3 text-sm leading-7 text-graphite/75">{document.summary}</p>
-      {summary ? (
-        <section className="mt-5 rounded-lg border border-ink/6 bg-paper/45 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Source review</p>
-              <p className="mt-1 text-sm font-semibold text-ink">
-                {summary.needsReview
-                  ? `${summary.needsReview} item${summary.needsReview === 1 ? '' : 's'} need review`
-                  : reviewSuggested
-                    ? 'Optional review available'
-                    : cleanStatusLabel}
-              </p>
-            </div>
-            {summary.needsReview ? (
-              <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">Action needed</span>
-            ) : reviewSuggested ? (
-              <span className="rounded-full bg-paper px-2.5 py-1 text-xs font-semibold text-graphite/70">Optional</span>
-            ) : (
-              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-semibold text-moss">Ready</span>
-            )}
-          </div>
-          {summary.reviewNotes.length ? (
-            <p className="mt-3 text-sm leading-6 text-graphite/72">{summary.reviewNotes[0]}</p>
-          ) : null}
-          <details className="mt-3 border-t border-ink/6 pt-3">
-            <summary className="cursor-pointer text-xs font-semibold text-graphite/65">What was found</summary>
-            <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-              <ExtractionStat label="Confirmed" value={confirmedAutomatically} />
-              <ExtractionStat label="Review suggested" value={reviewSuggested} />
-              <ExtractionStat label="Waiting for review" value={waitingForConfirmation} />
-              <ExtractionStat label="Subjects" value={summary.subjectsFound} />
-              <ExtractionStat label="Teacher comments" value={summary.teacherComments} />
-              <ExtractionStat label="Marks and grades" value={summary.marksExtracted + summary.gradesExtracted} />
-            </div>
-            {diagnostics && showDeveloperDiagnostics ? (
-              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-ink/6 pt-4 text-sm md:grid-cols-4">
-                <ExtractionStat label="Sections detected" value={diagnostics.detectedSubjectSections} />
-                <ExtractionStat label="Subjects with marks" value={diagnostics.subjectsWithMarks} />
-                <ExtractionStat label="Subjects with comments" value={diagnostics.subjectsWithComments} />
-                <ExtractionStat label="Uncertain fields" value={diagnostics.uncertainFields} />
-              </div>
-            ) : null}
-          </details>
-        </section>
-      ) : null}
+      <p className="mt-4 line-clamp-3 text-sm leading-7 text-graphite/75">{displaySummary}</p>
       {metadata ? (
         <div className="mt-5 grid gap-x-6 gap-y-4 border-t border-ink/6 pt-4 lg:grid-cols-3">
           <MetadataBlock label="Subjects" items={displaySubjects} />
@@ -92,8 +51,8 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
       ) : null}
       {linkedRecords.length ? (
         <div className="mt-5 grid gap-3 border-t border-ink/6 pt-4 md:grid-cols-2">
-          <SummaryBlock label="Extracted marks" value={markedRecords.length ? markedRecords.map(formatRecordResult).join(' / ') : commentRecords.length ? 'Teacher comments only' : 'Marks not extracted'} />
-          <SummaryBlock label="Extracted comments" value={commentRecords.length ? `${commentRecords.length} subject comment${commentRecords.length === 1 ? '' : 's'}` : 'No teacher comments extracted'} />
+          <SummaryBlock label="Results" value={markedRecords.length ? markedRecords.map(formatRecordResult).join(' / ') : commentRecords.length ? 'Teacher feedback only' : 'No results found'} />
+          <SummaryBlock label="Teacher feedback" value={commentRecords.length ? `${commentRecords.length} subject comment${commentRecords.length === 1 ? '' : 's'}` : 'No teacher feedback found'} />
         </div>
       ) : null}
       {metadata?.ignoreInstrumentalMusic ? (
@@ -211,15 +170,6 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function ExtractionStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <p className="text-lg font-semibold text-ink">{value.toLocaleString()}</p>
-      <p className="mt-1 text-xs leading-5 text-graphite/60">{label}</p>
-    </div>
-  );
-}
-
 function SummaryBlock({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-paper/65 p-3">
@@ -242,7 +192,7 @@ function MetadataBlock({ label, items }: { label: string; items: string[] }) {
           ))}
         </div>
       ) : (
-        <p className="mt-2 text-sm text-graphite/60">Not extracted yet</p>
+        <p className="mt-2 text-sm text-graphite/60">Not available</p>
       )}
     </div>
   );

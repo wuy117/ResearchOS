@@ -279,6 +279,7 @@ export function TutorPage({
   const weakTopics = useMemo(() => getWeakTopics(performanceRecords, performanceSummaries, tutorMemory), [performanceRecords, performanceSummaries, tutorMemory]);
   const recommendedTopics = useMemo(() => getRecommendedTopics(documents, weakTopics, performanceRecords, tutorMemory), [documents, weakTopics, performanceRecords, tutorMemory]);
   const hasReadableSources = documents.some((document) => document.extractedText?.trim() && document.status !== 'Failed');
+  const hasTutorHistory = tutorLessons.some((lesson) => lesson.workspaceId === workspaceId) || tutorSocraticTurns.some((turn) => turn.workspaceId === workspaceId) || tutorExamSessions.some((exam) => exam.workspaceId === workspaceId) || tutorAttempts.length > 0 || tutorMemory.topicsStudied.length > 0;
   const recentTopics = tutorMemory.topicsStudied.slice(0, 5);
   const activeLesson = tutorLessons.find((lesson) => lesson.workspaceId === workspaceId && lesson.status === 'in_progress') ?? tutorLessons.find((lesson) => lesson.workspaceId === workspaceId);
   const latestExam = tutorExamSessions.find((exam) => exam.workspaceId === workspaceId);
@@ -288,7 +289,8 @@ export function TutorPage({
   const [topic, setTopic] = useState(suggestedTopic);
   const [difficulty, setDifficulty] = useState<TutorDifficulty>('Core');
   const [isLoading, setIsLoading] = useState(false);
-  const [status, setStatus] = useState('Tutor reads your sources before teaching or questioning.');
+  const idleStatus = 'Tutor reads your sources before teaching or questioning.';
+  const [status, setStatus] = useState(idleStatus);
   const [currentLessonId, setCurrentLessonId] = useState(activeLesson?.id ?? '');
   const [checkpointAnswers, setCheckpointAnswers] = useState<Record<string, string>>({});
   const [revealedAnswers, setRevealedAnswers] = useState<Record<string, boolean>>({});
@@ -355,7 +357,7 @@ export function TutorPage({
       setView('lesson');
       setStatus('Lesson ready. Try each checkpoint before revealing the answer.');
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Tutor could not create a lesson right now.');
+      setStatus('Tutor could not create this lesson. Try again.');
     } finally {
       setIsLoading(false);
     }
@@ -471,7 +473,7 @@ export function TutorPage({
       setView('socratic');
       setStatus('Socratic mode is ready. Answer the single question before asking for the next one.');
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Tutor could not continue Socratic mode.');
+      setStatus('Tutor could not prepare the next question. Try again.');
     } finally {
       setIsLoading(false);
     }
@@ -521,7 +523,7 @@ export function TutorPage({
       setView('exam');
       setStatus('Exam questions ready. Submit an answer to see marking feedback and mark scheme reasoning.');
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Tutor could not generate exam questions.');
+      setStatus('Tutor could not prepare these exam questions. Try again.');
     } finally {
       setIsLoading(false);
     }
@@ -573,7 +575,7 @@ export function TutorPage({
       }));
       setStatus('Answer marked. Feedback and progress memory updated.');
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Tutor could not mark that answer.');
+      setStatus('Tutor could not mark that answer. Try again.');
     } finally {
       setIsLoading(false);
     }
@@ -597,7 +599,7 @@ export function TutorPage({
       }));
       setStatus('Tutor session deleted.');
     } catch (error) {
-      setStatus(error instanceof Error ? `Tutor session was not deleted: ${error.message}` : 'Tutor session was not deleted because cloud sync failed.');
+      setStatus('Tutor session was not deleted. Check your connection and try again.');
     }
   }
 
@@ -621,7 +623,7 @@ export function TutorPage({
       }));
       setStatus('Tutor memory was cleared. Lessons and exam sets were kept.');
     } catch (error) {
-      setStatus(error instanceof Error ? `Tutor memory was not cleared: ${error.message}` : 'Tutor memory was not cleared because cloud sync failed.');
+      setStatus('Tutor memory was not cleared. Check your connection and try again.');
     }
   }
 
@@ -633,11 +635,11 @@ export function TutorPage({
         copy="Lessons, active recall, Socratic questioning, and exam practice grounded in your sources."
       />
 
-      <div role="status" aria-live="polite" className="rounded-lg bg-paper/65 p-4">
-        <p className="text-sm leading-7 text-graphite/74">{isLoading ? 'Working with retrieved context...' : status}</p>
-      </div>
+      {isLoading || status !== idleStatus ? <div role="status" aria-live="polite" className="status-enter rounded-lg bg-paper/65 p-4">
+        <p className="text-sm leading-7 text-graphite/74">{isLoading ? 'Preparing…' : status}</p>
+      </div> : null}
 
-      <details className="order-last rounded-lg bg-white p-5 shadow-sm">
+      {hasTutorHistory ? <details className="order-last rounded-lg bg-white p-5 shadow-sm">
         <summary className="cursor-pointer text-sm font-semibold text-ink">Manage tutor history</summary>
         <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -707,9 +709,9 @@ export function TutorPage({
             />
           ))}
         </div>
-      </details>
+      </details> : null}
 
-      <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+      {hasReadableSources || hasTutorHistory ? <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
         <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
           <label className="block text-xs font-semibold text-graphite/70">
             Topic
@@ -735,9 +737,9 @@ export function TutorPage({
             Exam
           </button>
         </div>
-      </div>
+      </div> : null}
 
-      <div className="flex flex-wrap gap-2 border-b border-ink/6 pb-2">
+      {hasReadableSources || hasTutorHistory ? <div className="flex flex-wrap gap-2 border-b border-ink/6 pb-2">
         {(['home', 'lesson', 'socratic', 'exam'] as TutorView[]).map((item) => (
           <button
             key={item}
@@ -749,7 +751,7 @@ export function TutorPage({
             {item}
           </button>
         ))}
-      </div>
+      </div> : null}
 
       {view === 'home' ? (
         <TutorHome
@@ -921,15 +923,14 @@ function TutorHome({
                 ? 'Tutor will read your sources, teach the topic, and test recall before showing answers.'
                 : 'Upload a source first. Tutor needs real material before it can teach.'}
           </p>
-          <button
+          {activeLesson || hasReadableSources ? <button
             type="button"
             onClick={onContinue}
-            disabled={!activeLesson && !hasReadableSources}
-            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm"
           >
-            {activeLesson ? 'Continue previous lesson' : hasReadableSources ? 'Start suggested lesson' : 'Upload sources first'}
+            {activeLesson ? 'Continue previous lesson' : 'Start suggested lesson'}
             <ArrowRight size={17} />
-          </button>
+          </button> : null}
         </div>
         {hasReadableSources || tutorMemory.lessonsCompleted > 0 || tutorMemory.revisionStreak > 0 ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
           <TutorMetric icon={Target} label="Weakest topic" value={weakestTopic} />
@@ -952,10 +953,7 @@ function TutorHome({
                 <button key={topic.topic} type="button" onClick={() => onStartTopic(topic.topic)} className="w-full rounded-lg bg-paper/65 p-4 text-left hover:bg-paper">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-semibold text-ink">{topic.topic}</p>
-                    <span className="text-sm font-semibold text-graphite/70">{topic.confidence}%</span>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
-                    <div className="h-full rounded-full bg-moss" style={{ width: `${topic.confidence}%` }} />
+                    <ArrowRight size={16} className="text-graphite/55" />
                   </div>
                 </button>
               ))

@@ -88,6 +88,8 @@ export function AppShell({
   const showDeveloperTools = import.meta.env.DEV || new URLSearchParams(window.location.search).get('dev') === '1';
   const activePillar = getActivePillar(activePage);
   const visibleTabs = getVisibleTabs(activePillar.id);
+  const activeWorkspaceDocumentCount = activeWorkspace ? getWorkspaceDocumentCount(activeWorkspace.id) : 0;
+  const showAddSource = activePage !== 'upload' && activePage !== 'settings' && !(activePage === 'dashboard' && activeWorkspaceDocumentCount === 0);
 
   function createWorkspace() {
     const name = workspaceName.trim();
@@ -198,7 +200,7 @@ export function AppShell({
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{activePillar.label}</p>
                 <h1 className="mt-1 truncate text-base font-semibold text-ink sm:text-lg">{activeWorkspace?.name}</h1>
               </div>
-              {activePage !== 'upload' ? (
+              {showAddSource ? (
                 <button
                   type="button"
                   onClick={() => setActivePage('upload')}
@@ -253,22 +255,24 @@ export function AppShell({
           </header>
 
           <div className="scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-7 sm:px-6 xl:px-10 2xl:px-12">
-            {activePage === 'settings' ? (
-              <SettingsPage
-                state={state}
-                setState={setState}
-                storageStatus={storageStatus}
-                storageLabel={storageLabel}
-                user={user}
-                onSignOut={onSignOut}
-                claimableLocalState={claimableLocalState}
-                onImportClaimableLocalData={onImportClaimableLocalData}
-                onDismissClaimableLocalData={onDismissClaimableLocalData}
-                showDeveloperTools={showDeveloperTools}
-              />
-            ) : (
-              children
-            )}
+            <div key={activePage} className="page-enter">
+              {activePage === 'settings' ? (
+                <SettingsPage
+                  state={state}
+                  setState={setState}
+                  storageStatus={storageStatus}
+                  storageLabel={storageLabel}
+                  user={user}
+                  onSignOut={onSignOut}
+                  claimableLocalState={claimableLocalState}
+                  onImportClaimableLocalData={onImportClaimableLocalData}
+                  onDismissClaimableLocalData={onDismissClaimableLocalData}
+                  showDeveloperTools={showDeveloperTools}
+                />
+              ) : (
+                children
+              )}
+            </div>
           </div>
         </main>
       </div>
@@ -310,11 +314,11 @@ function SettingsPage({
     <div className="mx-auto max-w-5xl space-y-8">
       <section>
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Settings</p>
-        <h2 className="mt-3 font-serif text-4xl font-semibold leading-tight text-ink">Workspace controls</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-7 text-graphite/70">Account, storage, export, and advanced maintenance live here so daily learning stays focused.</p>
+        <h2 className="mt-3 font-serif text-4xl font-semibold leading-tight text-ink">Account and data</h2>
+        <p className="mt-3 max-w-2xl text-sm leading-7 text-graphite/70">Manage your account, saved work, and workspace data.</p>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+      <div className={`grid gap-6 ${storageStatus !== 'missing-env' ? 'lg:grid-cols-[1fr_1fr]' : ''}`}>
         <AccountDataControls
           state={state}
           storageStatus={storageStatus}
@@ -324,7 +328,7 @@ function SettingsPage({
           onImportClaimableLocalData={onImportClaimableLocalData}
           onDismissClaimableLocalData={onDismissClaimableLocalData}
         />
-        <section className="rounded-lg bg-white p-5 shadow-sm">
+        {storageStatus !== 'missing-env' ? <section className="rounded-lg bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Storage</p>
           <h3 className="mt-2 text-lg font-semibold text-ink">{storageLabel}</h3>
           <p className="mt-3 text-sm leading-7 text-graphite/72">
@@ -334,7 +338,7 @@ function SettingsPage({
                 ? 'Research OS is keeping your work locally until sync is available.'
                 : 'Your work is saved in this browser.'}
           </p>
-        </section>
+        </section> : null}
       </div>
 
       <details className="rounded-lg bg-white p-5 shadow-sm">
@@ -441,8 +445,8 @@ function AccountDataControls({
     try {
       await onImportClaimableLocalData();
       setMessage('Local browser data was copied into this account. Original local data was not deleted.');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Local data could not be imported.');
+    } catch {
+      setMessage('Local data could not be imported. Check your connection and try again.');
     } finally {
       setIsImporting(false);
     }
@@ -453,7 +457,7 @@ function AccountDataControls({
       <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
         <span>
           <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Account</span>
-          <span className="mt-1 block truncate text-sm font-semibold text-ink">{user?.email ?? 'Local-only mode'}</span>
+          <span className="mt-1 block truncate text-sm font-semibold text-ink">{user?.email ?? 'Saved in this browser'}</span>
         </span>
         <UserCircle size={17} className="text-graphite/60" />
       </button>
