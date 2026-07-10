@@ -21,7 +21,7 @@ import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type R
 import { AppShell } from './components/AppShell';
 import { AuthGate } from './components/AuthGate';
 import { CitationCard } from './components/CitationCard';
-import { DocumentCard } from './components/DocumentCard';
+import { DocumentCard, SourceArchiveCard } from './components/DocumentCard';
 import { SectionHeader } from './components/SectionHeader';
 import { TutorPage } from './components/TutorPage';
 import { useAuth } from './hooks/useAuth';
@@ -370,6 +370,7 @@ function Library({
 }) {
   const [message, setMessage] = useState('');
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [filters, setFilters] = useState({
     subject: 'All',
     academicYear: 'All',
@@ -380,6 +381,8 @@ function Library({
   });
   const filterOptions = useMemo(() => buildSourceFilterOptions(documents, state.performanceRecords), [documents, state.performanceRecords]);
   const filteredDocuments = useMemo(() => documents.filter((document) => documentMatchesSourceFilters(document, state.performanceRecords, filters)), [documents, filters, state.performanceRecords]);
+  const hasActiveFilters = Object.values(filters).some((value) => value !== 'All');
+  const activeFilterCount = Object.values(filters).filter((value) => value !== 'All').length;
 
   function updateFilter(field: keyof typeof filters, value: string) {
     setFilters((current) => ({ ...current, [field]: value }));
@@ -409,14 +412,33 @@ function Library({
   return (
     <div className="space-y-7">
       <SectionHeader
-        eyebrow="Document library"
+        eyebrow="Academic archive"
         title="Sources"
-        copy="Reports, notes, papers, and assessments, filtered by the academic context around them."
+        copy="Your reports, assessments, notes, and papers — organised around what they mean for your learning."
       />
       {message ? <StatusNote message={message} /> : null}
       {documents.length ? (
-        <section className="rounded-lg bg-white p-4 shadow-sm">
-          <div className="grid gap-x-4 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
+        <section className="border-y border-ink/[0.055] py-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-graphite/48">Filter archive</p>
+              <p className="mt-1 text-sm text-graphite/65">Narrow the collection by academic context.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <p className="text-sm font-medium tabular-nums text-graphite/65">
+                {filteredDocuments.length} of {documents.length} document{documents.length === 1 ? '' : 's'}
+              </p>
+              <button
+                type="button"
+                aria-expanded={mobileFiltersOpen}
+                onClick={() => setMobileFiltersOpen((value) => !value)}
+                className="rounded-md bg-white px-3 py-2 text-xs font-semibold text-ink shadow-sm ring-1 ring-ink/[0.07] md:hidden"
+              >
+                {mobileFiltersOpen ? 'Hide filters' : `Filters${activeFilterCount ? ` · ${activeFilterCount}` : ''}`}
+              </button>
+            </div>
+          </div>
+          <div className={`${mobileFiltersOpen ? 'grid' : 'hidden'} mt-4 gap-x-4 gap-y-4 md:grid md:grid-cols-2 xl:grid-cols-3`}>
             <SourceFilter label="Subject" value={filters.subject} options={filterOptions.subjects} onChange={(value) => updateFilter('subject', value)} />
             <SourceFilter label="Academic year" value={filters.academicYear} options={filterOptions.academicYears} onChange={(value) => updateFilter('academicYear', value)} />
             <SourceFilter label="Term" value={filters.term} options={filterOptions.terms} onChange={(value) => updateFilter('term', value)} />
@@ -424,18 +446,17 @@ function Library({
             <SourceFilter label="Teacher" value={filters.teacher} options={filterOptions.teachers} onChange={(value) => updateFilter('teacher', value)} />
             <SourceFilter label="Document type" value={filters.documentType} options={filterOptions.documentTypes} onChange={(value) => updateFilter('documentType', value)} />
           </div>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/6 pt-4">
-            <p className="text-sm font-medium text-graphite/72">
-              Showing {filteredDocuments.length} of {documents.length} document{documents.length === 1 ? '' : 's'}.
-            </p>
-            <button type="button" onClick={clearFilters} className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+          {hasActiveFilters ? (
+            <div className="mt-4 flex justify-end">
+              <button type="button" onClick={clearFilters} className="rounded-md px-2 py-2 text-xs font-semibold text-graphite/70 transition hover:bg-white hover:text-ink focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ink/10">
               Clear filters
-            </button>
-          </div>
+              </button>
+            </div>
+          ) : null}
         </section>
       ) : null}
       {documents.length ? (
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className="space-y-6">
           {filteredDocuments.map((document) => (
             <ManagedDocumentCard
               key={document.id}
@@ -479,9 +500,7 @@ function Library({
             />
           ))}
           {filteredDocuments.length === 0 ? (
-            <div className="xl:col-span-2">
-              <EmptyState title="No documents match these filters" copy="Change a filter to bring reports and assessments back into view." action="Clear filters" onClick={clearFilters} />
-            </div>
+            <EmptyState title="No documents match these filters" copy="Change a filter to bring reports and assessments back into view." action="Clear filters" onClick={clearFilters} />
           ) : null}
         </div>
       ) : (
@@ -509,9 +528,9 @@ function StatusNote({ message }: { message: string }) {
 
 function SourceFilter({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
   return (
-    <label className="text-sm font-semibold text-ink">
-      {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm font-normal outline-none ring-ink/10 focus:ring-4">
+    <label className="block min-w-0">
+      <span className="text-xs font-semibold uppercase tracking-[0.1em] text-graphite/55">{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 h-11 w-full min-w-0 rounded-lg border border-ink/[0.08] bg-white px-3 text-sm font-medium text-ink shadow-sm outline-none ring-ink/10 transition focus:border-ink/20 focus:ring-4">
         <option value="All">All</option>
         {options.map((option) => (
           <option key={option} value={option}>
@@ -680,11 +699,25 @@ function ManagedDocumentCard({
 
   return (
     <div className="space-y-3">
-      <DocumentCard document={document} records={records} chunkCount={chunkCount} />
-      <ExtractionReviewPanel records={records.filter((record) => record.sourceDocumentId === document.id)} onSaveRecord={onSaveRecord} />
+      <SourceArchiveCard
+        document={document}
+        records={records}
+        chunkCount={chunkCount}
+        actions={(
+          <>
+            <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-semibold text-graphite/65 transition hover:bg-paper hover:text-ink focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ink/10">
+              <Edit3 size={14} /> Edit details
+            </button>
+            <button type="button" onClick={() => onDelete(document)} className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-semibold text-graphite/52 transition hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100">
+              <Trash2 size={14} /> Delete
+            </button>
+          </>
+        )}
+        technicalDetails={<ExtractionReviewPanel records={records.filter((record) => record.sourceDocumentId === document.id)} onSaveRecord={onSaveRecord} />}
+      />
       {isEditing ? (
-        <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Edit source details</p>
+        <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-ink/[0.055]">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Edit archive details</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <FormField label="Document title" className="md:col-span-2"><input value={title} onChange={(event) => setTitle(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
             <FormField label="Academic year"><input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
@@ -713,14 +746,7 @@ function ManagedDocumentCard({
             <button type="button" onClick={() => setIsEditing(false)} className="rounded-lg border border-ink/10 px-4 py-2 text-sm font-semibold text-ink">Cancel</button>
           </div>
         </div>
-      ) : (
-        <div className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap gap-2">
-            <IconTextButton icon={Edit3} label="Edit" onClick={() => setIsEditing(true)} />
-            <IconTextButton icon={Trash2} label="Delete" onClick={() => onDelete(document)} danger />
-          </div>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }
