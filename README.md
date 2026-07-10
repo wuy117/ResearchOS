@@ -105,3 +105,24 @@ Build for production:
 ```bash
 npm run build
 ```
+
+### Extraction regression suite
+
+Run every unit, golden, API, and end-to-end extraction test:
+
+```bash
+npm test
+```
+
+Run only the extraction suite or its concise benchmark report:
+
+```bash
+npm run test:extraction
+npm run test:regression
+```
+
+The golden dataset lives in `src/data/extractionFixtures.ts`. Each fixture contains source text plus exact expected subjects, marks, teachers, comments, grades, effort, attainment, targets, predicted grades, academic period, classification, confidence, and review count. Add a new object to that array to extend the regression suite; the parameterized golden and end-to-end tests pick it up automatically.
+
+The offline benchmark measures deterministic extraction and validation only, so its AI and OCR latency values are zero unless an injected OCR stage is used. Real API responses include `extractionTimings` with AI call count, AI latency, validation time, and total time. Developer builds also log upload stages, OCR completion, subject/comment counts, duplicate rows, confidence reasons, academic record creation, and the Progress update. These diagnostics are disabled in production.
+
+Clean structured reports use one AI validation call. Messy OCR and unusually long or merged rows use the deeper four-call path, with the independent marks and comments calls running in parallel. If AI is unavailable or returns malformed JSON, deterministic local extraction remains available and the result is labelled `Local fallback`.

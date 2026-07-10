@@ -1,4 +1,5 @@
 import { getWordCount } from './chunkText';
+import { normalizeOcrText } from './extractionValidation';
 
 export type ExtractedImageText = {
   text: string;
@@ -47,10 +48,6 @@ function installSafariImageUploadCompat() {
       },
     });
   }
-}
-
-function normalizeOcrText(text: string) {
-  return text.replace(/[ \t]+/g, ' ').replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export async function extractImageText(file: File): Promise<ExtractedImageText> {

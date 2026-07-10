@@ -37,6 +37,47 @@ export type ExtractionFieldConfidence = Partial<Record<
   ExtractionConfidence
 >>;
 
+export type ExtractionDiagnostics = {
+  detectedSubjectSections: number;
+  subjectsWithMarks: number;
+  subjectsWithComments: number;
+  uncertainFields: number;
+  duplicateRows?: number;
+  ocrConsistency?: 'Excellent' | 'Good' | 'Poor';
+  confidenceReasons?: string[];
+  warnings: string[];
+};
+
+export type ExtractionQualityReport = {
+  expectedSubjects?: number;
+  subjectsFound: number;
+  subjectsMatched: number;
+  marksFound: number;
+  teachersFound: number;
+  commentsLinked: number;
+  gradesFound: number;
+  effortFound: number;
+  attainmentFound: number;
+  targetsFound: number;
+  predictedGradesFound: number;
+  duplicateRows: number;
+  excludedInstrumentalRecords: number;
+  needsReview: number;
+  ocrConsistency: 'Excellent' | 'Good' | 'Poor';
+  confidence: ExtractionConfidence;
+  confidenceReasons: string[];
+  potentialProblems: string[];
+};
+
+export type ExtractionTimings = {
+  ocrMs: number;
+  extractionMs: number;
+  aiLatencyMs: number;
+  validationMs: number;
+  totalMs: number;
+  aiCalls: number;
+};
+
 export type ResearchChatSource = {
   documentTitle: string;
   location: string;
@@ -92,6 +133,9 @@ export type PerformanceAnalysisRecord = {
   attainment?: string | null;
   predictedGrade?: string | null;
   targetGrade?: string | null;
+  rawEvidence?: string[];
+  confidenceReasons?: string[];
+  needsReviewReason?: string | null;
   marksExtracted?: boolean | null;
   extractionConfidence?: ExtractionConfidence | null;
   fieldConfidence?: ExtractionFieldConfidence | null;
@@ -119,6 +163,29 @@ export type PerformanceAdviceResponse = {
 };
 
 export type DocumentMetadataAnalysisResponse = {
+  documentSummary?: string;
+  subjects?: Array<{
+    subject?: string | null;
+    teacher?: string | null;
+    percentage?: number | null;
+    grade?: string | null;
+    effort?: string | null;
+    attainment?: string | null;
+    target?: string | null;
+    predictedGrade?: string | null;
+    teacherComment?: string | null;
+    strengths?: string[];
+    weaknesses?: string[];
+    actionPoints?: string[];
+    rawEvidence?: string[];
+    confidence?: ExtractionConfidence | null;
+    fieldConfidence?: ExtractionFieldConfidence | null;
+    needsReviewReason?: string | null;
+  }>;
+  extractionWarnings?: string[];
+  missingLikelySubjects?: string[];
+  extractionDiagnostics?: ExtractionDiagnostics;
+  confidence?: ExtractionConfidence;
   metadata: {
     sourceDate?: string | null;
     academicYear?: string | null;
@@ -135,6 +202,7 @@ export type DocumentMetadataAnalysisResponse = {
     metadataConfidence?: 'High' | 'Medium' | 'Low';
     extractedFacts?: string[];
     inferredMetadata?: string[];
+    metadataSource?: 'AI generated' | 'Local fallback';
   };
   summary: {
     sourceType?: string;
@@ -146,6 +214,8 @@ export type DocumentMetadataAnalysisResponse = {
     summaryText?: string;
   };
   performanceRecords: PerformanceAnalysisRecord[];
+  extractionQuality?: ExtractionQualityReport;
+  extractionTimings?: ExtractionTimings;
   message?: string;
 };
 
@@ -293,19 +363,17 @@ export async function analysePerformanceDocument({
   );
 
   return {
-    records: Array.isArray(data.records)
-      ? data.records.map((record) => ({
-          ...record,
-          extractionConfidence: normalizeConfidence(record?.extractionConfidence),
-          fieldConfidence: normalizeFieldConfidence(record?.fieldConfidence),
-        }))
-      : [],
+    records: Array.isArray(data.records) ? data.records.map(normalizePerformanceRecord) : [],
     message: typeof data.message === 'string' ? data.message : undefined,
   };
 }
 
 function normalizeStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [];
+}
+
+function normalizeNumberInRange(value: unknown, min: number, max: number): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max ? value : null;
 }
 
 function normalizeConfidence(value: unknown): ExtractionConfidence | undefined {
@@ -339,18 +407,88 @@ function normalizeFieldConfidence(value: unknown): ExtractionFieldConfidence | u
   return Object.keys(fieldConfidence).length ? fieldConfidence : undefined;
 }
 
+function normalizePerformanceRecord(record: PerformanceAnalysisRecord): PerformanceAnalysisRecord {
+  return {
+    ...record,
+    percentage: normalizeNumberInRange(record?.percentage, 0, 100),
+    rawEvidence: normalizeStringArray(record?.rawEvidence),
+    confidenceReasons: normalizeStringArray(record?.confidenceReasons),
+    needsReviewReason: typeof record?.needsReviewReason === 'string' ? record.needsReviewReason : null,
+    extractionConfidence: normalizeConfidence(record?.extractionConfidence),
+    fieldConfidence: normalizeFieldConfidence(record?.fieldConfidence),
+  };
+}
+
+function normalizeExtractionDiagnostics(value: unknown): ExtractionDiagnostics | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const diagnostics = value as Partial<ExtractionDiagnostics>;
+
+  return {
+    detectedSubjectSections: typeof diagnostics.detectedSubjectSections === 'number' ? diagnostics.detectedSubjectSections : 0,
+    subjectsWithMarks: typeof diagnostics.subjectsWithMarks === 'number' ? diagnostics.subjectsWithMarks : 0,
+    subjectsWithComments: typeof diagnostics.subjectsWithComments === 'number' ? diagnostics.subjectsWithComments : 0,
+    uncertainFields: typeof diagnostics.uncertainFields === 'number' ? diagnostics.uncertainFields : 0,
+    duplicateRows: typeof diagnostics.duplicateRows === 'number' ? diagnostics.duplicateRows : 0,
+    ocrConsistency: diagnostics.ocrConsistency === 'Excellent' || diagnostics.ocrConsistency === 'Good' || diagnostics.ocrConsistency === 'Poor' ? diagnostics.ocrConsistency : undefined,
+    confidenceReasons: normalizeStringArray(diagnostics.confidenceReasons),
+    warnings: normalizeStringArray(diagnostics.warnings),
+  };
+}
+
+function normalizeExtractionQuality(value: unknown): ExtractionQualityReport | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const report = value as Partial<ExtractionQualityReport>;
+  const count = (candidate: unknown) => typeof candidate === 'number' && Number.isFinite(candidate) ? candidate : 0;
+  return {
+    expectedSubjects: typeof report.expectedSubjects === 'number' ? report.expectedSubjects : undefined,
+    subjectsFound: count(report.subjectsFound),
+    subjectsMatched: count(report.subjectsMatched),
+    marksFound: count(report.marksFound),
+    teachersFound: count(report.teachersFound),
+    commentsLinked: count(report.commentsLinked),
+    gradesFound: count(report.gradesFound),
+    effortFound: count(report.effortFound),
+    attainmentFound: count(report.attainmentFound),
+    targetsFound: count(report.targetsFound),
+    predictedGradesFound: count(report.predictedGradesFound),
+    duplicateRows: count(report.duplicateRows),
+    excludedInstrumentalRecords: count(report.excludedInstrumentalRecords),
+    needsReview: count(report.needsReview),
+    ocrConsistency: report.ocrConsistency === 'Excellent' || report.ocrConsistency === 'Good' || report.ocrConsistency === 'Poor' ? report.ocrConsistency : 'Poor',
+    confidence: normalizeConfidence(report.confidence) ?? 'Low',
+    confidenceReasons: normalizeStringArray(report.confidenceReasons),
+    potentialProblems: normalizeStringArray(report.potentialProblems),
+  };
+}
+
+function normalizeExtractionTimings(value: unknown): ExtractionTimings | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const timings = value as Partial<ExtractionTimings>;
+  const duration = (candidate: unknown) => typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0 ? candidate : 0;
+  return {
+    ocrMs: duration(timings.ocrMs),
+    extractionMs: duration(timings.extractionMs),
+    aiLatencyMs: duration(timings.aiLatencyMs),
+    validationMs: duration(timings.validationMs),
+    totalMs: duration(timings.totalMs),
+    aiCalls: duration(timings.aiCalls),
+  };
+}
+
 export async function analyseDocumentMetadata({
   title,
   text,
   uploadMetadata,
+  pipelineTimings,
 }: {
   title: string;
   text: string;
   uploadMetadata: unknown;
+  pipelineTimings?: { ocrMs?: number };
 }): Promise<DocumentMetadataAnalysisResponse> {
   const data = await postJson<DocumentMetadataAnalysisResponse>(
     '/api/analyse-document-metadata',
-    { title, text, uploadMetadata },
+    { title, text, uploadMetadata, pipelineTimings },
     'Document metadata analysis is unreachable. Local metadata fallback remains available.',
   );
 
@@ -358,6 +496,12 @@ export async function analyseDocumentMetadata({
   const summary = data && typeof data.summary === 'object' ? data.summary : {};
 
   return {
+    documentSummary: typeof data.documentSummary === 'string' ? data.documentSummary : undefined,
+    subjects: Array.isArray(data.subjects) ? data.subjects : [],
+    extractionWarnings: normalizeStringArray(data.extractionWarnings),
+    missingLikelySubjects: normalizeStringArray(data.missingLikelySubjects),
+    extractionDiagnostics: normalizeExtractionDiagnostics(data.extractionDiagnostics),
+    confidence: normalizeConfidence(data.confidence),
     metadata: {
       sourceDate: typeof metadata.sourceDate === 'string' ? metadata.sourceDate : null,
       academicYear: typeof metadata.academicYear === 'string' ? metadata.academicYear : null,
@@ -374,6 +518,7 @@ export async function analyseDocumentMetadata({
       metadataConfidence: metadata.metadataConfidence === 'High' || metadata.metadataConfidence === 'Medium' || metadata.metadataConfidence === 'Low' ? metadata.metadataConfidence : 'Low',
       extractedFacts: normalizeStringArray(metadata.extractedFacts),
       inferredMetadata: normalizeStringArray(metadata.inferredMetadata),
+      metadataSource: metadata.metadataSource === 'Local fallback' ? 'Local fallback' : 'AI generated',
     },
     summary: {
       sourceType: typeof summary.sourceType === 'string' ? summary.sourceType : undefined,
@@ -384,13 +529,9 @@ export async function analyseDocumentMetadata({
       suggestedUse: typeof summary.suggestedUse === 'string' ? summary.suggestedUse : undefined,
       summaryText: typeof summary.summaryText === 'string' ? summary.summaryText : undefined,
     },
-    performanceRecords: Array.isArray(data.performanceRecords)
-      ? data.performanceRecords.map((record) => ({
-          ...record,
-          extractionConfidence: normalizeConfidence(record?.extractionConfidence),
-          fieldConfidence: normalizeFieldConfidence(record?.fieldConfidence),
-        }))
-      : [],
+    performanceRecords: Array.isArray(data.performanceRecords) ? data.performanceRecords.map(normalizePerformanceRecord) : [],
+    extractionQuality: normalizeExtractionQuality(data.extractionQuality),
+    extractionTimings: normalizeExtractionTimings(data.extractionTimings),
     message: typeof data.message === 'string' ? data.message : undefined,
   };
 }

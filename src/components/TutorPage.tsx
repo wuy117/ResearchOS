@@ -355,7 +355,7 @@ export function TutorPage({
       setView('lesson');
       setStatus('Lesson ready. Try each checkpoint before revealing the answer.');
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'AI Tutor could not create a lesson right now.');
+      setStatus(error instanceof Error ? error.message : 'Tutor could not create a lesson right now.');
     } finally {
       setIsLoading(false);
     }
@@ -471,7 +471,7 @@ export function TutorPage({
       setView('socratic');
       setStatus('Socratic mode is ready. Answer the single question before asking for the next one.');
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'AI Tutor could not continue Socratic mode.');
+      setStatus(error instanceof Error ? error.message : 'Tutor could not continue Socratic mode.');
     } finally {
       setIsLoading(false);
     }
@@ -521,7 +521,7 @@ export function TutorPage({
       setView('exam');
       setStatus('Exam questions ready. Submit an answer to see marking feedback and mark scheme reasoning.');
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'AI Tutor could not generate exam questions.');
+      setStatus(error instanceof Error ? error.message : 'Tutor could not generate exam questions.');
     } finally {
       setIsLoading(false);
     }
@@ -573,7 +573,7 @@ export function TutorPage({
       }));
       setStatus('Answer marked. Feedback and progress memory updated.');
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'AI Tutor could not mark that answer.');
+      setStatus(error instanceof Error ? error.message : 'Tutor could not mark that answer.');
     } finally {
       setIsLoading(false);
     }
@@ -597,7 +597,7 @@ export function TutorPage({
       }));
       setStatus('Tutor session deleted.');
     } catch (error) {
-      setStatus(error instanceof Error ? `Tutor session was not deleted: ${error.message}` : 'Tutor session was not deleted because Supabase failed.');
+      setStatus(error instanceof Error ? `Tutor session was not deleted: ${error.message}` : 'Tutor session was not deleted because cloud sync failed.');
     }
   }
 
@@ -621,26 +621,27 @@ export function TutorPage({
       }));
       setStatus('Tutor memory was cleared. Lessons and exam sets were kept.');
     } catch (error) {
-      setStatus(error instanceof Error ? `Tutor memory was not cleared: ${error.message}` : 'Tutor memory was not cleared because Supabase failed.');
+      setStatus(error instanceof Error ? `Tutor memory was not cleared: ${error.message}` : 'Tutor memory was not cleared because cloud sync failed.');
     }
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-7">
+    <div className="mx-auto flex max-w-7xl flex-col gap-7">
       <SectionHeader
-        eyebrow="Tutor"
+        eyebrow="Learn"
         title="Tutor"
         copy="Lessons, active recall, Socratic questioning, and exam practice grounded in your sources."
       />
 
-      <div className="rounded-lg bg-paper/65 p-4">
+      <div role="status" aria-live="polite" className="rounded-lg bg-paper/65 p-4">
         <p className="text-sm leading-7 text-graphite/74">{isLoading ? 'Working with retrieved context...' : status}</p>
       </div>
 
-      <section className="rounded-lg bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <details className="order-last rounded-lg bg-white p-5 shadow-sm">
+        <summary className="cursor-pointer text-sm font-semibold text-ink">Manage tutor history</summary>
+        <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Tutor data</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Saved sessions</p>
             <h3 className="mt-2 text-lg font-semibold text-ink">Sessions and learning memory</h3>
           </div>
           <button
@@ -706,27 +707,24 @@ export function TutorPage({
             />
           ))}
         </div>
-      </section>
+      </details>
 
       <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
         <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
-          <input
-            value={topic}
-            onChange={(event) => setTopic(event.target.value)}
-            placeholder={suggestedTopic || 'Topic to study'}
-            className="min-w-0 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4"
-          />
-          <select
-            value={difficulty}
-            onChange={(event) => setDifficulty(normalizeDifficulty(event.target.value))}
-            className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4"
-          >
-            <option>Foundation</option>
-            <option>Core</option>
-            <option>Stretch</option>
-          </select>
+          <label className="block text-xs font-semibold text-graphite/70">
+            Topic
+            <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={suggestedTopic || 'Topic to study'} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-normal text-ink outline-none ring-ink/10 transition focus:ring-4" />
+          </label>
+          <label className="block text-xs font-semibold text-graphite/70">
+            Difficulty
+            <select value={difficulty} onChange={(event) => setDifficulty(normalizeDifficulty(event.target.value))} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-normal text-ink outline-none ring-ink/10 transition focus:ring-4">
+              <option>Foundation</option>
+              <option>Core</option>
+              <option>Stretch</option>
+            </select>
+          </label>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2 self-end">
           <button type="button" onClick={() => startLesson()} disabled={isLoading} className="rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
             Lesson
           </button>
@@ -745,6 +743,7 @@ export function TutorPage({
             key={item}
             type="button"
             onClick={() => setView(item)}
+            aria-pressed={view === item}
             className={`rounded-lg px-4 py-2 text-sm font-semibold capitalize ${view === item ? 'bg-ink text-white' : 'text-graphite hover:bg-paper hover:text-ink'}`}
           >
             {item}
@@ -865,10 +864,10 @@ function TutorConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div className="w-full max-w-lg rounded-lg border border-ink/10 bg-white p-5 shadow-soft">
+      <div role="dialog" aria-modal="true" aria-labelledby="tutor-dialog-title" aria-describedby="tutor-dialog-body" className="w-full max-w-lg rounded-lg border border-ink/10 bg-white p-5 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Confirm destructive action</p>
-        <h2 className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
-        <p className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
+        <h2 id="tutor-dialog-title" className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
+        <p id="tutor-dialog-body" className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
         <div className="mt-6 flex justify-end gap-3">
           <button type="button" onClick={onClose} disabled={isWorking} className="rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink">
             Cancel
@@ -1065,6 +1064,7 @@ function LessonView({
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-graphite/70">{question.difficulty}</span>
                 </div>
                 <textarea
+                  aria-label={`Answer: ${question.prompt}`}
                   value={checkpointAnswers[question.id] ?? ''}
                   onChange={(event) => onAnswerChange(question.id, event.target.value)}
                   rows={3}
@@ -1142,6 +1142,7 @@ function SocraticView({
         {turn.feedback ? <p className="mt-5 rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/74">{turn.feedback}</p> : null}
         <h3 className="mt-5 font-serif text-3xl font-semibold leading-tight text-ink">{turn.question}</h3>
         <textarea
+          aria-label={`Answer: ${turn.question}`}
           value={answer}
           onChange={(event) => setAnswer(event.target.value)}
           rows={6}
@@ -1196,6 +1197,7 @@ function ExamView({
                 <p className="mt-3 text-sm leading-7 text-graphite/74">{question.markScheme}</p>
               </details>
               <textarea
+                aria-label={`Exam answer: ${question.prompt}`}
                 value={answers[question.id] ?? ''}
                 onChange={(event) => onAnswerChange(question.id, event.target.value)}
                 rows={5}

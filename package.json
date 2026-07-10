@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:extraction": "vitest run tests/extraction",
+    "test:regression": "vitest run tests/extraction/regression.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
@@ -27,6 +31,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vercel": "^54.18.2",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "vitest": "^3.2.7"
   }
 }

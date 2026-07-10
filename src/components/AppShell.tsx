@@ -6,10 +6,10 @@ import { initialState } from '../data/initialState';
 import type { AppStorageStatus } from '../hooks/useResearchState';
 import { isSupabaseEnabled } from '../lib/supabase';
 import { clearLocalStateOnly, clearSupabaseScope, type SupabaseResetScope } from '../services/researchStore';
-import type { DocumentMetadata, PageId, ResearchDocument, ResearchState } from '../types/research';
+import type { DocumentMetadata, ExtractionSummary, PageId, ResearchDocument, ResearchState } from '../types/research';
 import { analyseDocumentMetadata, embedChunks, type DocumentMetadataAnalysisResponse } from '../utils/api';
 import { buildDocumentMetadata, deriveCollections, getDocumentMetadata } from '../utils/learningModel';
-import { clearClaimableResearchState, getResearchStateSummary, getResearchStorageStats } from '../utils/storage';
+import { getResearchStateSummary, getResearchStorageStats } from '../utils/storage';
 
 type PillarId = 'home' | 'sources' | 'learn' | 'progress';
 
@@ -37,13 +37,6 @@ const secondaryTabs: Record<PillarId, Array<{ id: PageId; label: string; icon: t
     { id: 'performance', label: 'Performance', icon: BarChart3 },
     { id: 'timeline', label: 'Timeline', icon: CalendarDays },
   ],
-};
-
-const sectionDescriptions: Record<PillarId, string> = {
-  home: 'Recent changes, current focus, and the next useful step.',
-  sources: 'A quiet place for documents, reports, and academic filters.',
-  learn: 'Source-aware chat and Tutor modes in one workspace.',
-  progress: 'Trends, teacher evidence, and recommendations over time.',
 };
 
 function getActivePillar(activePage: PageId) {
@@ -88,9 +81,9 @@ export function AppShell({
     loading: 'Checking storage',
     'missing-env': 'Local only',
     'auth-required': 'Sign in required',
-    'client-created': 'Checking Supabase',
+    'client-created': 'Checking cloud sync',
     'connection-failed': 'Sync issue',
-    connected: user?.email ? `Signed in as ${user.email}` : 'Supabase connected',
+    connected: user?.email ? `Signed in as ${user.email}` : 'Cloud sync connected',
   }[storageStatus];
   const showDeveloperTools = import.meta.env.DEV || new URLSearchParams(window.location.search).get('dev') === '1';
   const activePillar = getActivePillar(activePage);
@@ -139,6 +132,7 @@ export function AppShell({
                   key={item.id}
                   type="button"
                   onClick={() => setActivePage(item.target)}
+                  aria-current={active ? 'page' : undefined}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium ${
                     active ? 'bg-paper text-ink' : 'text-graphite/76 hover:bg-paper/70 hover:text-ink'
                   }`}
@@ -157,6 +151,7 @@ export function AppShell({
             <div className="mb-3 flex gap-2">
               <input
                 value={workspaceName}
+                aria-label="New workspace name"
                 onChange={(event) => setWorkspaceName(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') createWorkspace();
@@ -176,6 +171,7 @@ export function AppShell({
                     key={workspace.id}
                     type="button"
                     onClick={() => setState((current) => ({ ...current, activeWorkspaceId: workspace.id }))}
+                    aria-pressed={active}
                     className={`w-full rounded-lg border p-3 text-left transition ${
                       active ? 'border-ink/12 bg-paper/85 shadow-sm' : 'border-transparent hover:border-ink/8 hover:bg-paper/55'
                     }`}
@@ -193,29 +189,25 @@ export function AppShell({
             </div>
           </div>
 
-          <div className="mt-auto space-y-3">
-            <button type="button" onClick={() => setActivePage('settings')} className="w-full rounded-lg px-2 py-2 text-left text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55 hover:bg-paper hover:text-ink">
-              Settings
-            </button>
-          </div>
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <header className="flex flex-col gap-4 border-b border-ink/6 bg-[#fbfaf7]/92 px-4 py-4 sm:px-6 xl:px-8">
+          <header className="flex flex-col gap-3 border-b border-ink/6 bg-[#fbfaf7]/92 px-4 py-3 sm:px-6 xl:px-8">
             <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Active workspace</p>
-                <h1 className="mt-1 font-serif text-3xl font-semibold leading-tight text-ink sm:text-4xl">{activeWorkspace?.name}</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-graphite/68">{sectionDescriptions[activePillar.id]}</p>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{activePillar.label}</p>
+                <h1 className="mt-1 truncate text-base font-semibold text-ink sm:text-lg">{activeWorkspace?.name}</h1>
               </div>
-              <button
-                type="button"
-                onClick={() => setActivePage('upload')}
-                className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite"
-              >
-                <UploadCloud size={18} />
-                Add Source
-              </button>
+              {activePage !== 'upload' ? (
+                <button
+                  type="button"
+                  onClick={() => setActivePage('upload')}
+                  className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-graphite"
+                >
+                  <UploadCloud size={17} />
+                  Add source
+                </button>
+              ) : null}
             </div>
             <div className="grid grid-cols-2 gap-2 lg:hidden">
               {navItems.map((item) => {
@@ -225,6 +217,7 @@ export function AppShell({
                     key={item.id}
                     type="button"
                     onClick={() => setActivePage(item.target)}
+                    aria-current={activePillar.id === item.id ? 'page' : undefined}
                     className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
                       activePillar.id === item.id ? 'bg-paper text-ink ring-1 ring-ink/8' : 'bg-white/70 text-graphite'
                     }`}
@@ -245,6 +238,7 @@ export function AppShell({
                       key={tab.id}
                       type="button"
                       onClick={() => setActivePage(tab.id)}
+                      aria-current={active ? 'page' : undefined}
                       className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
                         active ? 'bg-ink text-white shadow-sm' : 'bg-transparent text-graphite hover:bg-paper hover:text-ink'
                       }`}
@@ -323,7 +317,6 @@ function SettingsPage({
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         <AccountDataControls
           state={state}
-          setState={setState}
           storageStatus={storageStatus}
           user={user}
           onSignOut={onSignOut}
@@ -366,50 +359,49 @@ const resetOptions: ResetOption[] = [
   {
     scope: 'local',
     label: 'Clear local browser state',
-    body: 'This removes Research OS data saved in this browser. It does not delete Supabase data. The current screen stays visible until you refresh or continue working.',
+    body: 'This removes Research OS data saved in this browser. It does not delete synced cloud data. The current screen stays visible until you refresh or continue working.',
     confirmLabel: 'Clear local state',
   },
   {
     scope: 'supabase',
-    label: 'Clear all Supabase app data',
-    body: 'This deletes Research OS data from Supabase, including workspaces, documents, insights, chat, Tutor data, Progress data, collections, and legacy study artifacts. Local browser data is kept unless you run a full reset.',
-    confirmLabel: 'Clear Supabase data',
+    label: 'Clear all cloud data',
+    body: 'This deletes synced Research OS data for this account, including workspaces, documents, chat, Tutor data, Progress data, and collections. Data saved only in this browser is kept.',
+    confirmLabel: 'Clear cloud data',
   },
   {
     scope: 'chat',
     label: 'Clear chat history',
-    body: 'This deletes saved chat messages locally and in Supabase when connected. Documents, Tutor, and Progress are kept.',
+    body: 'This deletes saved chat messages in this browser and from cloud sync when connected. Documents, Tutor, and Progress are kept.',
     confirmLabel: 'Clear chat',
   },
   {
     scope: 'tutor',
     label: 'Clear Tutor memory',
-    body: 'This deletes Tutor lessons, attempts, Socratic turns, exam sessions, topic confidence, and revision streak locally and in Supabase when connected.',
+    body: 'This deletes Tutor lessons, attempts, Socratic turns, exam sessions, topic confidence, and revision streak here and from cloud sync when connected.',
     confirmLabel: 'Clear Tutor',
   },
   {
     scope: 'performance',
     label: 'Clear Performance data',
-    body: 'This deletes Performance records and AI performance summaries locally and in Supabase when connected. Documents are kept.',
+    body: 'This deletes performance records and coaching summaries here and from cloud sync when connected. Documents are kept.',
     confirmLabel: 'Clear Performance',
   },
   {
     scope: 'documents',
     label: 'Clear documents',
-    body: 'This deletes uploaded documents and related source records locally and in Supabase when connected. Performance records are kept but unlinked from sources.',
+    body: 'This deletes uploaded documents and related source records here and from cloud sync when connected. Performance records are kept but unlinked from sources.',
     confirmLabel: 'Clear documents',
   },
   {
     scope: 'full',
     label: 'Full reset: everything',
-    body: 'This deletes all Research OS local browser state and, when Supabase is connected, all app data in Supabase: workspaces, documents, insights, chat, Tutor, Progress, collections, and legacy study artifacts. The app returns to the clean first-launch state.',
+    body: 'This deletes all Research OS data in this browser and, when cloud sync is connected, all synced account data. The app returns to the clean first-launch state.',
     confirmLabel: 'Full reset',
   },
 ];
 
 function AccountDataControls({
   state,
-  setState,
   storageStatus,
   user,
   onSignOut,
@@ -418,7 +410,6 @@ function AccountDataControls({
   onDismissClaimableLocalData,
 }: {
   state: ResearchState;
-  setState: Dispatch<SetStateAction<ResearchState>>;
   storageStatus: AppStorageStatus;
   user: User | null;
   onSignOut: () => Promise<void>;
@@ -428,7 +419,6 @@ function AccountDataControls({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
-  const [confirmAction, setConfirmAction] = useState<DeveloperConfirmAction | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const summary = claimableLocalState ? getResearchStateSummary(claimableLocalState) : null;
   const hasCloud = storageStatus === 'connected' && Boolean(user);
@@ -458,23 +448,6 @@ function AccountDataControls({
     }
   }
 
-  async function runCloudDelete(fullReset: boolean) {
-    if (!hasCloud) {
-      setMessage('Cloud data is unavailable because Supabase is not signed in and connected.');
-      return;
-    }
-    await clearSupabaseScope('full', { userId: user?.id });
-    if (fullReset) {
-      clearLocalStateOnly();
-      clearClaimableResearchState();
-      setState(initialState);
-      setMessage('This account and browser were reset. The Supabase Auth user was not deleted.');
-    } else {
-      setState(initialState);
-      setMessage('All cloud data for this account was deleted. Local browser data was not cleared.');
-    }
-  }
-
   return (
     <div className="rounded-lg border border-ink/8 bg-white p-4">
       <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
@@ -491,7 +464,7 @@ function AccountDataControls({
             <div className="rounded-lg border border-brass/25 bg-brass/10 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/60">Local data found</p>
               <p className="mt-2 text-xs leading-5 text-graphite/72">
-                {summary.documents} documents, {summary.performanceRecords} performance records, {summary.tutorSessions} Tutor sessions, {summary.collections} metadata labels.
+                {summary.documents} documents, {summary.performanceRecords} progress records, {summary.tutorSessions} Tutor sessions, {summary.collections} source labels.
               </p>
               <div className="mt-3 grid gap-2">
                 <button type="button" disabled={!hasCloud || isImporting} onClick={importLocalData} className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white disabled:bg-graphite/45">
@@ -500,24 +473,6 @@ function AccountDataControls({
                 <button type="button" onClick={onDismissClaimableLocalData} className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
                   Keep local data only for now
                 </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setConfirmAction({
-                      title: 'Clear saved local import offer?',
-                      body: 'This clears the saved claim snapshot in this browser. It does not delete your active cloud data.',
-                      confirmLabel: 'Clear local offer',
-                      onConfirm: () => {
-                        clearClaimableResearchState();
-                        onDismissClaimableLocalData();
-                        setMessage('The local import offer was cleared.');
-                      },
-                    })
-                  }
-                  className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700"
-                >
-                  Clear local data
-                </button>
               </div>
             </div>
           ) : null}
@@ -525,66 +480,14 @@ function AccountDataControls({
             <Download size={14} />
             Export my data as JSON
           </button>
-          <button
-            type="button"
-            onClick={() =>
-              setConfirmAction({
-                title: 'Clear local browser data?',
-                body: 'This removes Research OS data saved in this browser. It does not delete cloud data for your account.',
-                confirmLabel: 'Clear local data',
-                onConfirm: () => {
-                  clearLocalStateOnly();
-                  clearClaimableResearchState();
-                  setMessage('Local browser data was cleared. Cloud data was not deleted.');
-                },
-              })
-            }
-            className="inline-flex w-full items-center gap-2 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink"
-          >
-            <Trash2 size={14} />
-            Clear local browser data
-          </button>
           {user ? (
             <button type="button" onClick={onSignOut} className="inline-flex w-full items-center gap-2 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
               <LogOut size={14} />
               Sign out
             </button>
           ) : null}
-          <button
-            type="button"
-            disabled={!hasCloud}
-            onClick={() =>
-              setConfirmAction({
-                title: 'Delete all cloud data?',
-                body: 'This deletes Research OS rows owned by the current Supabase user through normal RLS-protected permissions. It does not delete the Supabase Auth account.',
-                confirmLabel: 'Delete cloud data',
-                onConfirm: () => runCloudDelete(false),
-              })
-            }
-            className="inline-flex w-full items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 disabled:cursor-not-allowed disabled:border-ink/8 disabled:bg-paper disabled:text-graphite/45"
-          >
-            <Trash2 size={14} />
-            Delete all my cloud data
-          </button>
-          <button
-            type="button"
-            disabled={!hasCloud}
-            onClick={() =>
-              setConfirmAction({
-                title: 'Full reset for this account?',
-                body: 'This deletes cloud data for the signed-in account and clears local browser data. It does not delete the Supabase Auth user.',
-                confirmLabel: 'Full reset',
-                onConfirm: () => runCloudDelete(true),
-              })
-            }
-            className="inline-flex w-full items-center gap-2 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white disabled:bg-graphite/45"
-          >
-            <AlertTriangle size={14} />
-            Full reset for this account
-          </button>
         </div>
       ) : null}
-      <DeveloperConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
     </div>
   );
 }
@@ -616,11 +519,11 @@ function ResetResearchOS({
 
     if (scope === 'supabase') {
       if (!hasSupabase) {
-        setMessage('Supabase is not connected, so no remote data was cleared.');
+        setMessage('Cloud sync is not connected, so no cloud data was cleared.');
         return;
       }
       await clearSupabaseScope('supabase', { userId: user?.id });
-      setMessage('All Supabase app data was cleared. Local browser data was kept.');
+      setMessage('All cloud app data was cleared. Local browser data was kept.');
       return;
     }
 
@@ -631,12 +534,12 @@ function ResetResearchOS({
     if (scope === 'full') {
       clearLocalStateOnly();
       setState(initialState);
-      setMessage(hasSupabase ? 'Full reset completed. Local browser state and Supabase app data were cleared.' : 'Full local reset completed. Supabase was not connected.');
+      setMessage(hasSupabase ? 'Full reset completed. Local browser state and cloud data were cleared.' : 'Full local reset completed. Cloud sync was not connected.');
       return;
     }
 
     setState((current) => applyScopedStateClear(current, scope));
-    setMessage(`${getResetLabel(scope)} cleared${hasSupabase ? ' locally and in Supabase.' : ' locally. Supabase was not connected.'}`);
+    setMessage(`${getResetLabel(scope)} cleared${hasSupabase ? ' locally and in the cloud.' : ' locally. Cloud sync was not connected.'}`);
   }
 
   return (
@@ -676,12 +579,12 @@ function ResetResearchOS({
                     <Trash2 size={14} />
                     {option.label}
                   </button>
-                  {disabled ? <p className="mt-1 text-xs leading-5 text-graphite/60">Supabase is not connected.</p> : null}
+                  {disabled ? <p className="mt-1 text-xs leading-5 text-graphite/60">Cloud sync is not connected.</p> : null}
                 </div>
               );
             })}
           </div>
-          <p className="text-xs leading-5 text-graphite/65">Scoped clears preserve unrelated workflows such as Upload, Tutor, Progress, Timeline, and document editing.</p>
+          <p className="text-xs leading-5 text-graphite/65">Each option keeps unrelated sources, learning history, and progress data.</p>
         </div>
       ) : null}
       <DeveloperConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
@@ -719,7 +622,7 @@ function applyDeveloperMetadataAnalysis(document: ResearchDocument, performanceR
     performanceRecords: fallback.performanceRecords,
     collections: fallback.collections,
     metadataConfidence: analysis.metadata.metadataConfidence ?? fallback.metadataConfidence ?? 'Low',
-    metadataSource: 'AI generated',
+    metadataSource: analysis.metadata.metadataSource ?? 'AI generated',
     shouldAffectAcademicPerformance: analysis.metadata.shouldAffectAcademicPerformance ?? fallback.shouldAffectAcademicPerformance,
     extractedFacts: uniqueStrings([...(analysis.metadata.extractedFacts ?? []), ...(fallback.extractedFacts ?? [])]),
     inferredMetadata: uniqueStrings([...(analysis.metadata.inferredMetadata ?? []), ...(fallback.inferredMetadata ?? [])]),
@@ -735,20 +638,61 @@ function applyDeveloperMetadataAnalysis(document: ResearchDocument, performanceR
 
   return {
     ...document,
-    summary: buildDeveloperSummary(document, analysis, metadata),
+    summary: buildDeveloperSummary(document, analysis),
     tags: metadata.tags,
     metadata: {
       ...metadata,
       collections,
     },
+    extractionSummary: buildDeveloperExtractionSummary(document, metadata, performanceRecords, analysis),
     collectionIds: collections.map((collection) => `collection-${collection.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`),
   };
 }
 
-function buildDeveloperSummary(document: ResearchDocument, analysis: DocumentMetadataAnalysisResponse, metadata: DocumentMetadata) {
+function buildDeveloperExtractionSummary(document: ResearchDocument, metadata: DocumentMetadata, performanceRecords: ResearchState['performanceRecords'], analysis: DocumentMetadataAnalysisResponse): ExtractionSummary {
+  const linkedRecords = performanceRecords.filter((record) => record.sourceDocumentId === document.id);
+  const candidateRecords = analysis.performanceRecords.length ? analysis.performanceRecords : linkedRecords;
+  const subjectsFound = uniqueStrings([...metadata.subjects, ...candidateRecords.map((record) => record.subject)]);
+  const teacherComments = candidateRecords.filter((record) => record.teacherComment).length;
+  const marksExtracted = candidateRecords.filter((record) => record.marksExtracted || typeof record.percentage === 'number' || record.grade || record.attainment || record.predictedGrade || record.targetGrade).length;
+  const uncertainFields = analysis.extractionDiagnostics?.uncertainFields ?? candidateRecords.reduce((total, record) => total + Object.values(record.fieldConfidence ?? {}).filter((confidence) => confidence === 'Low').length + (record.needsReviewReason ? 1 : 0), 0);
+  const extractionWarnings = uniqueStrings([...(analysis.extractionWarnings ?? []), ...(analysis.extractionDiagnostics?.warnings ?? [])]);
+  const missingLikelySubjects = uniqueStrings(analysis.missingLikelySubjects ?? []);
+
+  return {
+    confidence: analysis.confidence ?? analysis.metadata.metadataConfidence ?? metadata.metadataConfidence ?? 'Medium',
+    status: uncertainFields || extractionWarnings.length || missingLikelySubjects.length ? 'Partially understood' : 'Document understood',
+    subjectsFound: subjectsFound.length,
+    teacherComments,
+    marksExtracted,
+    gradesExtracted: candidateRecords.filter((record) => record.grade || record.attainment || record.predictedGrade).length,
+    targetsFound: candidateRecords.filter((record) => record.targetGrade).length,
+    teachersIdentified: uniqueStrings([...metadata.teacherNames, ...candidateRecords.map((record) => record.teacher)]).length,
+    needsReview: candidateRecords.filter((record) => record.needsReviewReason || Object.values(record.fieldConfidence ?? {}).includes('Low')).length,
+    confirmedAutomatically: candidateRecords.filter((record) => !record.needsReviewReason && !Object.values(record.fieldConfidence ?? {}).includes('Low')).length,
+    reviewSuggested: candidateRecords.filter((record) => record.extractionConfidence === 'Medium').length,
+    waitingForConfirmation: candidateRecords.filter((record) => record.needsReviewReason || Object.values(record.fieldConfidence ?? {}).includes('Low')).length,
+    reviewNotes: [
+      `Re-run extraction found ${subjectsFound.length} subject${subjectsFound.length === 1 ? '' : 's'}.`,
+      extractionWarnings.length ? `${extractionWarnings.length} warning${extractionWarnings.length === 1 ? '' : 's'} recorded.` : '',
+      missingLikelySubjects.length ? `${missingLikelySubjects.length} likely subject${missingLikelySubjects.length === 1 ? '' : 's'} may be missing.` : '',
+    ].filter(Boolean),
+    diagnostics: analysis.extractionDiagnostics ?? {
+      detectedSubjectSections: subjectsFound.length,
+      subjectsWithMarks: marksExtracted,
+      subjectsWithComments: teacherComments,
+      uncertainFields,
+      warnings: extractionWarnings,
+    },
+    extractionWarnings,
+    missingLikelySubjects,
+  };
+}
+
+function buildDeveloperSummary(document: ResearchDocument, analysis: DocumentMetadataAnalysisResponse) {
   if (analysis.summary.summaryText) {
     return [
-      `[AI generated / confidence: ${metadata.metadataConfidence ?? 'Low'}] ${analysis.summary.summaryText}`,
+      analysis.summary.summaryText,
       analysis.summary.keyEvidence?.length ? `Key evidence: ${analysis.summary.keyEvidence.slice(0, 3).join('; ')}.` : '',
       analysis.summary.suggestedUse ? `Use it for: ${analysis.summary.suggestedUse}` : '',
     ]
@@ -756,7 +700,7 @@ function buildDeveloperSummary(document: ResearchDocument, analysis: DocumentMet
       .join(' ');
   }
 
-  return `[AI generated / confidence: ${metadata.metadataConfidence ?? 'Low'}] ${document.title} was analysed for subjects, topics, teacher evidence, and performance metadata.`;
+  return `${document.title} was analysed for subjects, topics, teacher evidence, and performance context.`;
 }
 
 function DeveloperTools({
@@ -803,7 +747,7 @@ function DeveloperTools({
   async function rerunMetadataExtraction(documentIds: string[], label: string) {
     const readableDocuments = state.documents.filter((document) => documentIds.includes(document.id) && document.extractedText?.trim());
     if (!readableDocuments.length) {
-      setMessage('No readable documents were available for metadata extraction.');
+      setMessage('No readable documents were available for extraction.');
       return;
     }
 
@@ -818,12 +762,15 @@ function DeveloperTools({
           text: document.extractedText ?? '',
           uploadMetadata: getDocumentMetadata(document, state.performanceRecords),
         });
+        if (import.meta.env.DEV && (analysis.extractionWarnings?.length || analysis.extractionDiagnostics?.warnings.length)) {
+          console.debug(`Extraction warnings for ${document.title}.`, analysis.extractionWarnings ?? analysis.extractionDiagnostics?.warnings);
+        }
         updates.set(document.id, applyDeveloperMetadataAnalysis(document, state.performanceRecords, analysis));
         analysed += 1;
       } catch (error) {
         failed += 1;
         if (import.meta.env.DEV) {
-          console.debug(`Metadata extraction failed for ${document.title}.`, error);
+          console.debug(`Document extraction failed for ${document.title}.`, error);
         }
       }
     }
@@ -878,10 +825,10 @@ function DeveloperTools({
             <DeveloperActionButton label="Rebuild local derived metadata" onClick={() => runLocalReset('Metadata rebuild', rebuildMetadata)} />
             <DeveloperActionButton label="Rebuild collections from documents" onClick={() => runLocalReset('Collections rebuild', (current) => ({ ...current, collections: deriveCollections(current) }))} />
             <DeveloperActionButton
-              label="Re-run metadata extraction for all documents"
+              label="Re-run extraction for all documents"
               disabled={!state.documents.some((document) => document.extractedText?.trim())}
               reason={!state.documents.some((document) => document.extractedText?.trim()) ? 'No readable documents to analyse.' : undefined}
-              onClick={() => rerunMetadataExtraction(state.documents.map((document) => document.id), 'All document metadata')}
+              onClick={() => rerunMetadataExtraction(state.documents.map((document) => document.id), 'All document extraction')}
             />
             <DeveloperActionButton
               label="Re-run embeddings for all chunks"
@@ -896,10 +843,10 @@ function DeveloperTools({
               ))}
             </select>
             <DeveloperActionButton
-              label="Re-run metadata extraction for one document"
+              label="Re-run extraction for one document"
               disabled={!documentId || !state.documents.find((document) => document.id === documentId)?.extractedText?.trim()}
               reason={!documentId ? 'Choose a document first.' : !state.documents.find((document) => document.id === documentId)?.extractedText?.trim() ? 'Selected document has no readable text.' : undefined}
-              onClick={() => rerunMetadataExtraction([documentId], 'Document metadata')}
+              onClick={() => rerunMetadataExtraction([documentId], 'Document extraction')}
             />
             <DeveloperActionButton
               label="Re-run embeddings for one document"
@@ -1052,10 +999,10 @@ function DeveloperConfirmModal({ action, onClose }: { action: DeveloperConfirmAc
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div className="w-full max-w-lg rounded-xl border border-ink/10 bg-white p-5 shadow-soft">
+      <div role="dialog" aria-modal="true" aria-labelledby="developer-dialog-title" aria-describedby="developer-dialog-body" className="w-full max-w-lg rounded-lg border border-ink/10 bg-white p-5 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Developer confirmation</p>
-        <h2 className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
-        <p className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
+        <h2 id="developer-dialog-title" className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
+        <p id="developer-dialog-body" className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
         <div className="mt-6 flex justify-end gap-3">
           <button type="button" onClick={onClose} disabled={isWorking} className="rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink">
             Cancel

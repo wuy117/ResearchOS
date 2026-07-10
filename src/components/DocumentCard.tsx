@@ -10,6 +10,8 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
   const markedRecords = linkedRecords.filter((record) => getRecordPercentage(record) !== undefined || record.grade || record.attainment || record.predictedGrade || record.targetGrade);
   const commentRecords = linkedRecords.filter((record) => record.teacherComment);
   const summary = document.extractionSummary;
+  const diagnostics = summary?.diagnostics;
+  const showDeveloperDiagnostics = import.meta.env.DEV || new URLSearchParams(window.location.search).get('dev') === '1';
   const confirmedAutomatically = summary?.confirmedAutomatically ?? Math.max(0, linkedRecords.length - (summary?.needsReview ?? 0));
   const reviewSuggested = summary?.reviewSuggested ?? 0;
   const waitingForConfirmation = summary?.waitingForConfirmation ?? summary?.needsReview ?? 0;
@@ -37,36 +39,48 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
       </div>
       <p className="mt-4 line-clamp-3 text-sm leading-7 text-graphite/75">{document.summary}</p>
       {summary ? (
-        <section className="mt-5 rounded-lg border border-ink/6 bg-paper/55 p-4">
+        <section className="mt-5 rounded-lg border border-ink/6 bg-paper/45 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Document understood</p>
-              <p className="mt-1 text-sm font-semibold text-ink">{summary.confidence} confidence</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Source review</p>
+              <p className="mt-1 text-sm font-semibold text-ink">
+                {summary.needsReview
+                  ? `${summary.needsReview} item${summary.needsReview === 1 ? '' : 's'} need review`
+                  : reviewSuggested
+                    ? 'Optional review available'
+                    : cleanStatusLabel}
+              </p>
             </div>
             {summary.needsReview ? (
-              <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">{summary.needsReview} quick check{summary.needsReview === 1 ? '' : 's'}</span>
+              <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">Action needed</span>
             ) : reviewSuggested ? (
-              <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">Review available</span>
+              <span className="rounded-full bg-paper px-2.5 py-1 text-xs font-semibold text-graphite/70">Optional</span>
             ) : (
-              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-semibold text-moss">{cleanStatusLabel}</span>
+              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-semibold text-moss">Ready</span>
             )}
-          </div>
-          <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-            <ExtractionStat label="Automatically confirmed" value={confirmedAutomatically} />
-            <ExtractionStat label="Review suggested" value={reviewSuggested} />
-            <ExtractionStat label="Waiting for confirmation" value={waitingForConfirmation} />
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
-            <ExtractionStat label="Subjects found" value={summary.subjectsFound} />
-            <ExtractionStat label="Teacher comments" value={summary.teacherComments} />
-            <ExtractionStat label="Marks extracted" value={summary.marksExtracted} />
-            <ExtractionStat label="Grades extracted" value={summary.gradesExtracted} />
-            <ExtractionStat label="Targets found" value={summary.targetsFound} />
-            <ExtractionStat label="Teachers identified" value={summary.teachersIdentified} />
           </div>
           {summary.reviewNotes.length ? (
             <p className="mt-3 text-sm leading-6 text-graphite/72">{summary.reviewNotes[0]}</p>
           ) : null}
+          <details className="mt-3 border-t border-ink/6 pt-3">
+            <summary className="cursor-pointer text-xs font-semibold text-graphite/65">What was found</summary>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+              <ExtractionStat label="Confirmed" value={confirmedAutomatically} />
+              <ExtractionStat label="Review suggested" value={reviewSuggested} />
+              <ExtractionStat label="Waiting for review" value={waitingForConfirmation} />
+              <ExtractionStat label="Subjects" value={summary.subjectsFound} />
+              <ExtractionStat label="Teacher comments" value={summary.teacherComments} />
+              <ExtractionStat label="Marks and grades" value={summary.marksExtracted + summary.gradesExtracted} />
+            </div>
+            {diagnostics && showDeveloperDiagnostics ? (
+              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-ink/6 pt-4 text-sm md:grid-cols-4">
+                <ExtractionStat label="Sections detected" value={diagnostics.detectedSubjectSections} />
+                <ExtractionStat label="Subjects with marks" value={diagnostics.subjectsWithMarks} />
+                <ExtractionStat label="Subjects with comments" value={diagnostics.subjectsWithComments} />
+                <ExtractionStat label="Uncertain fields" value={diagnostics.uncertainFields} />
+              </div>
+            ) : null}
+          </details>
         </section>
       ) : null}
       {metadata ? (
@@ -84,7 +98,7 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
       ) : null}
       {metadata?.ignoreInstrumentalMusic ? (
         <p className="mt-3 rounded-lg bg-paper/75 px-3 py-2 text-xs font-semibold text-graphite/70">
-          Instrumental/music lesson content is ignored for academic performance analysis.
+          Instrumental or performance lesson content is ignored for academic performance analysis.
         </p>
       ) : null}
       {document.status === 'Failed' && document.extractionError && document.extractionError !== document.summary ? <p className="mt-3 text-sm font-semibold text-red-700">{document.extractionError}</p> : null}
@@ -115,6 +129,52 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
             ) : (
               <p className="mt-2 text-sm leading-6 text-graphite/68">{originalFile.previewLabel}</p>
             )}
+          </div>
+        ) : null}
+        {showDeveloperDiagnostics ? (
+          <div className="mt-4 space-y-3 rounded-lg border border-ink/6 bg-paper/60 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Extraction diagnostics</p>
+            {summary?.extractionWarnings?.length ? (
+              <div>
+                <p className="text-xs font-semibold text-ink">Warnings</p>
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-graphite/72">
+                  {summary.extractionWarnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {summary?.missingLikelySubjects?.length ? (
+              <p className="text-xs leading-5 text-graphite/72">Missing likely subjects: {summary.missingLikelySubjects.join(', ')}</p>
+            ) : null}
+            <details>
+              <summary className="cursor-pointer text-xs font-semibold text-ink">View raw extracted text</summary>
+              <pre className="mt-3 max-h-96 overflow-auto rounded-lg border border-ink/8 bg-white p-3 text-xs leading-5 text-graphite/75">{document.extractedText || 'No raw text stored on this document.'}</pre>
+            </details>
+            <details>
+              <summary className="cursor-pointer text-xs font-semibold text-ink">Compare raw text vs extracted records</summary>
+              <div className="mt-3 space-y-3">
+                {linkedRecords.length ? linkedRecords.map((record) => (
+                  <div key={record.id} className="rounded-lg border border-ink/8 bg-white p-3">
+                    <p className="text-sm font-semibold text-ink">{record.subject}</p>
+                    <p className="mt-1 text-xs leading-5 text-graphite/72">{formatRecordResult(record)}{record.teacher ? ` / ${record.teacher}` : ''}</p>
+                    {record.teacherComment ? <p className="mt-2 text-xs leading-5 text-graphite/72">{record.teacherComment}</p> : null}
+                    {record.needsReviewReason ? <p className="mt-2 text-xs font-semibold text-brass">{record.needsReviewReason}</p> : null}
+                    {record.rawEvidence?.length ? (
+                      <ul className="mt-2 space-y-1 text-xs leading-5 text-graphite/68">
+                        {record.rawEvidence.slice(0, 3).map((evidence) => (
+                          <li key={evidence}>{evidence}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-xs text-graphite/55">No raw evidence quote stored for this record.</p>
+                    )}
+                  </div>
+                )) : (
+                  <p className="text-xs leading-5 text-graphite/68">No extracted records are linked to this document yet.</p>
+                )}
+              </div>
+            </details>
           </div>
         ) : null}
       </details>

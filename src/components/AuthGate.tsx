@@ -54,18 +54,18 @@ export function AuthGate({ authLoading, authError, onSignIn, onSignUp }: AuthGat
         </div>
 
         <div className="mt-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Account required</p>
-          <h1 className="mt-3 font-serif text-3xl font-semibold leading-tight text-ink">Sign in to your research desk.</h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Private workspace</p>
+          <h1 className="mt-3 font-serif text-3xl font-semibold leading-tight text-ink">Continue to Research OS</h1>
           <p className="mt-4 text-sm leading-7 text-graphite/72">
-            Research OS stores documents, study history, Tutor memory, and performance records privately per Supabase account.
+            Your documents, study history, Tutor memory, and progress records stay with your account.
           </p>
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg bg-paper p-1">
-          <button type="button" onClick={() => setMode('sign-in')} className={`rounded-md px-3 py-2 text-sm font-semibold ${mode === 'sign-in' ? 'bg-white text-ink shadow-sm' : 'text-graphite'}`}>
+          <button type="button" aria-pressed={mode === 'sign-in'} onClick={() => setMode('sign-in')} className={`rounded-md px-3 py-2 text-sm font-semibold ${mode === 'sign-in' ? 'bg-white text-ink shadow-sm' : 'text-graphite'}`}>
             Sign in
           </button>
-          <button type="button" onClick={() => setMode('sign-up')} className={`rounded-md px-3 py-2 text-sm font-semibold ${mode === 'sign-up' ? 'bg-white text-ink shadow-sm' : 'text-graphite'}`}>
+          <button type="button" aria-pressed={mode === 'sign-up'} onClick={() => setMode('sign-up')} className={`rounded-md px-3 py-2 text-sm font-semibold ${mode === 'sign-up' ? 'bg-white text-ink shadow-sm' : 'text-graphite'}`}>
             Sign up
           </button>
         </div>
@@ -93,7 +93,7 @@ export function AuthGate({ authLoading, authError, onSignIn, onSignUp }: AuthGat
           </label>
 
           {message || authError ? (
-            <p className="rounded-lg border border-brass/25 bg-brass/10 px-3 py-2 text-sm leading-6 text-graphite/78">{message || authError}</p>
+            <p role="status" className="rounded-lg border border-brass/25 bg-brass/10 px-3 py-2 text-sm leading-6 text-graphite/78">{message || authError}</p>
           ) : null}
 
           <button type="submit" disabled={authLoading || isSubmitting} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white disabled:bg-graphite/45">
@@ -104,7 +104,7 @@ export function AuthGate({ authLoading, authError, onSignIn, onSignUp }: AuthGat
 
         <div className="mt-6 flex gap-3 rounded-lg border border-ink/8 bg-paper/70 p-3 text-sm leading-6 text-graphite/72">
           <LockKeyhole size={17} className="mt-0.5 shrink-0 text-graphite/60" />
-          <p>Email and password authentication is handled by Supabase Auth. Research OS never stores custom passwords.</p>
+          <p>Sign-in is handled securely. Research OS never stores your password.</p>
         </div>
       </section>
     </main>

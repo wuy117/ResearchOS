@@ -1,7 +1,7 @@
 export type PageId = 'dashboard' | 'settings' | 'library' | 'performance' | 'timeline' | 'tutor' | 'upload' | 'chat' | 'study' | 'map';
 
 export type AcademicTerm = 'Michaelmas' | 'Lent' | 'Summer' | 'Custom' | 'Other';
-export type DocumentCategory = 'Report' | 'Exam result' | 'Mark sheet' | 'Notes' | 'Past paper' | 'Mark scheme' | 'Essay' | 'Other';
+export type DocumentCategory = 'Report' | 'Exam result' | 'Mark sheet' | 'Coursework' | 'Assessment' | 'Notes' | 'Past paper' | 'Mark scheme' | 'Essay' | 'Other';
 export type ExtractionConfidence = 'High' | 'Medium' | 'Low';
 export type ExtractedFieldKey =
   | 'subject'
@@ -33,6 +33,18 @@ export type ExtractionSummary = {
   reviewSuggested: number;
   waitingForConfirmation: number;
   reviewNotes: string[];
+  diagnostics?: {
+    detectedSubjectSections: number;
+    subjectsWithMarks: number;
+    subjectsWithComments: number;
+    uncertainFields: number;
+    duplicateRows?: number;
+    ocrConsistency?: 'Excellent' | 'Good' | 'Poor';
+    confidenceReasons?: string[];
+    warnings: string[];
+  };
+  extractionWarnings?: string[];
+  missingLikelySubjects?: string[];
 };
 
 export type OriginalDocumentSnapshot = {
@@ -201,6 +213,8 @@ export type PerformanceRecord = {
   attainment?: string;
   predictedGrade?: string;
   targetGrade?: string;
+  rawEvidence?: string[];
+  needsReviewReason?: string;
   marksExtracted?: boolean;
   extractionConfidence?: ExtractionConfidence;
   fieldConfidence?: ExtractionFieldConfidence;

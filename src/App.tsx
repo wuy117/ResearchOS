@@ -284,12 +284,12 @@ function Dashboard({
       <section className="grid gap-8 xl:grid-cols-[minmax(0,1.25fr)_360px]">
         <div className="py-3 sm:py-6">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Academic profile</p>
-          <h2 className="mt-4 max-w-3xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-6xl">
-            {hasReadySources ? 'Your academic profile is taking shape.' : 'Start with one real document.'}
+          <h2 className="mt-4 max-w-3xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-5xl">
+            {hasReadySources ? `${readyCount} source${readyCount === 1 ? ' is' : 's are'} ready to study.` : 'Start with one source.'}
           </h2>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/72">
             {hasReadySources
-              ? `${readyCount} source${readyCount === 1 ? '' : 's'} ready for study.`
+              ? 'Use your reports, notes, and assessments to ask questions, study a topic, or review progress.'
               : hasDocuments
                 ? 'One source needs attention before it can support learning.'
                 : 'Upload your first report to begin tracking academic progress.'}
@@ -305,12 +305,10 @@ function Dashboard({
           </div>
         </div>
         <div className="rounded-lg bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">What should I do next?</p>
-          <h3 className="mt-3 text-xl font-semibold text-ink">{nextAction.label}</h3>
-          <p className="mt-3 text-sm leading-7 text-graphite/72">{nextAction.detail}</p>
-          {metrics.length ? <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-ink/6 pt-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workspace at a glance</p>
+          {metrics.length ? <div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4">
             {metrics.map(([label, value]) => <MetricCard key={label} label={label} value={value} />)}
-          </div> : null}
+          </div> : <p className="mt-3 text-sm leading-7 text-graphite/72">Your source, subject, and progress totals will appear here.</p>}
         </div>
       </section>
 
@@ -400,7 +398,7 @@ function Library({
       setState((current) => removeDocumentFromState(current, document.id));
       setMessage(`${document.title} was deleted.`);
     } catch (error) {
-      setMessage(error instanceof Error ? `Document was not deleted: ${error.message}` : 'Document was not deleted because Supabase failed.');
+      setMessage(error instanceof Error ? `Document was not deleted: ${error.message}` : 'Document was not deleted because cloud sync failed.');
     }
   }
 
@@ -414,7 +412,7 @@ function Library({
       {message ? <StatusNote message={message} /> : null}
       {documents.length ? (
         <section className="rounded-lg bg-white p-4 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div className="grid gap-x-4 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
             <SourceFilter label="Subject" value={filters.subject} options={filterOptions.subjects} onChange={(value) => updateFilter('subject', value)} />
             <SourceFilter label="Academic year" value={filters.academicYear} options={filterOptions.academicYears} onChange={(value) => updateFilter('academicYear', value)} />
             <SourceFilter label="Term" value={filters.term} options={filterOptions.terms} onChange={(value) => updateFilter('term', value)} />
@@ -604,10 +602,10 @@ function ConfirmModal({ action, onClose }: { action: ConfirmAction | null; onClo
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div className="w-full max-w-lg rounded-lg border border-ink/10 bg-white p-5 shadow-soft">
+      <div role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body" className="w-full max-w-lg rounded-lg border border-ink/10 bg-white p-5 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Confirm destructive action</p>
-        <h2 className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
-        <p className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
+        <h2 id="confirm-dialog-title" className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
+        <p id="confirm-dialog-body" className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
         <div className="mt-6 flex flex-wrap justify-end gap-3">
           <button type="button" onClick={onClose} disabled={isWorking} className="rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink">
             Cancel
@@ -679,24 +677,20 @@ function ManagedDocumentCard({
   return (
     <div className="space-y-3">
       <DocumentCard document={document} records={records} chunkCount={chunkCount} />
-      <ExtractionReviewPanel document={document} records={records.filter((record) => record.sourceDocumentId === document.id)} onSaveRecord={onSaveRecord} />
+      <ExtractionReviewPanel records={records.filter((record) => record.sourceDocumentId === document.id)} onSaveRecord={onSaveRecord} />
       {isEditing ? (
         <div className="rounded-lg border border-ink/8 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Edit source details</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Document title" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4 md:col-span-2" />
-            <input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} placeholder="Academic year" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <select value={term} onChange={(event) => setTerm(event.target.value)} className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">
-              {[...academicTerms, term].filter((value, index, values) => value && values.indexOf(value) === index).map((value) => <option key={value} value={value}>{value}</option>)}
-            </select>
-            <input value={linkedAssessmentName} onChange={(event) => setLinkedAssessmentName(event.target.value)} placeholder="Assessment / report name" className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4 md:col-span-2" />
+            <FormField label="Document title" className="md:col-span-2"><input value={title} onChange={(event) => setTitle(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Academic year"><input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Term"><select value={term} onChange={(event) => setTerm(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">{[...academicTerms, term].filter((value, index, values) => value && values.indexOf(value) === index).map((value) => <option key={value} value={value}>{value}</option>)}</select></FormField>
+            <FormField label="Assessment or report name" className="md:col-span-2"><input value={linkedAssessmentName} onChange={(event) => setLinkedAssessmentName(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
             <details className="rounded-lg border border-ink/8 bg-paper/70 p-3 md:col-span-2">
               <summary className="cursor-pointer text-sm font-semibold text-ink">Add exact date (optional)</summary>
-              <input type="date" value={sourceDate} onChange={(event) => setSourceDate(event.target.value)} className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+              <FormField label="Exact date" className="mt-3"><input type="date" value={sourceDate} onChange={(event) => setSourceDate(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
             </details>
-            <select value={documentCategory} onChange={(event) => setDocumentCategory(event.target.value)} className="rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">
-              {[...documentCategories, documentCategory].filter((value, index, values) => value && values.indexOf(value) === index).map((value) => <option key={value} value={value}>{value}</option>)}
-            </select>
+            <FormField label="Document type"><select value={documentCategory} onChange={(event) => setDocumentCategory(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">{[...documentCategories, documentCategory].filter((value, index, values) => value && values.indexOf(value) === index).map((value) => <option key={value} value={value}>{value}</option>)}</select></FormField>
             <EditListField label="Subjects" value={subjects} setValue={setSubjects} />
             <EditListField label="Topics" value={topics} setValue={setTopics} />
             <EditListField label="Academic years" value={academicYears} setValue={setAcademicYears} />
@@ -707,7 +701,7 @@ function ManagedDocumentCard({
             <EditListField label="Tags" value={tags} setValue={setTags} />
             <label className="flex gap-3 rounded-lg border border-ink/8 bg-paper/70 p-3 text-sm leading-6 text-graphite/75 md:col-span-2">
               <input type="checkbox" checked={ignoreInstrumentalMusic} onChange={(event) => setIgnoreInstrumentalMusic(event.target.checked)} className="mt-1 size-4 shrink-0 accent-ink" />
-              <span>Ignore instrumental/music lesson content for academic performance analysis.</span>
+              <span>Keep instrumental or performance lesson content out of academic progress.</span>
             </label>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -727,7 +721,7 @@ function ManagedDocumentCard({
   );
 }
 
-function ExtractionReviewPanel({ document, records, onSaveRecord }: { document: ResearchDocument; records: PerformanceRecord[]; onSaveRecord: (record: PerformanceRecord) => void }) {
+function ExtractionReviewPanel({ records, onSaveRecord }: { records: PerformanceRecord[]; onSaveRecord: (record: PerformanceRecord) => void }) {
   const reviewRecords = records.filter(needsExtractionReview);
 
   if (!reviewRecords.length) return null;
@@ -738,10 +732,10 @@ function ExtractionReviewPanel({ document, records, onSaveRecord }: { document: 
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brass">May need a quick check</p>
           <p className="mt-2 text-sm leading-6 text-graphite/74">
-            Research OS understood this report. {reviewRecords.length} subject{reviewRecords.length === 1 ? ' has' : 's have'} one possible ambiguity before it affects Progress.
+            Check {reviewRecords.length} subject {reviewRecords.length === 1 ? 'entry' : 'entries'} before {reviewRecords.length === 1 ? 'it affects' : 'they affect'} Progress.
           </p>
         </div>
-        <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">{document.extractionSummary?.confidence ?? 'Medium'} confidence</span>
+        <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">Review required</span>
       </div>
       <div className="mt-4 space-y-3">
         {reviewRecords.map((record) => (
@@ -767,6 +761,7 @@ function ExtractionRecordEditor({ record, onSaveRecord }: { record: PerformanceR
   function save() {
     const cleanSubject = subject.trim() || record.subject;
     const nextPercentage = parseOptionalNumber(percentage);
+    const domain = getPerformanceDomain(cleanSubject, record.assessmentType, [record.title, teacherComment, grade, predictedGrade, targetGrade].join(' '));
     const nextRecord: PerformanceRecord = {
       ...record,
       subject: cleanSubject,
@@ -779,8 +774,8 @@ function ExtractionRecordEditor({ record, onSaveRecord }: { record: PerformanceR
       effort: effort.trim() || undefined,
       attainment: attainment.trim() || undefined,
       marksExtracted: Boolean(nextPercentage !== undefined || grade.trim() || predictedGrade.trim() || targetGrade.trim() || attainment.trim()),
-      domain: getPerformanceDomain(cleanSubject, record.assessmentType),
-      excludeFromAcademicAnalysis: getPerformanceDomain(cleanSubject, record.assessmentType) !== 'academic',
+      domain,
+      excludeFromAcademicAnalysis: domain !== 'academic',
       extractionConfidence: 'High',
       fieldConfidence: {
         subject: 'High',
@@ -824,15 +819,15 @@ function ExtractionRecordEditor({ record, onSaveRecord }: { record: PerformanceR
       </div>
       {isEditing ? (
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Subject" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-          <input value={teacher} onChange={(event) => setTeacher(event.target.value)} placeholder="Teacher" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-          <input value={percentage} onChange={(event) => setPercentage(event.target.value)} placeholder="Percentage" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-          <input value={grade} onChange={(event) => setGrade(event.target.value)} placeholder="Grade" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-          <input value={predictedGrade} onChange={(event) => setPredictedGrade(event.target.value)} placeholder="Predicted grade" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-          <input value={targetGrade} onChange={(event) => setTargetGrade(event.target.value)} placeholder="Target grade" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-          <input value={effort} onChange={(event) => setEffort(event.target.value)} placeholder="Effort" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-          <input value={attainment} onChange={(event) => setAttainment(event.target.value)} placeholder="Attainment" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
-          <textarea value={teacherComment} onChange={(event) => setTeacherComment(event.target.value)} rows={4} placeholder="Teacher comment" className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4 md:col-span-2" />
+          <FormField label="Subject"><input value={subject} onChange={(event) => setSubject(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+          <FormField label="Teacher"><input value={teacher} onChange={(event) => setTeacher(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+          <FormField label="Percentage"><input value={percentage} onChange={(event) => setPercentage(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+          <FormField label="Grade"><input value={grade} onChange={(event) => setGrade(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+          <FormField label="Predicted grade"><input value={predictedGrade} onChange={(event) => setPredictedGrade(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+          <FormField label="Target grade"><input value={targetGrade} onChange={(event) => setTargetGrade(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+          <FormField label="Effort"><input value={effort} onChange={(event) => setEffort(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+          <FormField label="Attainment"><input value={attainment} onChange={(event) => setAttainment(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+          <FormField label="Teacher comment" className="md:col-span-2"><textarea value={teacherComment} onChange={(event) => setTeacherComment(event.target.value)} rows={4} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
           <button type="button" onClick={save} className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white md:col-span-2">
             Save reviewed values
           </button>
@@ -868,7 +863,7 @@ function IconTextButton({ icon: Icon, label, onClick, danger = false }: { icon: 
 
 const assessmentTypes: AssessmentType[] = ['exam', 'report', 'coursework', 'music', 'mock', 'other'];
 const academicTerms: AcademicTerm[] = ['Michaelmas', 'Lent', 'Summer', 'Custom'];
-const documentCategories: DocumentCategory[] = ['Report', 'Exam result', 'Mark sheet', 'Notes', 'Past paper', 'Mark scheme', 'Essay', 'Other'];
+const documentCategories: DocumentCategory[] = ['Report', 'Exam result', 'Mark sheet', 'Coursework', 'Assessment', 'Notes', 'Past paper', 'Mark scheme', 'Essay', 'Other'];
 const defaultSubjectOptions = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'English', 'History', 'Geography', 'French', 'Spanish', 'Latin', 'Music'];
 
 type UploadMetadataDraft = {
@@ -927,22 +922,73 @@ function getRecordPercentage(record: PerformanceRecord) {
   return undefined;
 }
 
-function isMusicOrPerformanceSubject(subject: string) {
-  return /\b(music|instrument|instrumental|piano|violin|cello|flute|clarinet|saxophone|trumpet|guitar|drum|singing|vocal|orchestra|choir|abrsm|trinity)\b/i.test(subject);
+function isInstrumentalOrPerformanceText(value?: string | null) {
+  return /\b(instrument|instrumental|piano|violin|cello|flute|clarinet|saxophone|trumpet|guitar|drum|singing|vocal|ensemble|orchestra|choir|abrsm|trinity|graded instrument|music performance|performance lesson)\b/i.test(value ?? '');
 }
 
-function getPerformanceDomain(subject: string, assessmentType?: AssessmentType): PerformanceDomain {
-  if (assessmentType === 'music' || isMusicOrPerformanceSubject(subject)) return 'music';
+function isAcademicMusicText(value?: string | null) {
+  return /\b(gcse|appraising|composition|coursework|listening|set works?|theory|exam|report|assessment|mark sheet|marksheet|notes?)\b/i.test(value ?? '');
+}
+
+function isAcademicMusicCategory(category?: string | null) {
+  return /\b(exam|exam result|report|coursework|assessment|notes?|mark sheet|marksheet)\b/i.test(category ?? '');
+}
+
+function canDocumentCategoryAffectAcademicProgress(category?: string | null) {
+  return ['Report', 'Exam result', 'Mark sheet', 'Coursework', 'Assessment', 'Notes'].includes(String(category ?? ''));
+}
+
+function isMusicSubject(subject?: string | null) {
+  return /\bmusic\b/i.test(subject ?? '');
+}
+
+function isMusicOrPerformanceSubject(subject: string) {
+  return isMusicSubject(subject) || isInstrumentalOrPerformanceText(subject);
+}
+
+function shouldTreatAsInstrumentalPerformanceRecord(record: Pick<PerformanceRecord, 'subject' | 'title' | 'assessmentType' | 'teacherComment' | 'strengths' | 'weaknesses' | 'actionPoints' | 'domain' | 'excludeFromAcademicAnalysis'>) {
+  if (record.excludeFromAcademicAnalysis) return true;
+  if (record.domain === 'performance') return true;
+
+  const context = [record.subject, record.title, record.assessmentType, record.teacherComment, ...record.strengths, ...record.weaknesses, ...record.actionPoints].join(' ');
+  if (isInstrumentalOrPerformanceText(record.subject)) return true;
+  if (isMusicSubject(record.subject) && isAcademicMusicText(context)) return false;
+  return isInstrumentalOrPerformanceText(context);
+}
+
+function shouldTreatAsInstrumentalPerformanceDocument(metadata: DocumentMetadata) {
+  if (!metadata.ignoreInstrumentalMusic) return false;
+  const subjects = safeStringArray(metadata.subjects);
+  const context = [metadata.linkedAssessmentName, metadata.documentCategory, ...subjects, ...safeStringArray(metadata.tags), ...safeStringArray(metadata.topics)].join(' ');
+  if (isMusicSubject(context) && (isAcademicMusicCategory(metadata.documentCategory) || isAcademicMusicText(context))) return false;
+  return subjects.length > 0 && subjects.every((subject) => isInstrumentalOrPerformanceText(subject));
+}
+
+function shouldDocumentAffectAcademicPerformance(metadata: DocumentMetadata) {
+  return canDocumentCategoryAffectAcademicProgress(metadata.documentCategory) && !shouldTreatAsInstrumentalPerformanceDocument(metadata);
+}
+
+function shouldExcludeRecordForInstrumentalPreference(record: PerformanceRecord, metadata?: DocumentMetadata) {
+  if (!metadata?.ignoreInstrumentalMusic) return false;
+  if (isMusicSubject(record.subject) && (isAcademicMusicCategory(metadata.documentCategory) || isAcademicMusicText([metadata.linkedAssessmentName, record.title, record.assessmentType].join(' ')))) {
+    return false;
+  }
+  return shouldTreatAsInstrumentalPerformanceRecord(record);
+}
+
+function getPerformanceDomain(subject: string, assessmentType?: AssessmentType, context = ''): PerformanceDomain {
+  const combined = [subject, assessmentType, context].join(' ');
+  if (isInstrumentalOrPerformanceText(subject) || isInstrumentalOrPerformanceText(combined)) return 'performance';
   return 'academic';
 }
 
-function isAcademicPerformanceRecord(record: PerformanceRecord) {
-  const domain = record.domain ?? getPerformanceDomain(record.subject, record.assessmentType);
+export function isAcademicPerformanceRecord(record: PerformanceRecord) {
+  const domain = shouldTreatAsInstrumentalPerformanceRecord(record) ? 'performance' : 'academic';
   if (domain !== 'academic' || needsExtractionReview(record)) return false;
   return !record.excludeFromAcademicAnalysis || hasReviewAvailable(record) || hasProgressUsableEvidence(record);
 }
 
-function getAcademicPerformanceRecords(records: PerformanceRecord[]) {
+export function getAcademicPerformanceRecords(records: PerformanceRecord[]) {
   return records.filter(isAcademicPerformanceRecord);
 }
 
@@ -1207,8 +1253,9 @@ function hasMediumConfidenceUsefulValue(record: Pick<PerformanceRecord, 'fieldCo
   );
 }
 
-function needsExtractionReview(record: Pick<PerformanceRecord, 'reviewStatus' | 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted' | 'subject' | 'teacher' | 'teacherComment' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore'>) {
+function needsExtractionReview(record: Pick<PerformanceRecord, 'reviewStatus' | 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted' | 'subject' | 'teacher' | 'teacherComment' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore' | 'needsReviewReason'>) {
   if (record.reviewStatus === 'confirmed') return false;
+  if (record.needsReviewReason?.trim()) return true;
   const subjectIsUnclear = !record.subject.trim() || record.fieldConfidence?.subject === 'Low';
   if (subjectIsUnclear) return true;
   if (hasImpossibleMarkValue(record) || hasContradictoryMarkValue(record)) return true;
@@ -1222,7 +1269,7 @@ function hasReviewAvailable(record: Pick<PerformanceRecord, 'reviewStatus' | 'ex
   return record.reviewStatus !== 'confirmed' && !needsExtractionReview(record) && (record.extractionConfidence === 'Medium' || hasMediumConfidenceUsefulValue(record));
 }
 
-function getExtractionReviewReasons(record: Pick<PerformanceRecord, 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted' | 'subject' | 'teacher' | 'teacherComment' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore'>) {
+function getExtractionReviewReasons(record: Pick<PerformanceRecord, 'extractionConfidence' | 'fieldConfidence' | 'marksExtracted' | 'subject' | 'teacher' | 'teacherComment' | 'effort' | 'attainment' | 'percentage' | 'grade' | 'predictedGrade' | 'targetGrade' | 'score' | 'maxScore' | 'needsReviewReason'>) {
   const lowFields = Object.entries(record.fieldConfidence ?? {})
     .filter(([field, confidence]) => {
       if (confidence !== 'Low') return false;
@@ -1252,6 +1299,9 @@ function getExtractionReviewReasons(record: Pick<PerformanceRecord, 'extractionC
   });
   if (record.extractionConfidence === 'Low' && reasons.length === 0) {
     reasons.push('OCR or table structure made this row uncertain.');
+  }
+  if (record.needsReviewReason?.trim()) {
+    reasons.push(record.needsReviewReason.trim());
   }
   if (hasImpossibleMarkValue(record)) {
     reasons.push('Mark value looks impossible.');
@@ -1367,7 +1417,8 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
   );
 
   const assessmentType = normalizeAssessmentType(record.assessmentType);
-  const domain = getPerformanceDomain(subject, assessmentType);
+  const title = typeof record.title === 'string' && record.title.trim() ? record.title.trim() : fallbackTitle;
+  const domain = getPerformanceDomain(subject, assessmentType, [title, sourceMetadata?.linkedAssessmentName, sourceMetadata?.documentCategory].join(' '));
   const candidateRecord = {
     reviewStatus: undefined,
     extractionConfidence,
@@ -1384,6 +1435,7 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     targetGrade,
     score,
     maxScore,
+    needsReviewReason: cleanOptionalString(record.needsReviewReason),
   };
   const requiresReview = needsExtractionReview(candidateRecord);
   const teacher = candidateRecord.teacher;
@@ -1392,7 +1444,7 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
 
   return {
     id: `performance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    title: typeof record.title === 'string' && record.title.trim() ? record.title.trim() : fallbackTitle,
+    title,
     sourceDocumentId,
     date: typeof record.date === 'string' && record.date.trim() ? record.date.trim() : sourceMetadata?.sourceDate || '',
     term: typeof record.term === 'string' && record.term.trim() ? record.term.trim() : sourceMetadata?.term,
@@ -1400,7 +1452,39 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     subject,
     assessmentType,
     domain,
-    excludeFromAcademicAnalysis: Boolean(record.excludeFromAcademicAnalysis) || requiresReview || Boolean(sourceMetadata?.ignoreInstrumentalMusic && domain !== 'academic'),
+    excludeFromAcademicAnalysis:
+      Boolean(record.excludeFromAcademicAnalysis) ||
+      requiresReview ||
+      shouldExcludeRecordForInstrumentalPreference(
+        {
+          id: '',
+          title,
+          sourceDocumentId,
+          date: '',
+          subject,
+          assessmentType,
+          domain,
+          excludeFromAcademicAnalysis: false,
+          teacher,
+          teacherComment,
+          effort,
+          attainment,
+          score,
+          maxScore,
+          percentage,
+          grade,
+          predictedGrade,
+          targetGrade,
+          marksExtracted,
+          extractionConfidence,
+          fieldConfidence,
+          strengths: Array.isArray(record.strengths) ? record.strengths.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
+          weaknesses: Array.isArray(record.weaknesses) ? record.weaknesses.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
+          actionPoints: Array.isArray(record.actionPoints) ? record.actionPoints.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
+          createdAt: '',
+        },
+        sourceMetadata,
+      ),
     score,
     maxScore,
     percentage,
@@ -1419,6 +1503,8 @@ function createRecordFromAnalysis(record: PerformanceAnalysisRecord, sourceDocum
     strengths: Array.isArray(record.strengths) ? record.strengths.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
     weaknesses: Array.isArray(record.weaknesses) ? record.weaknesses.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
     actionPoints: Array.isArray(record.actionPoints) ? record.actionPoints.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
+    rawEvidence: Array.isArray(record.rawEvidence) ? record.rawEvidence.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [],
+    needsReviewReason: candidateRecord.needsReviewReason,
     createdAt: new Date().toISOString(),
   };
 }
@@ -1481,12 +1567,30 @@ function buildExtractionSummary(document: ResearchDocument, metadata: DocumentMe
   const confirmedRecords = linkedRecords.filter((record) => !needsExtractionReview(record));
   const metadataConfidence = metadata.metadataConfidence ?? analysis?.metadata.metadataConfidence ?? 'Low';
   const confidence = getLowestConfidence([metadataConfidence, ...linkedRecords.map(getRecordExtractionConfidence)]) ?? 'Low';
+  const extractionWarnings = uniqueStrings([...(analysis?.extractionWarnings ?? []), ...(analysis?.extractionDiagnostics?.warnings ?? [])]);
+  const missingLikelySubjects = uniqueStrings(analysis?.missingLikelySubjects ?? []);
+  const uncertainFields = linkedRecords.reduce((total, record) => total + Object.values(record.fieldConfidence ?? {}).filter((value) => value === 'Low').length + (record.needsReviewReason ? 1 : 0), 0);
+  const diagnostics = analysis?.extractionDiagnostics
+    ? {
+        ...analysis.extractionDiagnostics,
+        warnings: uniqueStrings(analysis.extractionDiagnostics.warnings),
+      }
+    : linkedRecords.length || extractionWarnings.length
+      ? {
+          detectedSubjectSections: subjectsFound,
+          subjectsWithMarks: marksExtracted,
+          subjectsWithComments: teacherComments,
+          uncertainFields,
+          warnings: extractionWarnings,
+        }
+      : undefined;
   const reviewNotes = [
     linkedRecords.length ? `Research OS understood this report. ${confirmedRecords.length} subject${confirmedRecords.length === 1 ? '' : 's'} confirmed automatically.` : '',
     reviewSuggestedRecords.length ? `${reviewSuggestedRecords.length} subject${reviewSuggestedRecords.length === 1 ? '' : 's'} may need a quick check later.` : '',
     reviewRecords.length ? `${reviewRecords.length} subject${reviewRecords.length === 1 ? ' is' : 's are'} waiting for confirmation before affecting Progress.` : '',
     linkedRecords.some(hasLowConfidenceMark) ? 'One possible mark ambiguity is visible for review and is not counted in Progress yet.' : '',
-    !analysis ? 'AI extraction was unavailable, so this summary uses local fallback metadata.' : '',
+    extractionWarnings.length ? `${extractionWarnings.length} extraction warning${extractionWarnings.length === 1 ? '' : 's'} recorded in diagnostics.` : '',
+    missingLikelySubjects.length ? `${missingLikelySubjects.length} likely subject${missingLikelySubjects.length === 1 ? '' : 's'} may be missing.` : '',
   ].filter(Boolean);
 
   return {
@@ -1503,6 +1607,9 @@ function buildExtractionSummary(document: ResearchDocument, metadata: DocumentMe
     reviewSuggested: reviewSuggestedRecords.length,
     waitingForConfirmation: reviewRecords.length,
     reviewNotes,
+    diagnostics,
+    extractionWarnings,
+    missingLikelySubjects,
   };
 }
 
@@ -1519,7 +1626,7 @@ function metadataFromDocumentAnalysis(document: ResearchDocument, fallback: Docu
       metadataSource: fallback.metadataSource ?? 'Local fallback',
       shouldAffectAcademicPerformance:
         fallback.shouldAffectAcademicPerformance ??
-        Boolean(fallback.documentCategory && ['Report', 'Exam result', 'Mark sheet'].includes(String(fallback.documentCategory)) && !fallback.ignoreInstrumentalMusic),
+        shouldDocumentAffectAcademicPerformance(fallback),
       extractedFacts: fallback.extractedFacts ?? [],
       inferredMetadata: fallback.inferredMetadata ?? ['Local metadata inferred from upload fields, filename, tags, and extracted text.'],
     };
@@ -1557,8 +1664,19 @@ function metadataFromDocumentAnalysis(document: ResearchDocument, fallback: Docu
     skills,
     tags,
     metadataConfidence: metadata.metadataConfidence ?? fallback.metadataConfidence ?? 'Low',
-    metadataSource: 'AI generated',
-    shouldAffectAcademicPerformance: metadata.shouldAffectAcademicPerformance ?? fallback.shouldAffectAcademicPerformance,
+    metadataSource: metadata.metadataSource ?? 'AI generated',
+    shouldAffectAcademicPerformance:
+      shouldDocumentAffectAcademicPerformance({
+        ...fallback,
+        documentCategory: metadata.documentCategory || fallback.documentCategory,
+        linkedAssessmentName: metadata.linkedAssessmentName || fallback.linkedAssessmentName || document.title,
+        ignoreInstrumentalMusic: metadata.ignoreInstrumentalMusic || fallback.ignoreInstrumentalMusic,
+        subjects,
+        topics,
+        tags,
+      })
+        ? true
+        : metadata.shouldAffectAcademicPerformance ?? fallback.shouldAffectAcademicPerformance,
     extractedFacts: uniqueStrings([...safeStringArray(metadata.extractedFacts), ...safeStringArray(fallback.extractedFacts)]),
     inferredMetadata: uniqueStrings([...safeStringArray(metadata.inferredMetadata), ...safeStringArray(fallback.inferredMetadata)]),
   };
@@ -1620,7 +1738,7 @@ function PerformancePage({
   const [form, setForm] = useState({
     title: '',
     subject: '',
-    date: new Date().toISOString().slice(0, 10),
+    date: '',
     academicYear: '',
     term: '',
     assessmentType: 'exam' as AssessmentType,
@@ -1640,7 +1758,7 @@ function PerformancePage({
     actionPoints: '',
   });
   const [selectedDocumentId, setSelectedDocumentId] = useState('');
-  const [statusMessage, setStatusMessage] = useState('Performance data is stored locally in this version.');
+  const [statusMessage, setStatusMessage] = useState('');
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
   const [editingRecordId, setEditingRecordId] = useState('');
@@ -1649,21 +1767,18 @@ function PerformancePage({
   const [selectedPeriod, setSelectedPeriod] = useState<ProgressPeriod>('This Academic Year');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
-  const [selectedTimelineSnapshotKey, setSelectedTimelineSnapshotKey] = useState('');
 
   const academicRecords = useMemo(() => getAcademicPerformanceRecords(records), [records]);
-  const musicRecords = useMemo(() => records.filter((record) => (record.domain ?? getPerformanceDomain(record.subject, record.assessmentType)) === 'music' || isMusicOrPerformanceSubject(record.subject)), [records]);
+  const musicRecords = useMemo(() => records.filter(shouldTreatAsInstrumentalPerformanceRecord), [records]);
   const academicSubjects = useMemo(() => Object.keys(getSubjectGroups(academicRecords)), [academicRecords]);
   const musicSubjects = useMemo(() => Object.keys(getSubjectGroups(musicRecords)), [musicRecords]);
   const subjectOptions = useMemo(() => ['All Subjects', ...academicSubjects, ...musicSubjects.filter((subject) => !academicSubjects.includes(subject))], [academicSubjects, musicSubjects]);
-  const availableRecords = selectedSubject === 'Music' || musicSubjects.includes(selectedSubject) ? musicRecords : academicRecords;
+  const availableRecords = musicSubjects.includes(selectedSubject) && !academicSubjects.includes(selectedSubject) ? musicRecords : academicRecords;
   const filteredRecords = useMemo(
     () => filterProgressRecords(availableRecords, selectedSubject, selectedPeriod, customStart, customEnd),
     [availableRecords, customEnd, customStart, selectedPeriod, selectedSubject],
   );
   const sortedRecords = useMemo(() => sortRecordsByAssessmentDate(filteredRecords), [filteredRecords]);
-  const timelineSnapshots = useMemo(() => getReportSnapshots(sortedRecords), [sortedRecords]);
-  const selectedTimelineSnapshot = timelineSnapshots.find((snapshot) => snapshot.key === selectedTimelineSnapshotKey) ?? timelineSnapshots[timelineSnapshots.length - 1];
   const learningSummary = useMemo(
     () => buildLearningSummary(filteredRecords, selectedSubject, summaries[0], tutorLessons, tutorAttempts, tutorMemory),
     [filteredRecords, selectedSubject, summaries, tutorAttempts, tutorLessons, tutorMemory],
@@ -1676,7 +1791,6 @@ function PerformancePage({
     () => buildProgressRecommendations(filteredRecords, tutorLessons, tutorAttempts, tutorMemory, documents, selectedSubject),
     [documents, filteredRecords, selectedSubject, tutorAttempts, tutorLessons, tutorMemory],
   );
-  const latestSummary = summaries[0];
   const analysableDocuments = documents.filter((document) => document.extractedText?.trim() && (document.status === 'Ready' || document.status === 'Indexed'));
   const computedPercentage = (() => {
     const score = parseOptionalNumber(form.score);
@@ -1726,13 +1840,13 @@ function PerformancePage({
       id: existing?.id ?? `performance-${Date.now()}`,
       sourceDocumentId: existing?.sourceDocumentId,
       title: form.title.trim() || `${subject} ${form.assessmentType}`,
-      date: form.date || new Date().toISOString().slice(0, 10),
+      date: form.date,
       academicYear: form.academicYear.trim() || undefined,
       term: form.term.trim() || undefined,
       subject,
       assessmentType: form.assessmentType,
-      domain: getPerformanceDomain(subject, form.assessmentType),
-      excludeFromAcademicAnalysis: getPerformanceDomain(subject, form.assessmentType) !== 'academic',
+      domain: getPerformanceDomain(subject, form.assessmentType, form.title),
+      excludeFromAcademicAnalysis: getPerformanceDomain(subject, form.assessmentType, form.title) !== 'academic',
       score: parseOptionalNumber(form.score),
       maxScore: parseOptionalNumber(form.maxScore),
       percentage: computedPercentage,
@@ -1809,6 +1923,7 @@ function PerformancePage({
       ...current,
       title: '',
       subject: '',
+      date: '',
       academicYear: '',
       term: '',
       score: '',
@@ -1845,7 +1960,7 @@ function PerformancePage({
       });
       setStatusMessage(`${record.title} was deleted.`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? `Performance record was not deleted: ${error.message}` : 'Performance record was not deleted because Supabase failed.');
+      setStatusMessage(error instanceof Error ? `Performance record was not deleted: ${error.message}` : 'Performance record was not deleted because cloud sync failed.');
     }
   }
 
@@ -1862,8 +1977,8 @@ function PerformancePage({
     try {
       const metadata = getDocumentMetadata(document, records);
 
-      if (metadata.ignoreInstrumentalMusic && metadata.documentCategory === 'Other' && metadata.subjects.every(isMusicOrPerformanceSubject)) {
-        setStatusMessage(`${document.title} is stored as source material, but its instrumental/music content is ignored for academic performance trends.`);
+      if (shouldTreatAsInstrumentalPerformanceDocument(metadata)) {
+        setStatusMessage(`${document.title} is stored as source material, but its instrumental or performance lesson content is ignored for academic performance trends.`);
         return;
       }
 
@@ -1872,8 +1987,8 @@ function PerformancePage({
         .map((record) => createRecordFromAnalysis(record, document.id, document.title, metadata))
         .filter((record): record is PerformanceRecord => Boolean(record))
         .map((record) =>
-          metadata.ignoreInstrumentalMusic && (record.domain !== 'academic' || isMusicOrPerformanceSubject(record.subject))
-            ? { ...record, domain: record.domain ?? 'music', excludeFromAcademicAnalysis: true }
+          shouldExcludeRecordForInstrumentalPreference(record, metadata)
+            ? { ...record, domain: record.domain ?? 'performance', excludeFromAcademicAnalysis: true }
             : record,
         );
 
@@ -1883,7 +1998,7 @@ function PerformancePage({
       }
 
       setState((current) => {
-        const performanceRecords = [...newRecords, ...current.performanceRecords];
+        const performanceRecords = [...newRecords, ...current.performanceRecords.filter((record) => record.sourceDocumentId !== document.id)];
         const documents = current.documents.map((item) =>
           item.id === document.id
             ? {
@@ -1935,7 +2050,7 @@ function PerformancePage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-10">
-      <SectionHeader eyebrow="Progress" title="Academic Mentor" copy="A clear reading of results, teacher feedback, recurring themes, and next steps." />
+      <SectionHeader eyebrow="Progress" title="Learning progress" copy="Results, teacher feedback, recurring themes, and practical next steps in one place." />
 
       {records.length > 0 ? <div className="rounded-lg bg-white p-4 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
@@ -1951,7 +2066,7 @@ function PerformancePage({
             </select>
           </label>
           <label className="text-sm font-semibold text-ink">
-            Time Period
+            Time period
             <select value={selectedPeriod} onChange={(event) => setSelectedPeriod(event.target.value as ProgressPeriod)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm font-normal outline-none ring-ink/10 focus:ring-4">
               {progressPeriods.map((period) => (
                 <option key={period} value={period}>
@@ -1966,11 +2081,11 @@ function PerformancePage({
         </div>
         {selectedPeriod === 'Custom Range' ? (
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+            <FormField label="From"><input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="To"><input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
           </div>
         ) : null}
-        <p className="mt-3 text-sm leading-7 text-graphite/74">{statusMessage}</p>
+        {statusMessage ? <p role="status" className="mt-3 text-sm leading-7 text-graphite/74">{statusMessage}</p> : null}
       </div> : null}
 
       {records.length === 0 ? (
@@ -1983,7 +2098,7 @@ function PerformancePage({
       {records.length > 0 ? (
         <>
       <section className="rounded-lg bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Learning Summary</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Learning summary</p>
         <div className="mt-4 max-w-4xl">
           <p className="text-sm font-semibold text-graphite/62">{selectedSubject}</p>
           <h3 className="mt-2 font-serif text-3xl font-semibold leading-tight text-ink">{learningSummary.headline}</h3>
@@ -1991,7 +2106,7 @@ function PerformancePage({
           <p className="mt-3 text-base font-semibold leading-8 text-ink">{learningSummary.nextAction}</p>
         </div>
         <details className="mt-5 rounded-lg border border-ink/8 bg-paper/55 p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-ink">Why This Summary</summary>
+          <summary className="cursor-pointer text-sm font-semibold text-ink">Why this summary</summary>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <InsightBadge label="Direction" value={learningSummary.direction} />
             <InsightBadge label="Confidence" value={learningSummary.confidence} />
@@ -2007,7 +2122,7 @@ function PerformancePage({
       </section>
 
       <section className="rounded-lg bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">This Term At A Glance</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">At a glance</p>
         <div className="mt-5 grid gap-4 lg:grid-cols-4">
           {atAGlance.map((item) => (
             <article key={item.label} className="rounded-lg border border-ink/8 bg-paper/55 p-4">
@@ -2022,13 +2137,13 @@ function PerformancePage({
       <section className="rounded-lg bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
           <LineChart size={15} />
-          Performance Trend
+          Performance trend
         </div>
         <TrendChart records={sortedRecords} documents={documents} selectedSubject={selectedSubject} />
       </section>
 
       <section className="rounded-lg bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Teacher Insights</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Teacher insights</p>
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
           {teacherInsights.length ? (
             teacherInsights.map((insight) => <TeacherInsightCard key={`${insight.theme}-${insight.classification}`} insight={insight} />)
@@ -2039,7 +2154,7 @@ function PerformancePage({
       </section>
 
       <section className="rounded-lg bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Repeated Themes</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Repeated themes</p>
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
           {repeatedThemes.length ? (
             repeatedThemes.map((theme) => <TeacherInsightCard key={`${theme.theme}-${theme.classification}`} insight={theme} compact />)
@@ -2066,11 +2181,6 @@ function PerformancePage({
         </div>
       </section>
 
-      <section className="rounded-lg bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Timeline</p>
-        <ProgressTimeline snapshots={timelineSnapshots} documents={documents} selectedKey={selectedTimelineSnapshot?.key} onSelect={setSelectedTimelineSnapshotKey} />
-      </section>
-
       {hasSupportingEvidence ? (
         <section className="rounded-lg bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Supporting Evidence</p>
@@ -2081,50 +2191,47 @@ function PerformancePage({
       {musicRecords.length ? <section className="rounded-lg bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
           <Music2 size={15} />
-          Music and Instrumental Progress
+          Instrumental and performance records
         </div>
         <p className="mt-3 text-sm leading-7 text-graphite/72">
-          Academic Progress ignores records marked excludeFromAcademicAnalysis. Select Music or a music subject above to view instrumental records without mixing them into academic trends.
+          Progress keeps GCSE Music, appraising, composition, coursework, listening, set works, and marked Music Theory with academic subjects. Instrumental lessons, graded performance exams, and ensemble feedback stay separate here.
         </p>
       </section> : null}
         </>
       ) : null}
 
       <details className="rounded-lg bg-white p-6 shadow-sm">
-        <summary className="cursor-pointer text-sm font-semibold text-ink">Manage Performance Data</summary>
+        <summary className="cursor-pointer text-sm font-semibold text-ink">Manage progress data</summary>
         <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <form onSubmit={handleManualSubmit} className="rounded-lg border border-ink/8 bg-paper/50 p-5">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
             <ClipboardList size={15} />
-            Manual Entry
+            Manual entry
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <input value={form.title} onChange={(event) => updateForm('title', event.target.value)} placeholder="Assessment title" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.subject} onChange={(event) => updateForm('subject', event.target.value)} placeholder="Subject" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input type="date" value={form.date} onChange={(event) => updateForm('date', event.target.value)} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <select value={form.assessmentType} onChange={(event) => updateForm('assessmentType', event.target.value)} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
-              {assessmentTypes.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-            <input value={form.academicYear} onChange={(event) => updateForm('academicYear', event.target.value)} placeholder="Academic year, e.g. 2025-2026" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.term} onChange={(event) => updateForm('term', event.target.value)} placeholder="Term, e.g. Summer" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.score} onChange={(event) => updateForm('score', event.target.value)} placeholder="Score" inputMode="decimal" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.maxScore} onChange={(event) => updateForm('maxScore', event.target.value)} placeholder="Max score" inputMode="decimal" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.percentage} onChange={(event) => updateForm('percentage', event.target.value)} placeholder={computedPercentage !== undefined ? `${computedPercentage}% calculated` : 'Percentage'} inputMode="decimal" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.grade} onChange={(event) => updateForm('grade', event.target.value)} placeholder="Grade" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.rank} onChange={(event) => updateForm('rank', event.target.value)} placeholder="Rank or set" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.teacher} onChange={(event) => updateForm('teacher', event.target.value)} placeholder="Teacher" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.effort} onChange={(event) => updateForm('effort', event.target.value)} placeholder="Effort" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.attainment} onChange={(event) => updateForm('attainment', event.target.value)} placeholder="Attainment" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.predictedGrade} onChange={(event) => updateForm('predictedGrade', event.target.value)} placeholder="Predicted grade" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <input value={form.targetGrade} onChange={(event) => updateForm('targetGrade', event.target.value)} placeholder="Target grade" className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <textarea value={form.teacherComment} onChange={(event) => updateForm('teacherComment', event.target.value)} placeholder="Teacher comment" rows={3} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
-            <textarea value={form.strengths} onChange={(event) => updateForm('strengths', event.target.value)} placeholder="Strengths, separated by commas or new lines" rows={2} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <textarea value={form.weaknesses} onChange={(event) => updateForm('weaknesses', event.target.value)} placeholder="Weaknesses, separated by commas or new lines" rows={2} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-            <textarea value={form.actionPoints} onChange={(event) => updateForm('actionPoints', event.target.value)} placeholder="Action points" rows={2} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
+            <FormField label="Assessment title"><input value={form.title} onChange={(event) => updateForm('title', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Subject"><input value={form.subject} onChange={(event) => updateForm('subject', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Academic year" hint="e.g. 2025-2026"><input value={form.academicYear} onChange={(event) => updateForm('academicYear', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Term"><input value={form.term} onChange={(event) => updateForm('term', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Assessment type"><select value={form.assessmentType} onChange={(event) => updateForm('assessmentType', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">{assessmentTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></FormField>
+            <FormField label="Teacher"><input value={form.teacher} onChange={(event) => updateForm('teacher', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <details className="rounded-lg border border-ink/8 bg-white p-3 sm:col-span-2">
+              <summary className="cursor-pointer text-sm font-semibold text-ink">Add exact date (optional)</summary>
+              <FormField label="Exact date" className="mt-3"><input type="date" value={form.date} onChange={(event) => updateForm('date', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            </details>
+            <FormField label="Score"><input value={form.score} onChange={(event) => updateForm('score', event.target.value)} inputMode="decimal" className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Maximum score"><input value={form.maxScore} onChange={(event) => updateForm('maxScore', event.target.value)} inputMode="decimal" className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Percentage" hint={computedPercentage !== undefined ? `${computedPercentage}% calculated` : undefined}><input value={form.percentage} onChange={(event) => updateForm('percentage', event.target.value)} inputMode="decimal" className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Grade"><input value={form.grade} onChange={(event) => updateForm('grade', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Rank or set"><input value={form.rank} onChange={(event) => updateForm('rank', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Effort"><input value={form.effort} onChange={(event) => updateForm('effort', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Attainment"><input value={form.attainment} onChange={(event) => updateForm('attainment', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Predicted grade"><input value={form.predictedGrade} onChange={(event) => updateForm('predictedGrade', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Target grade"><input value={form.targetGrade} onChange={(event) => updateForm('targetGrade', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Teacher comment" className="sm:col-span-2"><textarea value={form.teacherComment} onChange={(event) => updateForm('teacherComment', event.target.value)} rows={3} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Strengths" hint="Separate items with commas or new lines"><textarea value={form.strengths} onChange={(event) => updateForm('strengths', event.target.value)} rows={2} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Areas to improve" hint="Separate items with commas or new lines"><textarea value={form.weaknesses} onChange={(event) => updateForm('weaknesses', event.target.value)} rows={2} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+            <FormField label="Action points" className="sm:col-span-2"><textarea value={form.actionPoints} onChange={(event) => updateForm('actionPoints', event.target.value)} rows={2} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
           </div>
           <button type="submit" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
             <FilePlus2 size={17} />
@@ -2139,6 +2246,7 @@ function PerformancePage({
                   ...current,
                   title: '',
                   subject: '',
+                  date: '',
                   score: '',
                   maxScore: '',
                   percentage: '',
@@ -2166,19 +2274,12 @@ function PerformancePage({
           <div className="rounded-lg border border-ink/8 bg-paper/50 p-5">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
               <Sparkles size={15} />
-              Analyse Uploaded Report
+              Analyse uploaded report
             </div>
             <p className="mt-3 text-sm leading-7 text-graphite/72">Select an uploaded report. Research OS will look for academic records and will not invent missing marks.</p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
-                <option value="">Choose uploaded document</option>
-                {analysableDocuments.map((document) => (
-                  <option key={document.id} value={document.id}>
-                    {document.title}
-                  </option>
-                ))}
-              </select>
-              <button type="button" onClick={handleAnalyseDocument} disabled={isAnalysing || analysableDocuments.length === 0} className="rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+              <FormField label="Uploaded report" className="min-w-0 flex-1"><select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4"><option value="">Choose a document</option>{analysableDocuments.map((document) => <option key={document.id} value={document.id}>{document.title}</option>)}</select></FormField>
+              <button type="button" onClick={handleAnalyseDocument} disabled={isAnalysing || analysableDocuments.length === 0} className="self-end rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
                 {isAnalysing ? 'Analysing...' : 'Analyse'}
               </button>
             </div>
@@ -2187,29 +2288,6 @@ function PerformancePage({
             ) : null}
           </div>
 
-          <div className="rounded-lg border border-ink/8 bg-paper/50 p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Coaching Advice</p>
-                <h3 className="mt-2 font-serif text-3xl font-semibold text-ink">Academic Coaching Summary</h3>
-              </div>
-              <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || academicRecords.length === 0} className="rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
-                {isGeneratingAdvice ? 'Generating...' : 'Generate'}
-              </button>
-            </div>
-            {latestSummary ? (
-              <div className="mt-5 space-y-4">
-                <p className="text-sm leading-7 text-graphite/74">{latestSummary.overallCommentary}</p>
-                <TagList label="Strongest" items={latestSummary.strongestSubjects} />
-                <TagList label="Priority themes" items={latestSummary.recurringWeaknesses} />
-                <TagList label="Recommended actions" items={latestSummary.recommendedActions} />
-              </div>
-            ) : (
-              <p className="mt-5 rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
-                Add at least one performance record before generating advice. With limited data, the summary will include a confidence caveat.
-              </p>
-            )}
-          </div>
         </div>
         </div>
 
@@ -2264,6 +2342,18 @@ function MetricCard({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/50">{label}</p>
       <p className="mt-2 truncate text-2xl font-semibold text-ink">{value}</p>
     </div>
+  );
+}
+
+function FormField({ label, hint, className = '', children }: { label: string; hint?: string; className?: string; children: ReactNode }) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="flex min-h-5 items-baseline justify-between gap-3 text-xs font-semibold text-graphite/70">
+        <span>{label}</span>
+        {hint ? <span className="font-normal text-graphite/55">{hint}</span> : null}
+      </span>
+      <span className="mt-2 block">{children}</span>
+    </label>
   );
 }
 
@@ -2898,7 +2988,7 @@ function buildProgressAtAGlance(records: PerformanceRecord[]) {
   ];
 }
 
-function buildProgressRecommendations(records: PerformanceRecord[], tutorLessons: TutorLesson[], tutorAttempts: TutorAttempt[], tutorMemory: TutorMemory, documents: ResearchDocument[], subject: string) {
+export function buildProgressRecommendations(records: PerformanceRecord[], tutorLessons: TutorLesson[], tutorAttempts: TutorAttempt[], tutorMemory: TutorMemory, documents: ResearchDocument[], subject: string) {
   if (records.length === 0) {
     const readableSources = documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed').length;
     return [
@@ -3482,21 +3572,19 @@ function ChipCloud({ items }: { items: string[] }) {
   );
 }
 
-function TimelineRow({ event, compact = false }: { event: TimelineEvent; compact?: boolean }) {
+function TimelineRow({ event, compact = false, showContext = true }: { event: TimelineEvent; compact?: boolean; showContext?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const hasSubjectRecords = event.subjectRecords.length > 0;
   return (
     <article className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
-            {event.academicYear} / {event.term} / {event.type}
-          </p>
+          {showContext ? <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{event.academicYear} / {event.term} / {event.type}</p> : <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{event.type}</p>}
           <h3 className={`${compact ? 'mt-2 text-sm' : 'mt-3 text-lg'} font-semibold text-ink`}>{event.title}</h3>
           <p className={`${compact ? 'line-clamp-2' : ''} mt-2 text-sm leading-6 text-graphite/72`}>{event.detail}</p>
           {!compact && event.subjects.length ? <div className="mt-3"><ChipCloud items={event.subjects.slice(0, 6)} /></div> : null}
         </div>
-        <time className="shrink-0 whitespace-pre-line rounded-full bg-paper px-3 py-1 text-xs font-semibold text-graphite/70">{event.date || 'Undated'}</time>
+        {showContext ? <time className="shrink-0 whitespace-pre-line rounded-full bg-paper px-3 py-1 text-xs font-semibold text-graphite/70">{event.date || 'Undated'}</time> : null}
       </div>
       {!compact && hasSubjectRecords ? (
         <>
@@ -3567,7 +3655,7 @@ function TimelinePage({ events }: { events: TimelineEvent[] }) {
                         <time className="pt-4 text-sm font-semibold text-graphite/70">{date}</time>
                         <div className="space-y-3">
                           {dateEvents.map((event) => (
-                            <TimelineRow key={event.id} event={event} />
+                            <TimelineRow key={event.id} event={event} showContext={false} />
                           ))}
                         </div>
                       </div>
@@ -3645,6 +3733,18 @@ function Upload({
     }
   }
 
+  function logExtractionMetrics(analysis?: DocumentMetadataAnalysisResponse) {
+    if (!import.meta.env.DEV || !analysis) return;
+    const quality = analysis.extractionQuality;
+    const subjects = quality?.subjectsFound ?? analysis.performanceRecords.length;
+    const comments = quality?.commentsLinked ?? analysis.performanceRecords.filter((record) => record.teacherComment).length;
+    console.debug(`[Extraction] ${subjects} subjects found`);
+    console.debug(`[Extraction] ${comments} comments linked`);
+    console.debug(`[Extraction] ${quality?.duplicateRows ?? analysis.extractionDiagnostics?.duplicateRows ?? 0} duplicate rows`);
+    console.debug(`[Extraction] Confidence ${quality?.confidence ?? analysis.confidence ?? 'Low'}`, quality?.confidenceReasons ?? analysis.extractionDiagnostics?.confidenceReasons ?? []);
+    if (analysis.extractionTimings) console.debug('[Extraction] Timings', analysis.extractionTimings);
+  }
+
   function getStageErrorMessage(stage: UploadStage, cleanName: string, error: unknown) {
     const message = error instanceof Error ? error.message : '';
 
@@ -3680,7 +3780,7 @@ function Upload({
     };
   }
 
-  async function analyseDocumentMetadataIfPossible(document: ResearchDocument) {
+  async function analyseDocumentMetadataIfPossible(document: ResearchDocument, pipelineTimings?: { ocrMs?: number }) {
     if (!document.extractedText?.trim()) return undefined;
 
     try {
@@ -3688,6 +3788,7 @@ function Upload({
         title: document.title,
         text: document.extractedText,
         uploadMetadata: buildUploadMetadata(metadataDraft),
+        pipelineTimings,
       });
     } catch (error) {
       logUploadError('saving', error);
@@ -3799,13 +3900,13 @@ function Upload({
   async function analyseUploadedPerformanceIfRelevant(document: ResearchDocument, metadataAnalysis?: DocumentMetadataAnalysisResponse) {
     const metadata = getDocumentMetadata(document, performanceRecords);
     const category = metadata.documentCategory ?? '';
-    const canAffectProgress = ['Report', 'Exam result', 'Mark sheet'].includes(category);
+    const canAffectProgress = canDocumentCategoryAffectAcademicProgress(category);
 
     if (!document.extractedText?.trim() || !canAffectProgress) return 0;
 
-    const subjects = safeStringArray(metadata.subjects);
+    logExtractionMetrics(metadataAnalysis);
 
-    if (metadata.ignoreInstrumentalMusic && subjects.length > 0 && subjects.every(isMusicOrPerformanceSubject)) {
+    if (shouldTreatAsInstrumentalPerformanceDocument(metadata)) {
       return 0;
     }
 
@@ -3817,15 +3918,15 @@ function Upload({
         .map((record) => createRecordFromAnalysis(record, document.id, document.title, metadata))
         .filter((record): record is PerformanceRecord => Boolean(record))
         .map((record) =>
-          record.excludeFromAcademicAnalysis || (metadata.ignoreInstrumentalMusic && (record.domain !== 'academic' || isMusicOrPerformanceSubject(record.subject)))
-            ? { ...record, domain: record.domain ?? 'music', excludeFromAcademicAnalysis: true }
+          record.excludeFromAcademicAnalysis || shouldExcludeRecordForInstrumentalPreference(record, metadata)
+            ? { ...record, domain: record.domain ?? 'performance', excludeFromAcademicAnalysis: true }
             : record,
         );
 
       if (newRecords.length === 0) return 0;
 
       setState((current) => {
-        const performanceRecords = [...newRecords, ...current.performanceRecords];
+        const performanceRecords = [...newRecords, ...current.performanceRecords.filter((record) => record.sourceDocumentId !== document.id)];
         return withDerivedCollections({
           ...current,
           performanceRecords,
@@ -3846,6 +3947,12 @@ function Upload({
           ),
         });
       });
+
+      if (import.meta.env.DEV) {
+        const academicCreated = newRecords.filter(isAcademicPerformanceRecord).length;
+        console.debug(`[Extraction] ${academicCreated} academic records created`);
+        console.debug('[Extraction] Progress updated');
+      }
 
       return newRecords.filter(isAcademicPerformanceRecord).length;
     } catch (error) {
@@ -4138,7 +4245,10 @@ function Upload({
       uploadStage = 'extracting';
       logUploadStage(uploadStage, { fileName: cleanName });
       setNote('Extracting text...');
+      const ocrStartedAt = performance.now();
       const extracted = await extractImageText(file);
+      const ocrMs = performance.now() - ocrStartedAt;
+      if (import.meta.env.DEV) console.debug('[Extraction] OCR Complete', { milliseconds: Math.round(ocrMs), confidence: extracted.confidence });
 
       setState((current) => ({
         ...current,
@@ -4175,7 +4285,7 @@ function Upload({
         chunkIds: chunks.map((chunk) => chunk.id),
         originalFile,
       });
-      const metadataAnalysis = await analyseDocumentMetadataIfPossible(readyDocument);
+      const metadataAnalysis = await analyseDocumentMetadataIfPossible(readyDocument, { ocrMs });
       readyDocument = applyAnalysedDocument(readyDocument, metadataAnalysis);
 
       setState((current) => withDerivedCollections({
@@ -4348,8 +4458,8 @@ function Upload({
           <section className="rounded-lg bg-white p-5 shadow-sm">
             <h3 className="mt-2 text-xl font-semibold text-ink">Choose document</h3>
             <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-              <input value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="Optional display name" className="min-w-0 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4" />
-              <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-graphite shadow-sm hover:text-ink">
+              <FormField label="Display name" hint="Optional"><input value={fileName} onChange={(event) => setFileName(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4" /></FormField>
+              <label className="inline-flex cursor-pointer items-center justify-center gap-2 self-end rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-graphite shadow-sm hover:text-ink">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -4362,7 +4472,7 @@ function Upload({
                     setFileName(file?.name ?? fileName);
                   }}
                 />
-                Choose File
+                Choose file
               </label>
             </div>
             {selectedFile ? <p className="mt-4 text-sm font-medium text-ink">{selectedFile.name}</p> : null}
@@ -4372,15 +4482,13 @@ function Upload({
             <section className="rounded-lg bg-white p-5 shadow-sm">
               <h3 className="mt-2 text-xl font-semibold text-ink">Academic time</h3>
               <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px]">
-                <input value={metadataDraft.academicYear} onChange={(event) => updateUploadMetadata('academicYear', event.target.value)} placeholder="Academic year, e.g. 2025-2026" className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
-                <select value={metadataDraft.term} onChange={(event) => updateUploadMetadata('term', event.target.value as AcademicTerm)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
-                  {academicTerms.map((term) => <option key={term} value={term}>{term}</option>)}
-                </select>
-                <input value={metadataDraft.linkedAssessmentName} onChange={(event) => updateUploadMetadata('linkedAssessmentName', event.target.value)} placeholder="Assessment / report name, e.g. Michaelmas Report" className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4 sm:col-span-2" />
+                <FormField label="Academic year" hint="e.g. 2025-2026"><input value={metadataDraft.academicYear} onChange={(event) => updateUploadMetadata('academicYear', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
+                <FormField label="Term"><select value={metadataDraft.term} onChange={(event) => updateUploadMetadata('term', event.target.value as AcademicTerm)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">{academicTerms.map((term) => <option key={term} value={term}>{term}</option>)}</select></FormField>
+                <FormField label="Assessment or report name" hint="e.g. Michaelmas Report" className="sm:col-span-2"><input value={metadataDraft.linkedAssessmentName} onChange={(event) => updateUploadMetadata('linkedAssessmentName', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
               </div>
               <details className="mt-3 rounded-lg border border-ink/8 bg-paper/50 p-3">
                 <summary className="cursor-pointer text-sm font-semibold text-ink">Add exact date (optional)</summary>
-                <input type="date" value={metadataDraft.sourceDate} onChange={(event) => updateUploadMetadata('sourceDate', event.target.value)} className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" />
+                <FormField label="Exact date" className="mt-3"><input type="date" value={metadataDraft.sourceDate} onChange={(event) => updateUploadMetadata('sourceDate', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
               </details>
             </section>
           ) : null}
@@ -4389,9 +4497,7 @@ function Upload({
             <section className="rounded-lg bg-white p-5 shadow-sm">
               <h3 className="mt-2 text-xl font-semibold text-ink">Document type</h3>
               <div className="mt-4 grid gap-3">
-                <select value={metadataDraft.documentCategory} onChange={(event) => updateUploadMetadata('documentCategory', event.target.value as DocumentCategory)} className="rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">
-                  {documentCategories.map((category) => <option key={category} value={category}>{category}</option>)}
-                </select>
+                <FormField label="Type"><select value={metadataDraft.documentCategory} onChange={(event) => updateUploadMetadata('documentCategory', event.target.value as DocumentCategory)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">{documentCategories.map((category) => <option key={category} value={category}>{category}</option>)}</select></FormField>
               </div>
             </section>
           ) : null}
@@ -4401,15 +4507,15 @@ function Upload({
               <h3 className="mt-2 text-xl font-semibold text-ink">Subjects</h3>
               <div className="mt-4 flex flex-wrap gap-2">
                 {defaultSubjectOptions.map((subject) => (
-                  <button key={subject} type="button" onClick={() => toggleUploadSubject(subject)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${metadataDraft.subjectsIncluded.includes(subject) ? 'border-ink bg-ink text-white' : 'border-ink/10 bg-paper text-graphite/75'}`}>
+                  <button key={subject} type="button" aria-pressed={metadataDraft.subjectsIncluded.includes(subject)} onClick={() => toggleUploadSubject(subject)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${metadataDraft.subjectsIncluded.includes(subject) ? 'border-ink bg-ink text-white' : 'border-ink/10 bg-paper text-graphite/75'}`}>
                     {subject}
                   </button>
                 ))}
               </div>
-              <textarea value={metadataDraft.customSubjects} onChange={(event) => updateUploadMetadata('customSubjects', event.target.value)} rows={2} placeholder="Other subjects" className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
+              <FormField label="Other subjects" hint="Optional" className="mt-3"><textarea value={metadataDraft.customSubjects} onChange={(event) => updateUploadMetadata('customSubjects', event.target.value)} rows={2} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
               <label className="mt-3 flex gap-3 rounded-lg bg-paper/60 p-3 text-sm leading-6 text-graphite/75">
                 <input type="checkbox" checked={metadataDraft.ignoreInstrumentalMusic} onChange={(event) => updateUploadMetadata('ignoreInstrumentalMusic', event.target.checked)} className="mt-1 size-4 shrink-0 accent-ink" />
-                <span>Keep instrumental music out of academic progress trends.</span>
+                <span>Keep instrumental or performance lesson content out of academic progress.</span>
               </label>
             </section>
           ) : null}
@@ -4418,9 +4524,9 @@ function Upload({
             <section className="rounded-lg bg-white p-5 shadow-sm">
               <button type="button" onClick={handleUpload} disabled={isReading || !canUpload} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
                 <FilePlus2 size={18} />
-                {isReading ? 'Importing...' : 'Import Document'}
+                {isReading ? 'Importing...' : 'Import document'}
               </button>
-              {isReading || note !== 'Choose a document to add to this workspace.' ? <p className="mt-4 text-center text-sm font-medium text-graphite/74">{note}</p> : null}
+              {isReading || note !== 'Choose a document to add to this workspace.' ? <p role="status" className="mt-4 text-center text-sm font-medium text-graphite/74">{note}</p> : null}
               {failedUpload ? (
                 <button
                   type="button"
@@ -4682,7 +4788,7 @@ function ResearchChat({
       await deleteRemoteRowsIfNeeded({ chat_messages: [message.id] }, storageStatus, userId);
       setState((current) => ({ ...current, chat: current.chat.filter((item) => item.id !== message.id) }));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? `Message was not deleted: ${error.message}` : 'Message was not deleted because Supabase failed.');
+      setErrorMessage(error instanceof Error ? `Message was not deleted: ${error.message}` : 'Message was not deleted because cloud sync failed.');
     }
   }
 
@@ -4691,7 +4797,7 @@ function ResearchChat({
       await deleteRemoteRowsIfNeeded({ chat_messages: chat.map((message) => message.id) }, storageStatus, userId);
       setState((current) => ({ ...current, chat: [] }));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? `Chat history was not cleared: ${error.message}` : 'Chat history was not cleared because Supabase failed.');
+      setErrorMessage(error instanceof Error ? `Chat history was not cleared: ${error.message}` : 'Chat history was not cleared because cloud sync failed.');
     }
   }
 
@@ -4781,6 +4887,7 @@ function ResearchChat({
           ) : null}
           <div className="flex gap-3">
             <input
+              aria-label="Ask your workspace"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               onKeyDown={(event) => {
