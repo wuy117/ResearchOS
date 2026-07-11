@@ -238,6 +238,21 @@ export type PerformanceSummary = {
   recurringWeaknesses: string[];
   recommendedActions: string[];
   overallCommentary: string;
+  recordIds?: string[];
+  teacherThemes?: Array<{
+    theme: string;
+    classification: 'Strength' | 'Priority' | 'Improving';
+    summary: string;
+    why: string;
+    evidence: string[];
+    subjects: string[];
+  }>;
+  coachingRecommendations?: Array<{
+    title: string;
+    action: string;
+    why: string;
+    evidence: string;
+  }>;
 };
 
 export type TutorDifficulty = 'Foundation' | 'Core' | 'Stretch';

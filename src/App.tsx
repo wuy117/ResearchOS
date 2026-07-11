@@ -7,11 +7,8 @@ import {
   Edit3,
   FilePlus2,
   LibraryBig,
-  Lightbulb,
-  LineChart,
   Network,
   MessageSquareText,
-  Music2,
   Trash2,
   Send,
   Sparkles,
@@ -29,7 +26,7 @@ import { useResearchState } from './hooks/useResearchState';
 import { isSupabaseEnabled } from './lib/supabase';
 import { deleteSupabaseRows, saveChunks, saveDocument, saveState } from './services/researchStore';
 import type { AcademicTerm, AssessmentType, ChatMessage, DocumentCategory, DocumentChunk, DocumentMetadata, ExtractionConfidence, ExtractionFieldConfidence, ExtractionSummary, MapEdge, MapNode, OriginalDocumentSnapshot, PageId, PerformanceDomain, PerformanceRecord, PerformanceSummary, ResearchDocument, ResearchState, TutorAttempt, TutorLesson, TutorMemory } from './types/research';
-import { analyseDocumentMetadata, analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, setApiAccessTokenProvider, type DocumentMetadataAnalysisResponse, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
+import { analyseDocumentMetadata, analysePerformanceDocument, askResearchChat, embedChunks, generatePerformanceAdvice, semanticSearch, setApiAccessTokenProvider, type DocumentMetadataAnalysisResponse, type PerformanceAdviceResponse, type PerformanceAnalysisRecord, type SemanticSearchMatch } from './utils/api';
 import { chunkText, extractTopics, getWordCount, summarizeText } from './utils/chunkText';
 import { extractDocxText } from './utils/extractDocxText';
 import { extractImageText, isSupportedImageFile } from './utils/extractImageText';
@@ -1136,7 +1133,7 @@ async function deleteRemoteRowsIfNeeded(rows: Parameters<typeof deleteSupabaseRo
   await deleteSupabaseRows(rows, { userId });
 }
 
-function buildPerformanceSummary(records: PerformanceRecord[], advice: Omit<PerformanceSummary, 'id' | 'generatedAt'>): PerformanceSummary {
+function buildPerformanceSummary(records: PerformanceRecord[], advice: PerformanceAdviceResponse): PerformanceSummary {
   return {
     id: `performance-summary-${Date.now()}`,
     generatedAt: new Date().toISOString(),
@@ -1148,6 +1145,9 @@ function buildPerformanceSummary(records: PerformanceRecord[], advice: Omit<Perf
     recurringStrengths: advice.recurringStrengths,
     recurringWeaknesses: advice.recurringWeaknesses,
     recommendedActions: advice.recommendedActions,
+    recordIds: records.map((record) => record.id).sort(),
+    teacherThemes: advice.teacherThemes,
+    coachingRecommendations: advice.coachingRecommendations,
     overallCommentary:
       advice.overallCommentary ||
       `Based on the available ${records.length} performance record${records.length === 1 ? '' : 's'}, more data may be needed before drawing firm conclusions.`,
@@ -1809,17 +1809,18 @@ function PerformancePage({
     [availableRecords, customEnd, customStart, selectedPeriod, selectedSubject],
   );
   const sortedRecords = useMemo(() => sortRecordsByAssessmentDate(filteredRecords), [filteredRecords]);
+  const matchingSummary = useMemo(() => {
+    const recordKey = filteredRecords.map((record) => record.id).sort().join('|');
+    return summaries.find((summary) => summary.recordIds?.slice().sort().join('|') === recordKey);
+  }, [filteredRecords, summaries]);
   const learningSummary = useMemo(
-    () => buildLearningSummary(filteredRecords, selectedSubject, summaries[0], tutorLessons, tutorAttempts, tutorMemory),
-    [filteredRecords, selectedSubject, summaries, tutorAttempts, tutorLessons, tutorMemory],
+    () => buildLearningSummary(filteredRecords, selectedSubject, matchingSummary),
+    [filteredRecords, matchingSummary, selectedSubject],
   );
-  const atAGlance = useMemo(() => buildProgressAtAGlance(filteredRecords), [filteredRecords]);
-  const teacherInsights = useMemo(() => buildTeacherInsights(filteredRecords), [filteredRecords]);
-  const repeatedThemes = useMemo(() => buildRepeatedThemes(filteredRecords), [filteredRecords]);
-  const hasSupportingEvidence = useMemo(() => getSupportingEvidenceItems(filteredRecords, selectedSubject).length > 0, [filteredRecords, selectedSubject]);
+  const teacherInsights = useMemo(() => buildTeacherInsights(filteredRecords, matchingSummary?.teacherThemes), [filteredRecords, matchingSummary?.teacherThemes]);
   const recommendations = useMemo(
-    () => buildProgressRecommendations(filteredRecords, tutorLessons, tutorAttempts, tutorMemory, documents, selectedSubject),
-    [documents, filteredRecords, selectedSubject, tutorAttempts, tutorLessons, tutorMemory],
+    () => buildProgressRecommendations(filteredRecords, tutorLessons, tutorAttempts, tutorMemory, documents, selectedSubject, matchingSummary?.coachingRecommendations),
+    [documents, filteredRecords, matchingSummary?.coachingRecommendations, selectedSubject, tutorAttempts, tutorLessons, tutorMemory],
   );
   const analysableDocuments = documents.filter((document) => document.extractedText?.trim() && (document.status === 'Ready' || document.status === 'Indexed'));
   const computedPercentage = (() => {
@@ -2077,14 +2078,14 @@ function PerformancePage({
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-10">
-      <SectionHeader eyebrow="Progress" title="Learning progress" copy="Results, teacher feedback, recurring themes, and practical next steps in one place." />
+    <div className="mx-auto max-w-6xl space-y-8">
+      <SectionHeader eyebrow="Progress" title="Your learning, clearly explained" copy="A tutor's view of what is going well, what has changed, what teachers repeat, and what to do next." />
 
-      {records.length > 0 ? <div className="rounded-lg bg-white p-4 shadow-sm">
+      {records.length > 0 ? <div className="border-y border-ink/[0.06] py-5">
         <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
-          <label className="text-sm font-semibold text-ink">
-            Subject
-            <select value={selectedSubject} onChange={(event) => setSelectedSubject(event.target.value)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm font-normal outline-none ring-ink/10 focus:ring-4">
+          <label className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
+            Focus
+            <select value={selectedSubject} onChange={(event) => setSelectedSubject(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-ink/[0.08] bg-white px-3 text-sm font-medium normal-case tracking-normal text-ink shadow-sm outline-none ring-ink/10 focus:ring-4">
               {subjectOptions.map((subject) => (
                 <option key={subject} value={subject}>
                   {subject}
@@ -2093,9 +2094,9 @@ function PerformancePage({
               {!subjectOptions.includes('Music') ? <option value="Music">Music</option> : null}
             </select>
           </label>
-          <label className="text-sm font-semibold text-ink">
-            Time period
-            <select value={selectedPeriod} onChange={(event) => setSelectedPeriod(event.target.value as ProgressPeriod)} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm font-normal outline-none ring-ink/10 focus:ring-4">
+          <label className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
+            Period
+            <select value={selectedPeriod} onChange={(event) => setSelectedPeriod(event.target.value as ProgressPeriod)} className="mt-2 h-11 w-full rounded-lg border border-ink/[0.08] bg-white px-3 text-sm font-medium normal-case tracking-normal text-ink shadow-sm outline-none ring-ink/10 focus:ring-4">
               {progressPeriods.map((period) => (
                 <option key={period} value={period}>
                   {period}
@@ -2103,8 +2104,8 @@ function PerformancePage({
               ))}
             </select>
           </label>
-          <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || filteredRecords.filter(isAcademicPerformanceRecord).length === 0} className="self-end rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
-            {isGeneratingAdvice ? 'Updating…' : 'Refresh summary'}
+          <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || filteredRecords.filter(isAcademicPerformanceRecord).length === 0} className="h-11 self-end rounded-lg bg-ink px-4 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+            {isGeneratingAdvice ? 'Reading reports…' : 'Refresh tutor view'}
           </button>
         </div>
         {selectedPeriod === 'Custom Range' ? (
@@ -2125,93 +2126,58 @@ function PerformancePage({
 
       {records.length > 0 ? (
         <>
-      <section className="rounded-lg bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Learning summary</p>
-        <div className="mt-4 max-w-4xl">
-          <p className="text-sm font-semibold text-graphite/62">{selectedSubject}</p>
-          <h3 className="mt-2 font-serif text-3xl font-semibold leading-tight text-ink">{learningSummary.headline}</h3>
-          <p className="mt-4 text-base leading-8 text-graphite/78">{learningSummary.body}</p>
-          <p className="mt-3 text-base font-semibold leading-8 text-ink">{learningSummary.nextAction}</p>
-        </div>
-        <p className="mt-5 border-t border-ink/6 pt-4 text-sm leading-6 text-graphite/62">Based on saved reports, teacher feedback, results, and Tutor history.</p>
-      </section>
+          <section className="rounded-xl bg-white px-6 py-7 shadow-[0_18px_48px_rgba(43,40,35,0.06)] ring-1 ring-ink/[0.045] sm:px-8 sm:py-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brass">How am I doing?</p>
+            <div className="mt-4 max-w-4xl">
+              <p className="text-sm font-semibold text-graphite/58">{selectedSubject} · {selectedPeriod}</p>
+              <h2 className="mt-2 font-serif text-3xl font-semibold leading-tight text-ink sm:text-4xl">{learningSummary.headline}</h2>
+              <p className="mt-4 text-base leading-8 text-graphite/76 sm:text-lg">{learningSummary.body}</p>
+            </div>
+          </section>
 
-      <section className="rounded-lg bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">At a glance</p>
-        <div className="mt-5 grid gap-4 lg:grid-cols-4">
-          {atAGlance.map((item) => (
-            <article key={item.label} className="rounded-lg border border-ink/8 bg-paper/55 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{item.label}</p>
-              <h3 className="mt-2 text-lg font-semibold leading-6 text-ink">{item.value}</h3>
-              <p className="mt-2 text-sm leading-6 text-graphite/72">{item.reason}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+          <section className="border-t border-ink/[0.06] pt-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brass">What changed?</p>
+            <TrendChart records={sortedRecords} documents={documents} selectedSubject={selectedSubject} storyMode />
+          </section>
 
-      <section className="rounded-lg bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
-          <LineChart size={15} />
-          Performance trend
-        </div>
-        <TrendChart records={sortedRecords} documents={documents} selectedSubject={selectedSubject} />
-      </section>
+          <section className="border-t border-ink/[0.06] pt-8">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brass">What do teachers keep telling me?</p>
+              <h2 className="mt-3 font-serif text-2xl font-semibold text-ink sm:text-3xl">The messages worth carrying into the next piece of work.</h2>
+            </div>
+            {teacherInsights.length ? (
+              <div className="mt-6 divide-y divide-ink/[0.06]">
+                {teacherInsights.slice(0, 3).map((insight) => <TeacherInsightCard key={`${insight.theme}-${insight.classification}`} insight={insight} />)}
+              </div>
+            ) : (
+              <p className="mt-5 rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/70">There is not enough written teacher feedback in this view to identify a repeated message yet.</p>
+            )}
+          </section>
 
-      <section className="rounded-lg bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Teacher feedback</p>
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          {teacherInsights.length ? (
-            teacherInsights.map((insight) => <TeacherInsightCard key={`${insight.theme}-${insight.classification}`} insight={insight} />)
-          ) : !repeatedThemes.length ? (
-            <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70 lg:col-span-3">No recurring teacher feedback yet.</p>
-          ) : null}
-        </div>
-        {repeatedThemes.length ? <div className="mt-6 border-t border-ink/6 pt-5">
-          <p className="text-sm font-semibold text-ink">Repeated across reports</p>
-          <div className="mt-4 grid gap-4 lg:grid-cols-3">
-            {repeatedThemes.map((theme) => <TeacherInsightCard key={`${theme.theme}-${theme.classification}`} insight={theme} compact />)}
-          </div>
-        </div> : null}
-      </section>
-
-      <section className="rounded-lg bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
-          <Lightbulb size={15} />
-          Recommendations
-        </div>
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          {recommendations.map((recommendation, index) => (
-            <article key={recommendation.title} className="rounded-lg border border-ink/8 bg-paper/60 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Action {index + 1}</p>
-              <h3 className="mt-2 text-lg font-semibold text-ink">{recommendation.title}</h3>
-              <p className="mt-3 text-sm leading-7 text-graphite/72">{recommendation.reason}</p>
-              <p className="mt-3 text-xs font-semibold text-graphite/55">{recommendation.evidence}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      {hasSupportingEvidence ? (
-        <section className="rounded-lg bg-white p-6 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Supporting Evidence</p>
-          <SupportingEvidence records={filteredRecords} selectedSubject={selectedSubject} />
-        </section>
-      ) : null}
-
-      {musicRecords.length ? <section className="rounded-lg bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
-          <Music2 size={15} />
-          Instrumental and performance records
-        </div>
-        <p className="mt-3 text-sm leading-7 text-graphite/72">
-          Progress keeps GCSE Music, appraising, composition, coursework, listening, set works, and marked Music Theory with academic subjects. Instrumental lessons, graded performance exams, and ensemble feedback stay separate here.
-        </p>
-      </section> : null}
+          <section className="border-t border-ink/[0.06] pt-8">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brass">What should I do next?</p>
+              <h2 className="mt-3 font-serif text-2xl font-semibold text-ink sm:text-3xl">A short plan, in priority order.</h2>
+            </div>
+            <div className="mt-6 divide-y divide-ink/[0.06] border-y border-ink/[0.06]">
+              {recommendations.map((recommendation, index) => (
+                <article key={recommendation.title} className="grid gap-4 py-6 sm:grid-cols-[42px_1fr]">
+                  <span className="font-serif text-2xl text-brass">{index + 1}</span>
+                  <div className="max-w-4xl">
+                    <h3 className="text-lg font-semibold text-ink">{recommendation.title}</h3>
+                    <p className="mt-2 text-sm leading-7 text-graphite/74">{recommendation.action}</p>
+                    <p className="mt-3 text-sm leading-7 text-graphite/68"><span className="font-semibold text-ink">Why this now:</span> {recommendation.why}</p>
+                    {recommendation.evidence ? <p className="mt-2 border-l-2 border-brass/35 pl-3 text-sm italic leading-6 text-graphite/62">{recommendation.evidence}</p> : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
         </>
       ) : null}
 
-      <details className="rounded-lg bg-white p-6 shadow-sm">
-        <summary className="cursor-pointer text-sm font-semibold text-ink">{records.length ? 'Manage progress data' : 'Add a progress record'}</summary>
+      <details className="border-t border-ink/[0.06] pt-5">
+        <summary className="cursor-pointer text-sm font-semibold text-graphite/68">{records.length ? 'Manage the evidence behind this view' : 'Add a progress record'}</summary>
         <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <form onSubmit={handleManualSubmit} className="rounded-lg border border-ink/8 bg-paper/50 p-5">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
@@ -2655,21 +2621,56 @@ function topEvidenceTerms(records: PerformanceRecord[], field: 'strengths' | 'we
   return [...byTerm.values()].sort((a, b) => b.records.length - a.records.length || a.term.localeCompare(b.term));
 }
 
-const teacherThemePatterns = [
-  { theme: 'Calculation Precision', why: 'It protects marks in science and maths by reducing avoidable errors.', pattern: /\b(careless arithmetic|calculation|calculations|numeric|numerical|arithmetic|check calculations|checking calculations|significant figures|sig\.? figs?|precision|precise|accuracy|accurate|rounding|units?)\b/i },
-  { theme: 'Engagement', why: 'Sustained attention and classroom participation make later independent study easier.', pattern: /\b(engagement|engaged|enthusiasm|interested|attentive|excellent effort|effort|hard[- ]working|works hard|diligent|classroom attitude|participation|contributes|contribution|discussion|oral)\b/i },
-  { theme: 'Analytical Writing', why: 'Clear analysis, justification, and evidence make written answers more persuasive.', pattern: /\b(analyse|analyze|analysis|analytical|justify|support arguments?|evidence|evaluation|evaluate|evaluating|judgement|judgment|interpret|essay|written expression|writing|written work|explain|explanation)\b/i },
-  { theme: 'Exam Technique', why: 'Good technique turns knowledge into marks under time pressure.', pattern: /\b(exam technique|timing|time management|question technique|marks|past paper|assessment technique|exam conditions|answer the question)\b/i },
-  { theme: 'Organisation', why: 'Structure and preparation reduce cognitive load before assessments.', pattern: /\b(organisation|organization|organised|organized|structure|structured|preparation|prepared|notes|revision plan|planning)\b/i },
-  { theme: 'Confidence', why: 'Confidence helps a student attempt harder questions and show what they know.', pattern: /\b(confidence|confident|self-belief|hesitant|hesitancy)\b/i },
-  { theme: 'Independence', why: 'Independent habits make progress less dependent on teacher prompting.', pattern: /\b(independence|independent|initiative|self-directed|extension|challenge)\b/i },
-  { theme: 'Consistency', why: 'Consistent habits make improvement more reliable across subjects and reports.', pattern: /\b(consistency|consistent|consistently|regularly|reliable|steady|maintained)\b/i },
-  { theme: 'Practical Work', why: 'Practical accuracy supports stronger scientific understanding and evidence.', pattern: /\b(practical|experiment|laboratory|lab work|investigation|experimental)\b/i },
-  { theme: 'Vocabulary', why: 'Precise vocabulary helps answers become clearer and more subject-specific.', pattern: /\b(vocabulary|terminology|terms|technical language|keyword|key word)\b/i },
+const teacherThemeConcepts = [
+  {
+    theme: 'Reasoning & Evidence',
+    why: 'Making the reasoning visible helps a teacher reward what you know, not merely the final answer.',
+    phrases: ['justify conclusions', 'conclusions need evidence', 'use supporting evidence', 'evidence selection', 'explain the answer', 'link results to conclusions', 'interpret data', 'analyse ideas', 'evaluate arguments', 'support each point', 'show reasoning', 'draw conclusions'],
+  },
+  {
+    theme: 'Accuracy & Checking',
+    why: 'A reliable checking routine protects marks that understanding alone should already have earned.',
+    phrases: ['check calculations', 'careless arithmetic', 'verify units', 'significant figures', 'numerical accuracy', 'multi step accuracy', 'proofread work', 'avoid small errors', 'show each step', 'precise answers'],
+  },
+  {
+    theme: 'Communication & Structure',
+    why: 'Clear structure and precise language make good ideas easier to follow and harder to misread.',
+    phrases: ['organise writing', 'structure paragraphs', 'clear expression', 'technical vocabulary', 'subject terminology', 'present ideas clearly', 'well organised answer', 'coherent argument'],
+  },
+  {
+    theme: 'Preparation & Exam Craft',
+    why: 'Good preparation turns knowledge into a dependable performance when time and marks are limited.',
+    phrases: ['exam technique', 'manage time', 'answer the question', 'past paper practice', 'revision plan', 'prepare thoroughly', 'plan before writing', 'work under timed conditions'],
+  },
+  {
+    theme: 'Independent Learning',
+    why: 'Independent habits make progress continue between lessons rather than waiting for the next prompt.',
+    phrases: ['work independently', 'show initiative', 'take responsibility', 'respond to challenge', 'seek extension', 'self directed study', 'act on feedback', 'ask useful questions'],
+  },
+  {
+    theme: 'Engagement & Effort',
+    why: 'Sustained attention and purposeful effort make later independent work much easier.',
+    phrases: ['contribute in class', 'sustained effort', 'work diligently', 'participate in discussion', 'stay focused', 'positive attitude', 'engage with learning', 'show enthusiasm'],
+  },
+  {
+    theme: 'Practical & Applied Thinking',
+    why: 'Careful practical thinking connects classroom knowledge to methods, observations, and real evidence.',
+    phrases: ['plan experiments', 'practical work', 'laboratory method', 'investigate results', 'experimental design', 'apply knowledge', 'method and variables', 'organise experiments'],
+  },
+  {
+    theme: 'Confidence & Ambition',
+    why: 'Confidence matters when it leads to attempting harder work and showing the full extent of your understanding.',
+    phrases: ['show confidence', 'attempt harder questions', 'trust own judgement', 'speak with confidence', 'take intellectual risks', 'believe in ability', 'less hesitant'],
+  },
+  {
+    theme: 'Consistency & Follow-through',
+    why: 'Reliable habits make good work repeatable rather than dependent on the day or the subject.',
+    phrases: ['work consistently', 'maintain standards', 'complete homework regularly', 'follow through', 'sustain progress', 'meet deadlines', 'reliable effort', 'apply this every time'],
+  },
 ];
 
 const positiveThemeWords = /\b(strong|excellent|good|very good|impressive|confident|clear|secure|effective|well|praise|praised|pleased|engaged|enthusiastic|consistent|attentive|diligent|thoughtful|successful)\b/i;
-const needsWorkThemeWords = /\b(needs?|should|must|target|focus|improve|develop|work on|weak|weaker|inconsistent|lack|careless|limited|struggle|difficulty|more|further|ensure|avoid|check|remember|accuracy|significant figures)\b/i;
+const needsWorkThemeWords = /\b(needs?|should|must|target|focus|improve|develop|work on|weak|weaker|inconsistent|lack|careless|limited|struggle|difficulty|more|further|ensure|avoid|check|remember|keep|continue|accuracy|significant figures)\b/i;
 const improvementThemeWords = /\b(improved|improving|progress|better|developed|stronger|clearer|increasing|now able|has begun|recent improvement)\b/i;
 
 type CommentThemeMention = {
@@ -2678,11 +2679,13 @@ type CommentThemeMention = {
   kind: 'strength' | 'weakness' | 'improvement';
   record: PerformanceRecord;
   snippet: string;
+  source: 'comment' | 'record';
 };
 
 type TeacherInsight = {
   theme: string;
-  classification: 'Strength' | 'Development' | 'Emerging Improvement';
+  classification: 'Strength' | 'Priority' | 'Improving';
+  summary: string;
   why: string;
   subjects: string[];
   quote?: string;
@@ -2692,7 +2695,7 @@ type TeacherInsight = {
 
 function splitCommentSentences(comment: string) {
   return comment
-    .split(/(?<=[.!?])\s+|\n+/)
+    .split(/(?<=[.!?;])\s+|\n+|\s+but\s+|\s+while\s+/i)
     .map((part) => part.trim())
     .filter(Boolean);
 }
@@ -2709,16 +2712,16 @@ function extractTeacherCommentThemes(records: PerformanceRecord[]) {
   records.forEach((record) => {
     if (!record.teacherComment?.trim()) return;
     splitCommentSentences(record.teacherComment).forEach((sentence) => {
-      teacherThemePatterns.forEach(({ theme, why, pattern }) => {
-        if (!pattern.test(sentence)) return;
+      const concept = inferThemeFromTerm(sentence);
+      if (!concept.matched) return;
         mentions.push({
-          theme,
-          why,
+          theme: concept.theme,
+          why: concept.why,
           kind: classifyThemeSentence(sentence),
           record,
           snippet: sentence.length > 150 ? `${sentence.slice(0, 147)}...` : sentence,
+          source: 'comment',
         });
-      });
     });
   });
   return mentions;
@@ -2731,11 +2734,42 @@ function titleCaseTheme(value: string) {
     .replace(/\w\S*/g, (word) => (word.length <= 2 && word !== word.toLowerCase() ? word : `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`));
 }
 
+const semanticStopWords = new Set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'before', 'by', 'for', 'from', 'in', 'into', 'is', 'it', 'more', 'of', 'on', 'or', 'the', 'their', 'this', 'to', 'with', 'work']);
+
+function semanticStem(value: string) {
+  const stem = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .replace(/ies$/, 'y')
+    .replace(/(ised|ized)$/, 'ize')
+    .replace(/(ing|ed)$/, '')
+    .replace(/s$/, '');
+  return /^organi[sz]e$/.test(stem) ? 'organize' : stem;
+}
+
+function semanticTokens(value: string) {
+  return new Set(value.split(/\s+/).map(semanticStem).filter((token) => token.length > 2 && !semanticStopWords.has(token)));
+}
+
+function semanticPhraseScore(value: string, phrase: string) {
+  const valueTokens = semanticTokens(value);
+  const phraseTokens = semanticTokens(phrase);
+  if (!valueTokens.size || !phraseTokens.size) return 0;
+  const overlap = [...phraseTokens].filter((token) => valueTokens.has(token)).length;
+  const coverage = overlap / phraseTokens.size;
+  const exactPhrase = value.toLowerCase().includes(phrase.toLowerCase()) ? 4 : 0;
+  return exactPhrase + coverage * 3 + (overlap >= 2 ? 1 : 0);
+}
+
 function inferThemeFromTerm(term: string) {
-  const pattern = teacherThemePatterns.find((item) => item.pattern.test(term));
-  return pattern ?? {
+  const ranked = teacherThemeConcepts
+    .map((concept) => ({ ...concept, score: Math.max(...concept.phrases.map((phrase) => semanticPhraseScore(term, phrase))) }))
+    .sort((a, b) => b.score - a.score);
+  const match = ranked[0];
+  return match && match.score >= 2.2 ? { ...match, matched: true } : {
     theme: titleCaseTheme(term),
     why: 'Repeated teacher feedback is worth turning into a deliberate study habit.',
+    matched: false,
   };
 }
 
@@ -2745,9 +2779,15 @@ function insightConfidence(count: number, subjects: string[]) {
   return 'Early';
 }
 
-function buildTeacherInsightGroups(mentions: CommentThemeMention[], explicitItems: Array<{ theme: string; why: string; kind: CommentThemeMention['kind']; record: PerformanceRecord; snippet: string }>) {
-  const grouped = new Map<string, CommentThemeMention[]>();
+function buildTeacherInsightGroups(mentions: CommentThemeMention[], explicitItems: CommentThemeMention[]) {
+  const deduplicated = new Map<string, CommentThemeMention>();
   [...mentions, ...explicitItems].forEach((mention) => {
+    const key = `${mention.theme}|${mention.kind}|${mention.record.id}`;
+    const existing = deduplicated.get(key);
+    if (!existing || (existing.source === 'record' && mention.source === 'comment')) deduplicated.set(key, mention);
+  });
+  const grouped = new Map<string, CommentThemeMention[]>();
+  deduplicated.forEach((mention) => {
     grouped.set(mention.theme, [...(grouped.get(mention.theme) ?? []), mention]);
   });
 
@@ -2758,18 +2798,30 @@ function buildTeacherInsightGroups(mentions: CommentThemeMention[], explicitItem
         weakness: themeMentions.filter((mention) => mention.kind === 'weakness').length,
         improvement: themeMentions.filter((mention) => mention.kind === 'improvement').length,
       };
-      const dominantKind = counts.improvement >= Math.max(counts.strength, counts.weakness)
+      const dominantKind = counts.improvement > Math.max(counts.strength, counts.weakness)
         ? 'improvement'
-        : counts.weakness > counts.strength
+        : counts.weakness > 0
           ? 'weakness'
           : 'strength';
       const subjects = uniqueStrings(themeMentions.map((mention) => mention.record.subject)).slice(0, 4);
+      const classification = dominantKind === 'improvement' ? 'Improving' : dominantKind === 'weakness' ? 'Priority' : 'Strength';
+      const quoteMention = themeMentions.find((mention) => mention.kind === dominantKind && mention.source === 'comment')
+        ?? themeMentions.find((mention) => mention.kind === dominantKind)
+        ?? themeMentions.find((mention) => mention.source === 'comment')
+        ?? themeMentions[0];
       return {
         theme,
-        classification: dominantKind === 'improvement' ? 'Emerging Improvement' : dominantKind === 'weakness' ? 'Development' : 'Strength',
+        classification,
+        summary: counts.strength > 0 && counts.weakness > 0
+          ? `Teachers recognise ${theme.toLowerCase()} in your work, but keep asking you to make it more deliberate and reliable.`
+          : classification === 'Improving'
+          ? `Recent comments suggest that ${theme.toLowerCase()} is becoming more secure.`
+          : classification === 'Priority'
+            ? `Teachers keep returning to ${theme.toLowerCase()} as the habit most likely to improve the next piece of work.`
+            : `Teachers repeatedly recognise ${theme.toLowerCase()} as something worth protecting.`,
         why: themeMentions[0]?.why ?? inferThemeFromTerm(theme).why,
         subjects,
-        quote: themeMentions.find((mention) => mention.snippet)?.snippet,
+        quote: quoteMention?.snippet,
         confidence: insightConfidence(themeMentions.length, subjects),
         count: themeMentions.length,
       } satisfies TeacherInsight;
@@ -2777,130 +2829,42 @@ function buildTeacherInsightGroups(mentions: CommentThemeMention[], explicitItem
     .sort((a, b) => b.count - a.count || a.theme.localeCompare(b.theme));
 }
 
-type EvidenceSignal = {
-  label: string;
-  score: number;
-  stars: string;
-  detail: string;
-};
-
-function scoreToStars(score: number) {
-  const clamped = Math.max(0, Math.min(5, Math.round(score)));
-  return `${clamped}/5`;
-}
-
-function countGradeEvidence(record: PerformanceRecord) {
-  return [record.grade, record.effort, record.attainment, record.predictedGrade, record.targetGrade, record.rank].filter((value) => value?.trim()).length;
-}
-
-function getEvidenceSignals(records: PerformanceRecord[], tutorLessons: TutorLesson[], tutorAttempts: TutorAttempt[], tutorMemory: TutorMemory): EvidenceSignal[] {
-  const snapshots = getReportSnapshots(records);
-  const commentCount = records.filter((record) => record.teacherComment?.trim()).length;
-  const markedRecords = records.filter((record) => getRecordPercentage(record) !== undefined || record.score !== undefined || record.grade?.trim()).length;
-  const gradeRecords = records.filter((record) => countGradeEvidence(record) > 0).length;
-  const themeMentions = ['strengths', 'weaknesses', 'actionPoints'].reduce((total, field) => total + topEvidenceTerms(records, field as 'strengths' | 'weaknesses' | 'actionPoints').reduce((sum, item) => sum + item.records.length, 0), 0);
-  const repeatedThemes = ['strengths', 'weaknesses', 'actionPoints'].reduce((total, field) => total + topEvidenceTerms(records, field as 'strengths' | 'weaknesses' | 'actionPoints').filter((item) => item.records.length > 1).length, 0);
-  const relevantTutorTopics = tutorMemory.topicsStudied.filter((topic) => topic.lessonsCompleted > 0 || topic.attempts > 0).length;
-  const tutorEvidence = tutorLessons.length + tutorAttempts.length + relevantTutorTopics;
-
-  return [
-    {
-      label: 'Comments',
-      score: commentCount >= 5 ? 5 : commentCount >= 3 ? 4 : commentCount >= 2 ? 3 : commentCount === 1 ? 2 : 0,
-      stars: scoreToStars(commentCount >= 5 ? 5 : commentCount >= 3 ? 4 : commentCount >= 2 ? 3 : commentCount === 1 ? 2 : 0),
-      detail: commentCount ? `${commentCount} teacher comment${commentCount === 1 ? '' : 's'}` : 'no teacher comments yet',
-    },
-    {
-      label: 'Marks',
-      score: markedRecords >= 5 ? 5 : markedRecords >= 3 ? 4 : markedRecords >= 2 ? 3 : markedRecords === 1 ? 2 : 0,
-      stars: scoreToStars(markedRecords >= 5 ? 5 : markedRecords >= 3 ? 4 : markedRecords >= 2 ? 3 : markedRecords === 1 ? 2 : 0),
-      detail: markedRecords ? `${markedRecords} marked or graded record${markedRecords === 1 ? '' : 's'}` : 'not needed for comment-led analysis',
-    },
-    {
-      label: 'Targets',
-      score: gradeRecords >= 5 ? 5 : gradeRecords >= 3 ? 4 : gradeRecords >= 2 ? 3 : gradeRecords === 1 ? 2 : 0,
-      stars: scoreToStars(gradeRecords >= 5 ? 5 : gradeRecords >= 3 ? 4 : gradeRecords >= 2 ? 3 : gradeRecords === 1 ? 2 : 0),
-      detail: gradeRecords ? `${gradeRecords} record${gradeRecords === 1 ? '' : 's'} include effort, attainment, rank, target, or predicted grade` : 'no target or grade evidence yet',
-    },
-    {
-      label: 'Timeline',
-      score: snapshots.length >= 5 ? 5 : snapshots.length >= 3 ? 4 : snapshots.length === 2 ? 3 : snapshots.length === 1 ? 2 : 0,
-      stars: scoreToStars(snapshots.length >= 5 ? 5 : snapshots.length >= 3 ? 4 : snapshots.length === 2 ? 3 : snapshots.length === 1 ? 2 : 0),
-      detail: snapshots.length ? `${snapshots.length} report point${snapshots.length === 1 ? '' : 's'} in order` : 'no timeline evidence yet',
-    },
-    {
-      label: 'Themes',
-      score: repeatedThemes >= 4 ? 5 : repeatedThemes >= 2 ? 4 : themeMentions >= 4 ? 3 : themeMentions >= 1 ? 2 : 0,
-      stars: scoreToStars(repeatedThemes >= 4 ? 5 : repeatedThemes >= 2 ? 4 : themeMentions >= 4 ? 3 : themeMentions >= 1 ? 2 : 0),
-      detail: repeatedThemes ? `${repeatedThemes} repeated theme${repeatedThemes === 1 ? '' : 's'}` : themeMentions ? `${themeMentions} one-off theme mention${themeMentions === 1 ? '' : 's'}` : 'no extracted themes yet',
-    },
-    {
-      label: 'Revision',
-      score: tutorEvidence >= 8 ? 5 : tutorEvidence >= 5 ? 4 : tutorEvidence >= 2 ? 3 : tutorEvidence === 1 ? 2 : 0,
-      stars: scoreToStars(tutorEvidence >= 8 ? 5 : tutorEvidence >= 5 ? 4 : tutorEvidence >= 2 ? 3 : tutorEvidence === 1 ? 2 : 0),
-      detail: tutorEvidence ? `${tutorEvidence} Tutor or revision signal${tutorEvidence === 1 ? '' : 's'}` : 'no Tutor history in this view',
-    },
-  ];
-}
-
-function getOverallConfidence(signals: EvidenceSignal[]) {
-  const weighted = signals.reduce((total, signal) => total + signal.score, 0);
-  if (weighted >= 19) return 'High';
-  if (weighted >= 10) return 'Medium';
-  if (weighted >= 4) return 'Early';
-  return 'Thin';
-}
-
 function describeEvidenceScope(records: PerformanceRecord[]) {
   const snapshots = getReportSnapshots(records).length;
-  if (snapshots >= 6) return `${snapshots} reports show a longer-term pattern.`;
-  if (snapshots >= 3) return `${snapshots} reports reveal several repeated observations.`;
-  if (snapshots === 2) return 'Two reports show early patterns, but not yet a long-term trend.';
-  if (snapshots === 1) return 'This first report is a starting point, not yet a trend.';
-  return `${records.length} record${records.length === 1 ? '' : 's'} match this view.`;
+  if (snapshots >= 6) return `Across ${snapshots} reports, the longer pattern is now useful.`;
+  if (snapshots >= 3) return `Across ${snapshots} reports, the repeated messages are becoming clear.`;
+  if (snapshots === 2) return 'With two reports, the direction is beginning to show, though it is still early.';
+  if (snapshots === 1) return 'This first report is a useful starting point; it should be read as a snapshot, not a trend.';
+  return 'There is useful evidence here, but no report-level pattern yet.';
 }
 
-function firstUsefulAction(records: PerformanceRecord[], subject: string) {
-  const insight = buildTeacherInsights(records).find((item) => item.classification === 'Development') ?? buildTeacherInsights(records)[0];
-  const target = insight?.theme ?? topEvidenceTerms(records, 'actionPoints')[0]?.term ?? topEvidenceTerms(records, 'weaknesses')[0]?.term;
-  const subjectName = subject === 'All Subjects' ? insight?.subjects[0] ?? records.find((record) => record.subject)?.subject : subject;
-  if (target && subjectName) return `The clearest next step is to turn ${target.toLowerCase()} feedback into a short checklist for ${subjectName}.`;
-  if (target) return `The clearest next step is to practise ${target.toLowerCase()} before the next assessment.`;
-  const strength = topEvidenceTerms(records, 'strengths')[0]?.term;
-  if (strength && subjectName) return `Keep protecting ${strength.toLowerCase()} in ${subjectName}, then compare it with the next report.`;
-  return 'Add another report to compare changes over time.';
-}
-
-function buildLearningSummary(records: PerformanceRecord[], subject: string, latestSummary: PerformanceSummary | undefined, tutorLessons: TutorLesson[], tutorAttempts: TutorAttempt[], tutorMemory: TutorMemory) {
+function buildLearningSummary(records: PerformanceRecord[], subject: string, latestSummary: PerformanceSummary | undefined) {
   const delta = getTrendDelta(records);
-  const insights = buildTeacherInsights(records);
+  const insights = buildTeacherInsights(records, latestSummary?.teacherThemes);
   const strongestInsight = insights.find((item) => item.classification === 'Strength');
-  const developmentInsight = insights.find((item) => item.classification === 'Development');
-  const improvementInsight = insights.find((item) => item.classification === 'Emerging Improvement');
-  const evidenceSignals = getEvidenceSignals(records, tutorLessons, tutorAttempts, tutorMemory);
-  const confidence = getOverallConfidence(evidenceSignals);
-  const direction = delta === undefined ? (records.length > 1 ? 'Evidence-led' : 'Early observation') : delta > 4 ? 'Appears to be improving' : delta < -4 ? 'Needs attention' : 'Appears steady';
+  const developmentInsight = insights.find((item) => item.classification === 'Priority');
+  const improvementInsight = insights.find((item) => item.classification === 'Improving');
   const headline =
     delta !== undefined
       ? delta > 4
-        ? `Results appear to be improving by ${Math.round(delta)} percentage points.`
+        ? 'You are moving in the right direction.'
         : delta < -4
-          ? `Results have moved down by ${Math.abs(Math.round(delta))} percentage points and need attention.`
-          : 'The marked results look steady, so teacher evidence matters most now.'
+          ? 'The latest results need a focused response.'
+          : 'Your results are steady; the next gain will come from acting on feedback.'
       : insights.length || records.some((record) => record.teacherComment)
-        ? 'Early observations are already visible from teacher evidence.'
-        : 'This view has evidence, but the useful pattern is still emerging.';
+        ? 'Your teachers are already giving you a clear direction.'
+        : 'This is a useful starting point, with more to learn from the next report.';
   const summarySentences = [
     describeEvidenceScope(records),
-    strongestInsight ? `Teachers consistently point to ${strongestInsight.theme.toLowerCase()} as a strength${strongestInsight.subjects.length ? `, especially in ${strongestInsight.subjects.slice(0, 3).join(', ')}` : ''}.` : undefined,
-    developmentInsight ? `The main recurring academic recommendation is ${developmentInsight.theme.toLowerCase()}${developmentInsight.subjects.length ? ` across ${developmentInsight.subjects.slice(0, 3).join(', ')}` : ''}.` : undefined,
-    improvementInsight ? `There are signs of improvement in ${improvementInsight.theme.toLowerCase()}.` : undefined,
+    strongestInsight ? `${strongestInsight.theme} is a strength worth protecting${strongestInsight.subjects.length ? `, particularly in ${strongestInsight.subjects.slice(0, 3).join(', ')}` : ''}.` : undefined,
+    developmentInsight ? `The most useful priority now is ${developmentInsight.theme.toLowerCase()}${developmentInsight.subjects.length ? ` across ${developmentInsight.subjects.slice(0, 3).join(', ')}` : ''}.` : undefined,
+    improvementInsight ? `${improvementInsight.theme} is beginning to improve.` : undefined,
     delta !== undefined
       ? delta > 4
-        ? `Results are moving up by about ${Math.round(delta)} percentage points in same-subject comparisons.`
+        ? `Across like-for-like subject comparisons, the typical rise is about ${Math.round(delta)} points.`
         : delta < -4
-          ? `Results are down by about ${Math.abs(Math.round(delta))} percentage points in same-subject comparisons, so the next review should be targeted.`
-          : 'Results look broadly stable, so teacher feedback is the best guide for what to practise next.'
+          ? `Across like-for-like subject comparisons, the typical fall is about ${Math.abs(Math.round(delta))} points, so the next response should be specific rather than broad.`
+          : 'The marks have not shifted much, so teacher feedback is the best guide to the next improvement.'
       : undefined,
     latestSummary?.overallCommentary && subject === 'All Subjects' ? latestSummary.overallCommentary : undefined,
   ].filter((item): item is string => Boolean(item));
@@ -2908,167 +2872,163 @@ function buildLearningSummary(records: PerformanceRecord[], subject: string, lat
   return {
     headline,
     body: summarySentences.join(' '),
-    nextAction: firstUsefulAction(records, subject),
-    confidence,
-    confidenceSignals: evidenceSignals,
-    direction,
-    source: latestSummary?.overallCommentary && subject === 'All Subjects' ? 'Saved coaching note plus current evidence profile' : 'Filtered records, teacher evidence, marks, targets, timeline, and Tutor history',
   };
 }
 
-function getImprovementSignals(records: PerformanceRecord[]) {
-  const sorted = sortRecordsByAssessmentDate(records);
-  const midpoint = Math.max(1, Math.floor(sorted.length / 2));
-  const earlier = sorted.slice(0, midpoint);
-  const later = sorted.slice(midpoint);
-  const earlierWeaknesses = new Set(topEvidenceTerms(earlier, 'weaknesses').map((item) => item.term.toLowerCase()));
-  const laterStrengths = topEvidenceTerms(later.length ? later : sorted, 'strengths');
-  const movedToStrength = laterStrengths.filter((item) => earlierWeaknesses.has(item.term.toLowerCase())).map((item) => `${item.term} appears to have improved since earlier feedback.`);
-  const explicitImprovement = sorted
-    .filter((record) => /\b(improv|progress|better|stronger|developed|clearer)\b/i.test(record.teacherComment ?? ''))
-    .slice(-3)
-    .map((record) => `${record.subject}: teacher evidence suggests improvement in ${record.title}.`);
-  const delta = getTrendDelta(records);
-  const markSignal = delta !== undefined && delta > 4 ? [`Marks have risen by about ${Math.round(delta)} percentage points in same-subject comparisons.`] : [];
-  return uniqueStrings([...movedToStrength, ...explicitImprovement, ...markSignal]).slice(0, 4);
-}
+export function buildTeacherInsights(records: PerformanceRecord[], savedThemes?: PerformanceSummary['teacherThemes']) {
+  if (savedThemes?.length) {
+    return savedThemes.slice(0, 4).map((theme) => ({
+      theme: theme.theme,
+      classification: theme.classification,
+      summary: theme.summary,
+      why: theme.why,
+      subjects: theme.subjects,
+      quote: theme.evidence[0],
+      confidence: insightConfidence(theme.evidence.length, theme.subjects),
+      count: Math.max(theme.evidence.length, theme.subjects.length, 1),
+    } satisfies TeacherInsight));
+  }
 
-function buildTeacherInsights(records: PerformanceRecord[]) {
   const commentThemes = extractTeacherCommentThemes(records);
   const explicitItems = [
     ...topEvidenceTerms(records, 'strengths').map((item) => {
       const theme = inferThemeFromTerm(item.term);
-      return item.records.map((record) => ({ theme: theme.theme, why: theme.why, kind: 'strength' as const, record, snippet: item.term }));
+      return item.records.map((record) => ({ theme: theme.theme, why: theme.why, kind: 'strength' as const, record, snippet: item.term, source: 'record' as const }));
     }).flat(),
     ...topEvidenceTerms(records, 'weaknesses').map((item) => {
       const theme = inferThemeFromTerm(item.term);
-      return item.records.map((record) => ({ theme: theme.theme, why: theme.why, kind: 'weakness' as const, record, snippet: item.term }));
+      return item.records.map((record) => ({ theme: theme.theme, why: theme.why, kind: 'weakness' as const, record, snippet: item.term, source: 'record' as const }));
     }).flat(),
     ...topEvidenceTerms(records, 'actionPoints').map((item) => {
       const theme = inferThemeFromTerm(item.term);
-      return item.records.map((record) => ({ theme: theme.theme, why: theme.why, kind: 'weakness' as const, record, snippet: item.term }));
+      return item.records.map((record) => ({ theme: theme.theme, why: theme.why, kind: 'weakness' as const, record, snippet: item.term, source: 'record' as const }));
     }).flat(),
   ];
-  return buildTeacherInsightGroups(commentThemes, explicitItems).slice(0, 6);
+  return buildTeacherInsightGroups(commentThemes, explicitItems).slice(0, 4);
 }
 
-function buildRepeatedThemes(records: PerformanceRecord[]) {
-  return buildTeacherInsights(records)
-    .filter((insight) => insight.count > 1 || insight.confidence !== 'Early')
-    .slice(0, 6);
+function getPracticeActionForTheme(theme: string, subjects: string[]) {
+  const subjectText = subjects.length ? ` in ${subjects.slice(0, 2).join(' and ')}` : '';
+  if (/Reasoning|Evidence/i.test(theme)) return `Before submitting the next piece${subjectText}, underline each conclusion and check that the evidence and explanation are both visible.`;
+  if (/Accuracy|Checking/i.test(theme)) return `Reserve the final five minutes${subjectText} for calculations, units, signs, and any answer copied between steps.`;
+  if (/Communication|Structure/i.test(theme)) return `Plan the order of the answer first, then use the final read-through to tighten vocabulary and remove any unclear sentence.`;
+  if (/Preparation|Exam/i.test(theme)) return `Complete one timed question, mark it, and write down the single exam habit to repeat next time.`;
+  if (/Independent/i.test(theme)) return `Choose one follow-up task without waiting for a prompt, then record what you changed after checking the feedback.`;
+  if (/Engagement|Effort/i.test(theme)) return `Set one visible participation or focus goal for the next lesson and review it immediately afterwards.`;
+  if (/Practical|Applied/i.test(theme)) return `For the next practical task, write the method, variables, expected evidence, and conclusion link before starting.`;
+  if (/Confidence|Ambition/i.test(theme)) return `Attempt one question beyond the comfortable level and annotate where your reasoning was secure.`;
+  if (/Consistency|Follow/i.test(theme)) return `Use the same short preparation and checking routine for the next three pieces of work.`;
+  return `Turn this feedback into a three-point checklist and use it before the next piece of work${subjectText}.`;
 }
 
-function buildProgressAtAGlance(records: PerformanceRecord[]) {
-  const marked = records
-    .map((record) => ({ record, percentage: getRecordPercentage(record) }))
-    .filter((item): item is { record: PerformanceRecord; percentage: number } => typeof item.percentage === 'number');
-  const averagesBySubject = Object.entries(getSubjectTrendSeries(records)).map(([subject, points]) => ({
-    subject,
-    latest: points[points.length - 1],
-    average: Math.round(points.reduce((total, point) => total + point.percentage, 0) / points.length),
-  }));
-  const strongest = averagesBySubject.sort((a, b) => b.average - a.average || a.subject.localeCompare(b.subject))[0];
-  const changes = getTrendChanges(records);
-  const biggestImprovement = [...changes].filter((change) => change.delta > 0).sort((a, b) => b.delta - a.delta)[0];
-  const biggestConcern = [...changes].filter((change) => change.delta < 0).sort((a, b) => a.delta - b.delta)[0];
-  const fallbackConcern = marked.sort((a, b) => a.percentage - b.percentage)[0];
-  const insight = buildTeacherInsights(records)[0];
+export function buildProgressRecommendations(
+  records: PerformanceRecord[],
+  tutorLessons: TutorLesson[],
+  tutorAttempts: TutorAttempt[],
+  tutorMemory: TutorMemory,
+  documents: ResearchDocument[],
+  subject: string,
+  savedRecommendations?: PerformanceSummary['coachingRecommendations'],
+) {
+  if (savedRecommendations?.length) return savedRecommendations.slice(0, 3);
 
-  return [
-    {
-      label: 'Strongest Subject',
-      value: strongest ? strongest.subject : 'Still Emerging',
-      reason: strongest ? `Latest evidence averages around ${strongest.average}%.` : 'More marked reports will make this clearer.',
-    },
-    {
-      label: 'Biggest Improvement',
-      value: biggestImprovement ? `${biggestImprovement.subject} +${Math.round(biggestImprovement.delta)}` : 'More Evidence Needed',
-      reason: biggestImprovement ? `${getShortReportAxisLabel(biggestImprovement.from.records[0])} to ${getShortReportAxisLabel(biggestImprovement.to.records[0])}.` : 'Only same-subject reports are compared.',
-    },
-    {
-      label: 'Biggest Concern',
-      value: biggestConcern ? `${biggestConcern.subject} ${Math.round(biggestConcern.delta)}` : fallbackConcern ? fallbackConcern.record.subject : 'No Clear Concern',
-      reason: biggestConcern ? 'This is the largest same-subject fall in the current view.' : fallbackConcern ? `${fallbackConcern.record.title} is the lowest marked result in this view.` : 'Add another report before comparing changes over time.',
-    },
-    {
-      label: 'Recurring Teacher Message',
-      value: insight ? insight.theme : 'More Reports Needed',
-      reason: insight ? `${insight.classification} theme across ${insight.subjects.join(', ') || 'the selected records'}.` : 'Teacher comments will make this more personal.',
-    },
-  ];
-}
-
-export function buildProgressRecommendations(records: PerformanceRecord[], tutorLessons: TutorLesson[], tutorAttempts: TutorAttempt[], tutorMemory: TutorMemory, documents: ResearchDocument[], subject: string) {
   if (records.length === 0) {
     const readableSources = documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed').length;
     return [
       {
-        title: 'Analyse a report',
-        reason: 'Progress becomes useful once Research OS has at least one report, exam result, mark sheet, or teacher comment to reason from.',
+        title: 'Start with one real report',
+        action: 'Choose a recent report or assessment and add it to this view.',
+        why: 'A tutor can give useful early guidance from one report, then compare direction when a second report arrives.',
         evidence: `${readableSources} readable source${readableSources === 1 ? '' : 's'} available for analysis.`,
       },
       {
-        title: 'Add the first assessment record',
-        reason: 'A single report starts the timeline; two reports allow early comparison; later reports make the pattern stronger.',
-        evidence: 'No academic performance records match the current view yet.',
+        title: 'Keep the teacher wording',
+        action: 'Save the comments as well as the marks or grades.',
+        why: 'Teacher wording explains what produced a result and what needs to change next.',
+        evidence: 'No written teacher feedback matches this view yet.',
       },
       {
-        title: 'Capture teacher comments',
-        reason: 'Teacher wording makes the recommendations more specific than marks alone.',
-        evidence: 'Strengths, weaknesses, and action points will appear after a report or manual record is saved.',
+        title: 'Return after the next report',
+        action: 'Compare the same subject again when the next assessment or report is available.',
+        why: 'Change is only meaningful when the page compares like with like.',
+        evidence: 'There is not yet a same-subject comparison.',
       },
     ];
   }
 
   const insights = buildTeacherInsights(records);
-  const development = insights.find((item) => item.classification === 'Development');
-  const improvement = insights.find((item) => item.classification === 'Emerging Improvement');
+  const priorities = insights.filter((item) => item.classification === 'Priority');
+  const improvement = insights.find((item) => item.classification === 'Improving');
   const strength = insights.find((item) => item.classification === 'Strength');
-  const lowest = [...records]
-    .map((record) => ({ record, percentage: getRecordPercentage(record) }))
-    .filter((item): item is { record: PerformanceRecord; percentage: number } => typeof item.percentage === 'number')
-    .sort((a, b) => a.percentage - b.percentage)[0];
   const changes = getTrendChanges(records);
   const decline = [...changes].filter((change) => change.delta < 0).sort((a, b) => a.delta - b.delta)[0];
   const improvementChange = [...changes].filter((change) => change.delta > 0).sort((a, b) => b.delta - a.delta)[0];
   const relevantTutorTopics = tutorMemory.topicsStudied.filter((topic) => subject === 'All Subjects' || topic.topic.toLowerCase().includes(subject.toLowerCase()) || subject.toLowerCase().includes(topic.topic.toLowerCase()));
   const hasTutorPractice = tutorLessons.length + tutorAttempts.length > 0 || relevantTutorTopics.length > 0;
-  const sourceCount = documents.filter((document) => {
-    const metadata = getDocumentMetadata(document, records);
-    return subject === 'All Subjects' || metadata.subjects.includes(subject) || document.title.toLowerCase().includes(subject.toLowerCase());
-  }).length;
-  const reviewTopic = decline?.subject ?? lowest?.record.subject ?? (subject === 'All Subjects' ? records[0]?.subject : subject) ?? 'the selected subject';
-  const developmentTheme = development?.theme ?? topEvidenceTerms(records, 'weaknesses')[0]?.term ?? topEvidenceTerms(records, 'actionPoints')[0]?.term;
+  const recommendations = priorities.slice(0, 2).map((priority) => ({
+    title: priority.theme,
+    action: getPracticeActionForTheme(priority.theme, priority.subjects),
+    why: `${priority.summary} ${priority.why}`,
+    evidence: priority.quote ?? '',
+  }));
 
-  return [
+  if (recommendations.length < 2 && decline) {
+    recommendations.push({
+      title: `Rebuild confidence in ${decline.subject}`,
+      action: `Review the gap between ${getShortReportAxisLabel(decline.from.records[0])} and ${getShortReportAxisLabel(decline.to.records[0])}, then practise the weakest skill before another full paper.`,
+      why: `${decline.subject} moved from ${decline.from.percentage}% to ${decline.to.percentage}%, so a targeted response is more useful than broad revision.`,
+      evidence: `${decline.from.percentage}% to ${decline.to.percentage}% across comparable reports.`,
+    });
+  }
+
+  const protectedTheme = improvement ?? strength;
+  if (protectedTheme) {
+    const matchingImprovementChange = improvementChange && protectedTheme.subjects.includes(improvementChange.subject) ? improvementChange : undefined;
+    recommendations.push({
+      title: protectedTheme.classification === 'Improving' ? `Keep the improvement in ${protectedTheme.theme}` : `Protect ${protectedTheme.theme}`,
+      action: getPracticeActionForTheme(protectedTheme.theme, protectedTheme.subjects),
+      why: matchingImprovementChange
+        ? `${matchingImprovementChange.subject} rose from ${matchingImprovementChange.from.percentage}% to ${matchingImprovementChange.to.percentage}%; naming the successful habit makes it easier to repeat.`
+        : `${protectedTheme.summary} Strengths should remain visible while the priority work changes.`,
+      evidence: protectedTheme.quote ?? '',
+    });
+  }
+
+  const fallbackSteps = [
     {
-      title: developmentTheme ? `Improve ${developmentTheme}` : `Review ${reviewTopic} before the next assessment`,
-      reason: development
-        ? `${development.count} teacher evidence point${development.count === 1 ? '' : 's'} highlight ${development.theme.toLowerCase()}${development.subjects.length ? ` in ${development.subjects.join(', ')}` : ''}.`
-        : decline
-          ? `${decline.subject} fell from ${decline.from.percentage}% to ${decline.to.percentage}%, so it needs targeted review before the next assessment.`
-          : lowest
-            ? `${lowest.record.subject} is currently the lowest marked result in this view at ${lowest.percentage}%.`
-            : 'Teacher feedback is available, but more marked reports will make the priority sharper.',
-      evidence: development?.quote ?? (decline ? `${getShortReportAxisLabel(decline.from.records[0])} to ${getShortReportAxisLabel(decline.to.records[0])}.` : 'Grounded in the selected Progress evidence.'),
+      title: 'Check the next piece against this plan',
+      action: hasTutorPractice ? 'Use the next Tutor practice or assignment to apply the first two habits, then compare the teacher response.' : 'Use the first two habits on the next assignment and compare the teacher response when it returns.',
+      why: 'A recommendation becomes useful only when the next piece of work tests whether it changed the outcome.',
+      evidence: improvementChange ? `${improvementChange.subject} already shows that change can be seen across reports.` : 'The next comparable report will show whether the plan worked.',
     },
     {
-      title: 'Turn teacher feedback into a checklist',
-      reason: development
-        ? `A short checklist will make ${development.theme.toLowerCase()} visible before work is handed in, rather than relying on memory under pressure.`
-        : 'A short pre-submission checklist is the best next structure while the evidence base is still building.',
-      evidence: hasTutorPractice ? 'This can be practised using existing Tutor history and saved source material.' : `${sourceCount} uploaded source${sourceCount === 1 ? '' : 's'} can support the checklist.`,
+      title: 'Read the comment before revising',
+      action: 'Start the next revision session by rewriting the latest teacher comment as one question to answer or one habit to practise.',
+      why: 'This keeps revision tied to the teacher’s diagnosis instead of defaulting to broad, unfocused review.',
+      evidence: records.find((record) => record.teacherComment?.trim())?.teacherComment ?? 'The current view has limited written feedback, so the next comment will be especially useful.',
     },
     {
-      title: improvement ? `Protect improvement in ${improvement.theme}` : strength ? `Protect ${strength.theme}` : `Review ${reviewTopic} before the next assessment`,
-      reason: improvementChange
-        ? `${improvementChange.subject} rose from ${improvementChange.from.percentage}% to ${improvementChange.to.percentage}%; keep the habit that produced that gain.`
-        : strength
-          ? `Teachers already praise ${strength.theme.toLowerCase()}, so the aim is to keep it while working on the priority theme.`
-          : 'Add another report before comparing changes over time.',
-      evidence: improvement?.quote ?? strength?.quote ?? `${sourceCount} uploaded source${sourceCount === 1 ? '' : 's'} and ${tutorAttempts.length} Tutor attempt${tutorAttempts.length === 1 ? '' : 's'} are available as context.`,
+      title: 'Create the next fair comparison',
+      action: `When the next ${subject === 'All Subjects' ? 'report' : `${subject} result`} arrives, compare it with the same subject and note which habit changed.`,
+      why: 'A like-for-like comparison is the safest way to tell whether the plan helped.',
+      evidence: 'Progress never treats movement between different subjects as a trend.',
     },
   ];
+
+  fallbackSteps.forEach((step) => {
+    if (recommendations.length < 3 && !recommendations.some((recommendation) => recommendation.title === step.title)) recommendations.push(step);
+  });
+
+  if (recommendations.length < 3) {
+    recommendations.push({
+      title: 'Keep one useful habit visible',
+      action: 'Choose the clearest successful habit from this report and write it at the top of the next piece of work.',
+      why: 'Protecting a strength prevents improvement work from becoming a list of faults.',
+      evidence: 'This is a cautious fallback while the page waits for more specific teacher evidence.',
+    });
+  }
+
+  return recommendations.slice(0, 3);
 }
 
 function ProgressTimeline({ snapshots, documents, selectedKey, onSelect }: { snapshots: ReportSnapshot[]; documents: ResearchDocument[]; selectedKey?: string; onSelect: (key: string) => void }) {
@@ -3197,47 +3157,103 @@ function DetailPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TeacherInsightCard({ insight, compact = false }: { insight: TeacherInsight; compact?: boolean }) {
-  const tone = insight.classification === 'Strength'
-    ? 'border-moss/25 bg-moss/5'
-    : insight.classification === 'Emerging Improvement'
-      ? 'border-brass/30 bg-brass/5'
-      : 'border-red-200 bg-red-50/55';
-  const label = insight.classification === 'Development' ? 'Development' : insight.classification;
-
+function TeacherInsightCard({ insight }: { insight: TeacherInsight }) {
+  const label = insight.classification === 'Priority' ? 'Work on this' : insight.classification === 'Improving' ? 'Getting stronger' : 'Keep this strength';
   return (
-    <article className={`rounded-lg border p-4 ${tone}`}>
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</p>
-      <h3 className="mt-2 text-lg font-semibold text-ink">{insight.theme}</h3>
-      <p className="mt-2 text-sm leading-6 text-graphite/74">{insight.why}</p>
-      {insight.subjects.length ? (
-        <p className="mt-3 text-sm leading-6 text-graphite/70">
-          <span className="font-semibold text-ink">Subjects involved:</span> {insight.subjects.join(', ')}
-        </p>
-      ) : null}
-      {!compact && insight.quote ? (
-        <blockquote className="mt-3 border-l-2 border-ink/18 pl-3 text-sm leading-6 text-graphite/72">
-          "{insight.quote}"
-        </blockquote>
-      ) : null}
+    <article className="grid gap-3 py-6 md:grid-cols-[170px_1fr]">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/52">{label}</p>
+        {insight.subjects.length ? <p className="mt-2 text-xs leading-5 text-graphite/58">{insight.subjects.join(' · ')}</p> : null}
+      </div>
+      <div className="max-w-3xl">
+        <h3 className="text-xl font-semibold text-ink">{insight.theme}</h3>
+        <p className="mt-2 text-sm leading-7 text-graphite/74">{insight.summary}</p>
+        <p className="mt-2 text-sm leading-7 text-graphite/66"><span className="font-semibold text-ink">Why it matters:</span> {insight.why}</p>
+        {insight.quote ? <blockquote className="mt-3 border-l-2 border-brass/35 pl-3 text-sm italic leading-6 text-graphite/62">{insight.quote}</blockquote> : null}
+      </div>
     </article>
   );
+}
+
+function ReportSnapshotStory({ snapshot, documents }: { snapshot: ReportSnapshot; documents: ResearchDocument[] }) {
+  const sourceTitle = documents.find((document) => document.id === snapshot.records[0]?.sourceDocumentId)?.title ?? snapshot.title;
+  const marked = snapshot.records
+    .map((record) => ({ record, percentage: getRecordPercentage(record) }))
+    .filter((item): item is { record: PerformanceRecord; percentage: number } => item.percentage !== undefined)
+    .sort((a, b) => b.percentage - a.percentage);
+  const average = marked.length ? Math.round(marked.reduce((total, item) => total + item.percentage, 0) / marked.length) : undefined;
+  const highest = marked[0];
+  const lowest = marked.length > 1 ? marked[marked.length - 1] : undefined;
+  const story = highest && lowest
+    ? `${highest.record.subject} is the strongest marked subject in this report. ${lowest.record.subject} is the clearest place to focus next.`
+    : highest
+      ? `${highest.record.subject} is at ${highest.percentage}%. Treat this as a starting point until the next comparable report arrives.`
+      : 'This report is best read through the teacher comments; there are no comparable percentage marks in it.';
+
+  return (
+    <div className="mt-5 rounded-xl bg-white p-5 shadow-sm ring-1 ring-ink/[0.045] sm:p-7">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-ink/[0.06] pb-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/50">One report · snapshot</p>
+          <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">{sourceTitle}</h3>
+          <p className="mt-2 text-sm text-graphite/62">{[snapshot.records[0]?.term, snapshot.records[0]?.academicYear].filter(Boolean).join(' · ') || 'Current report'}</p>
+        </div>
+        {average !== undefined ? <p className="font-serif text-4xl font-semibold text-ink">{average}% <span className="font-sans text-xs font-semibold uppercase tracking-[0.1em] text-graphite/50">average</span></p> : null}
+      </div>
+      <p className="mt-5 max-w-3xl text-base leading-7 text-graphite/76">{story}</p>
+      {marked.length ? (
+        <div className="mt-6 space-y-4">
+          {marked.map(({ record, percentage }) => (
+            <div key={record.id}>
+              <div className="mb-1.5 flex items-center justify-between gap-4 text-sm">
+                <span className="font-semibold text-ink">{record.subject}</span>
+                <span className="font-semibold tabular-nums text-ink">{percentage}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-paper">
+                <div className="h-full rounded-full bg-moss" style={{ width: `${Math.max(3, Math.min(100, percentage))}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function getSubjectTimelineStory(points: TrendPoint[], subject: string) {
+  const first = points[0];
+  const latest = points[points.length - 1];
+  if (!first || !latest || points.length < 2) return { headline: `${subject} has one marked starting point.`, body: 'The next comparable report will show whether the learning is moving.' };
+  const delta = latest.percentage - first.percentage;
+  if (delta > 2) return { headline: `${subject} has risen by ${Math.round(delta)} points.`, body: `${getShortReportAxisLabel(first.records[0])} was ${first.percentage}%; ${getShortReportAxisLabel(latest.records[0])} is ${latest.percentage}%. The next question is which habit produced that gain.` };
+  if (delta < -2) return { headline: `${subject} has fallen by ${Math.abs(Math.round(delta))} points.`, body: `${getShortReportAxisLabel(first.records[0])} was ${first.percentage}%; ${getShortReportAxisLabel(latest.records[0])} is ${latest.percentage}%. Use the teacher feedback to choose one precise response.` };
+  return { headline: `${subject} is broadly steady.`, body: `The change from ${first.percentage}% to ${latest.percentage}% is small, so the written feedback is more useful than the number alone.` };
 }
 
 function TrendChart({
   records,
   documents,
   selectedSubject,
+  storyMode = false,
 }: {
   records: PerformanceRecord[];
   documents: ResearchDocument[];
   selectedSubject: string;
+  storyMode?: boolean;
 }) {
+  if (!storyMode && selectedSubject === 'All Subjects') {
+    return <CompactSubjectMovementComparison records={records} />;
+  }
+
+  const snapshots = getReportSnapshots(records);
+  if (snapshots.length === 1) {
+    return <ReportSnapshotStory snapshot={snapshots[0]} documents={documents} />;
+  }
+
   if (selectedSubject === 'All Subjects') {
     return <SubjectMovementComparison records={records} />;
   }
 
-  const snapshots = getReportSnapshots(records);
   const trendSeries = getTrendEligibleSeries(records);
   const seriesEntries = Object.entries(trendSeries);
   const allPoints = seriesEntries.flatMap(([, points]) => points);
@@ -3253,20 +3269,20 @@ function TrendChart({
     return pad.left + (axisSlots.length <= 1 ? plotWidth / 2 : (index / (axisSlots.length - 1)) * plotWidth);
   };
   const yFor = (percentage: number) => pad.top + plotHeight - (Math.min(100, Math.max(0, percentage)) / 100) * plotHeight;
-  const colors = ['rgb(31 41 51)', 'rgb(111 123 92)', 'rgb(183 142 74)', 'rgb(83 102 122)', 'rgb(133 92 78)', 'rgb(92 116 132)'];
-  const changes = getTrendChanges(records);
-  const largestImprovement = [...changes].filter((change) => change.delta > 0).sort((a, b) => b.delta - a.delta)[0];
-  const largestDecline = [...changes].filter((change) => change.delta < 0).sort((a, b) => a.delta - b.delta)[0];
-  const singleSnapshot = snapshots.length === 1 ? snapshots[0] : undefined;
-  const singleSnapshotSource = singleSnapshot?.records[0]?.sourceDocumentId ? documents.find((document) => document.id === singleSnapshot.records[0].sourceDocumentId)?.title : undefined;
-  const singleSnapshotTitle = singleSnapshotSource || singleSnapshot?.title || selectedSubject;
+  const colors = ['rgb(31 41 51)', 'rgb(111 123 92)', 'rgb(183 142 74)'];
+  const timelineStory = getSubjectTimelineStory(allPoints, selectedSubject);
 
   return (
     <div className="mt-5">
       {seriesEntries.length ? (
         <>
-          <p className="mb-4 text-sm font-semibold text-ink">{selectedSubject} over time</p>
-          <svg className="h-[320px] w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Progression over time by assessment date and percentage">
+          <div className="mb-5 max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/50">One subject · timeline</p>
+            <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">{timelineStory.headline}</h3>
+            <p className="mt-2 text-sm leading-7 text-graphite/70">{timelineStory.body}</p>
+          </div>
+          <div className="overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-ink/[0.045] sm:p-5">
+          <svg className="h-[300px] w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${selectedSubject} marks across comparable reports`}>
             {[0, 25, 50, 75, 100].map((tick) => (
               <g key={tick}>
                 <line x1={pad.left} x2={width - pad.right} y1={yFor(tick)} y2={yFor(tick)} stroke="rgba(31,41,51,0.08)" />
@@ -3297,28 +3313,12 @@ function TrendChart({
               <text key={getReportSnapshotKey(point.records[0])} x={xForPoint(point)} y={height - pad.bottom + 20} textAnchor="middle" className="fill-graphite text-[10px]">{getShortReportAxisLabel(point.records[0])}</text>
             ))}
           </svg>
-          <div className="grid gap-3 md:grid-cols-2">
-            {largestImprovement || largestDecline ? (
-              <>
-                {largestImprovement ? <TrendCallout label="Largest improvement" change={largestImprovement} /> : <TrendDataNotice />}
-                {largestDecline ? <TrendCallout label="Largest decline" change={largestDecline} /> : <TrendDataNotice />}
-              </>
-            ) : (
-              <div className="md:col-span-2"><TrendDataNotice /></div>
-            )}
           </div>
-          <p className="mt-4 text-xs leading-5 text-graphite/65">
-            This chart only connects records inside the same subject across different reports.
-          </p>
         </>
-      ) : singleSnapshot ? (
-        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
-          Only one report is available for {singleSnapshotTitle}. Future reports will reveal progress.
-        </p>
       ) : records.length ? (
-        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Only one marked report is available. Future reports will reveal progress.</p>
+        <p className="mt-5 rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/70">There are reports here, but not yet two comparable marked results for {selectedSubject}. Read the teacher messages as the main guide for now.</p>
       ) : (
-        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">No records match this subject and time period yet.</p>
+        <p className="mt-5 rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/70">No reports match this focus and period yet.</p>
       )}
     </div>
   );
@@ -3347,7 +3347,7 @@ function getSubjectMovementRows(records: PerformanceRecord[]) {
     .sort((a, b) => b.delta - a.delta || a.subject.localeCompare(b.subject));
 }
 
-function SubjectMovementComparison({ records }: { records: PerformanceRecord[] }) {
+function CompactSubjectMovementComparison({ records }: { records: PerformanceRecord[] }) {
   const rows = getSubjectMovementRows(records);
   const maxDelta = Math.max(12, ...rows.map((row) => Math.abs(row.delta ?? 0)));
 
@@ -3358,21 +3358,18 @@ function SubjectMovementComparison({ records }: { records: PerformanceRecord[] }
       {rows.length ? (
         <div className="space-y-3">
           {rows.map((row) => {
-            const delta = row.delta;
-            const width = delta === undefined ? 0 : Math.min(100, Math.round((Math.abs(delta) / maxDelta) * 100));
+            const width = Math.min(100, Math.round((Math.abs(row.delta) / maxDelta) * 100));
             return (
               <div key={row.subject} className="rounded-lg border border-ink/8 bg-paper/55 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-ink">{row.subject}</p>
-                    <p className="mt-1 text-xs text-graphite/62">
-                      {row.first && row.latest ? `${getShortReportAxisLabel(row.first.records[0])}: ${row.first.percentage}% · ${getShortReportAxisLabel(row.latest.records[0])}: ${row.latest.percentage}%` : 'One marked report'}
-                    </p>
+                    <p className="mt-1 text-xs text-graphite/62">{`${getShortReportAxisLabel(row.first.records[0])}: ${row.first.percentage}% · ${getShortReportAxisLabel(row.latest.records[0])}: ${row.latest.percentage}%`}</p>
                   </div>
-                  <p className={`text-lg font-semibold ${delta >= 0 ? 'text-moss' : 'text-red-700'}`}>{delta > 0 ? '+' : ''}{Math.round(delta)}</p>
+                  <p className={`text-lg font-semibold ${row.delta >= 0 ? 'text-moss' : 'text-red-700'}`}>{row.delta > 0 ? '+' : ''}{Math.round(row.delta)}</p>
                 </div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
-                  <div className={`h-full rounded-full ${delta >= 0 ? 'bg-moss' : 'bg-red-500'}`} style={{ width: `${Math.max(8, width)}%` }} />
+                  <div className={`h-full rounded-full ${row.delta >= 0 ? 'bg-moss' : 'bg-red-500'}`} style={{ width: `${Math.max(8, width)}%` }} />
                 </div>
               </div>
             );
@@ -3382,6 +3379,60 @@ function SubjectMovementComparison({ records }: { records: PerformanceRecord[] }
         <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Add a later report for the same subject to see subject movement.</p>
       ) : (
         <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">No marked academic records match this view yet.</p>
+      )}
+    </div>
+  );
+}
+
+function SubjectMovementComparison({ records }: { records: PerformanceRecord[] }) {
+  const rows = getSubjectMovementRows(records);
+  const maxDelta = Math.max(12, ...rows.map((row) => Math.abs(row.delta ?? 0)));
+  const topGain = [...rows].filter((row) => row.delta > 0).sort((a, b) => b.delta - a.delta)[0];
+  const topFall = [...rows].filter((row) => row.delta < 0).sort((a, b) => a.delta - b.delta)[0];
+  const story = rows.length && rows.every((row) => row.delta > 0)
+    ? `Every comparable subject improved. ${topGain?.subject ?? 'The strongest mover'} made the clearest gain.`
+    : topGain && topFall
+      ? `${topGain.subject} made the clearest gain, while ${topFall.subject} needs the closest attention.`
+      : topGain
+        ? `${topGain.subject} made the clearest gain; the other comparable subjects were steadier.`
+        : topFall
+          ? `${topFall.subject} shows the clearest fall and should be the first subject reviewed.`
+          : 'The comparable subjects are broadly steady.';
+
+  return (
+    <div className="mt-5">
+      <div className="mb-5 max-w-3xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/50">All subjects · comparison</p>
+        <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">{story}</h3>
+        <p className="mt-2 text-sm leading-7 text-graphite/70">Each subject is compared only with itself, from its first marked report in this view to its latest.</p>
+      </div>
+      {rows.length ? (
+        <div className="divide-y divide-ink/[0.06] border-y border-ink/[0.06]">
+          {rows.map((row) => {
+            const delta = row.delta;
+            const width = delta === undefined ? 0 : Math.min(100, Math.round((Math.abs(delta) / maxDelta) * 100));
+            return (
+              <div key={row.subject} className="py-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-ink">{row.subject}</p>
+                    <p className="mt-1 text-sm text-graphite/62">
+                      {row.first && row.latest ? `${getShortReportAxisLabel(row.first.records[0])} ${row.first.percentage}% → ${getShortReportAxisLabel(row.latest.records[0])} ${row.latest.percentage}%` : 'One marked report'}
+                    </p>
+                  </div>
+                  <p className={`font-serif text-2xl font-semibold ${delta >= 0 ? 'text-moss' : 'text-red-700'}`}>{delta > 0 ? '+' : ''}{Math.round(delta)} <span className="font-sans text-xs uppercase tracking-[0.1em]">points</span></p>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-paper">
+                  <div className={`h-full rounded-full ${delta >= 0 ? 'bg-moss' : 'bg-red-500'}`} style={{ width: `${Math.max(8, width)}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : records.length ? (
+        <p className="rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/70">There is only one marked report per subject here, so this view is a snapshot rather than a comparison.</p>
+      ) : (
+        <p className="rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/70">No marked reports match this view yet.</p>
       )}
     </div>
   );

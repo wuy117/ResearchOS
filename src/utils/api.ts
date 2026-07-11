@@ -160,6 +160,20 @@ export type PerformanceAdviceResponse = {
   recurringWeaknesses: string[];
   recommendedActions: string[];
   overallCommentary: string;
+  teacherThemes: Array<{
+    theme: string;
+    classification: 'Strength' | 'Priority' | 'Improving';
+    summary: string;
+    why: string;
+    evidence: string[];
+    subjects: string[];
+  }>;
+  coachingRecommendations: Array<{
+    title: string;
+    action: string;
+    why: string;
+    evidence: string;
+  }>;
 };
 
 export type DocumentMetadataAnalysisResponse = {
@@ -543,6 +557,27 @@ export async function generatePerformanceAdvice(records: unknown[]): Promise<Per
     'Performance advice is unreachable. Please try again.',
   );
 
+  const teacherThemes = Array.isArray(data.teacherThemes) ? data.teacherThemes.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const value = item as Record<string, unknown>;
+    const classification: PerformanceAdviceResponse['teacherThemes'][number]['classification'] = value.classification === 'Strength' || value.classification === 'Priority' || value.classification === 'Improving' ? value.classification : 'Priority';
+    if (typeof value.theme !== 'string' || typeof value.summary !== 'string' || typeof value.why !== 'string') return [];
+    return [{
+      theme: value.theme,
+      classification,
+      summary: value.summary,
+      why: value.why,
+      evidence: normalizeStringArray(value.evidence),
+      subjects: normalizeStringArray(value.subjects),
+    }];
+  }) : [];
+  const coachingRecommendations = Array.isArray(data.coachingRecommendations) ? data.coachingRecommendations.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const value = item as Record<string, unknown>;
+    if (typeof value.title !== 'string' || typeof value.action !== 'string' || typeof value.why !== 'string') return [];
+    return [{ title: value.title, action: value.action, why: value.why, evidence: typeof value.evidence === 'string' ? value.evidence : '' }];
+  }) : [];
+
   return {
     subjects: Array.isArray(data.subjects) ? data.subjects : [],
     strongestSubjects: Array.isArray(data.strongestSubjects) ? data.strongestSubjects : [],
@@ -553,6 +588,8 @@ export async function generatePerformanceAdvice(records: unknown[]): Promise<Per
     recurringWeaknesses: Array.isArray(data.recurringWeaknesses) ? data.recurringWeaknesses : [],
     recommendedActions: Array.isArray(data.recommendedActions) ? data.recommendedActions : [],
     overallCommentary: typeof data.overallCommentary === 'string' ? data.overallCommentary : '',
+    teacherThemes,
+    coachingRecommendations,
   };
 }
 

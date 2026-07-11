@@ -58,17 +58,20 @@ function buildMessages(records: unknown[]) {
     {
       role: 'system' as const,
       content: [
-        'You are a thoughtful academic mentor analysing student performance records.',
+        'You are an experienced tutor reading school reports and assessment records.',
         'Return JSON only. Do not wrap it in Markdown.',
-        'Use careful, non-deterministic wording such as "suggests", "may indicate", and "based on the available records".',
-        'Do not make harsh comments or fixed predictions. Include a confidence caveat when there is limited data.',
+        'Group teacher feedback by meaning, even when teachers use different words. For example, "justify conclusions", "use evidence", and "explain how results support the answer" belong to one reasoning-and-evidence theme.',
+        'Do not create separate themes for phrases that express the same underlying learning habit.',
+        'Every recommendation must state a concrete action, why it matters now, and the report evidence behind it.',
+        'Write like a calm, experienced tutor. Never use analytics, extraction, confidence-score, or dashboard language.',
+        'Do not make harsh comments or fixed predictions. If evidence is limited, say so naturally.',
       ].join(' '),
     },
     {
       role: 'user' as const,
       content: [
         'Generate this exact JSON shape:',
-        '{"subjects":["string"],"strongestSubjects":["string"],"weakestSubjects":["string"],"improvingSubjects":["string"],"decliningSubjects":["string"],"recurringStrengths":["string"],"recurringWeaknesses":["string"],"recommendedActions":["string"],"overallCommentary":"string"}',
+        '{"subjects":["string"],"strongestSubjects":["string"],"weakestSubjects":["string"],"improvingSubjects":["string"],"decliningSubjects":["string"],"recurringStrengths":["string"],"recurringWeaknesses":["string"],"recommendedActions":["string"],"overallCommentary":"string","teacherThemes":[{"theme":"string","classification":"Strength|Priority|Improving","summary":"string","why":"string","evidence":["short teacher quote"],"subjects":["string"]}],"coachingRecommendations":[{"title":"string","action":"string","why":"string","evidence":"short teacher quote or same-subject change"}]}',
         '',
         'Performance records:',
         JSON.stringify(records).slice(0, 14000),
