@@ -112,20 +112,20 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen text-ink">
-      <div className="flex min-h-screen overflow-hidden bg-ivory">
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-ink/6 bg-[#fbfaf7] p-5 lg:flex">
+    <div className="h-[100dvh] text-ink">
+      <div className="flex h-full overflow-hidden bg-ivory">
+        <aside className="hidden w-64 shrink-0 flex-col border-r border-ink/[0.055] bg-[#faf9f6] px-5 py-6 lg:flex">
           <div className="mb-9 flex items-center gap-3">
             <div className="grid size-9 place-items-center rounded-lg bg-paper text-ink">
               <BookOpen size={19} />
             </div>
             <div>
               <p className="text-sm font-semibold text-ink">Research OS</p>
-              <p className="text-xs text-graphite/58">Learning workspace</p>
+              <p className="text-xs text-graphite/80">Learning workspace</p>
             </div>
           </div>
 
-          <nav className="space-y-1">
+          <nav className="space-y-1.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = activePillar.id === item.id;
@@ -135,20 +135,20 @@ export function AppShell({
                   type="button"
                   onClick={() => setActivePage(item.target)}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium ${
-                    active ? 'bg-paper text-ink' : 'text-graphite/76 hover:bg-paper/70 hover:text-ink'
+                  className={`flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium ${
+                    active ? 'bg-paper text-ink' : 'text-graphite/80 hover:bg-paper/65 hover:text-ink'
                   }`}
                 >
-                  <Icon size={17} className={active ? 'text-ink' : 'text-graphite/70'} />
+                  <Icon size={17} className={active ? 'text-ink' : 'text-graphite/80'} />
                   {item.label}
                 </button>
               );
             })}
           </nav>
 
-          <div className="mt-8">
+          <div className="mt-8 flex min-h-0 flex-1 flex-col">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workspaces</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Workspaces</p>
             </div>
             <div className="mb-3 flex gap-2">
               <input
@@ -161,11 +161,11 @@ export function AppShell({
                 placeholder="New workspace"
                 className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4"
               />
-              <button type="button" onClick={createWorkspace} aria-label="Create workspace" title="Create workspace" className="grid size-9 place-items-center rounded-lg bg-ink text-white">
+              <button type="button" onClick={createWorkspace} aria-label="Create workspace" title="Create workspace" className="grid size-9 place-items-center rounded-lg bg-ink text-white hover:bg-graphite">
                 <Plus size={16} />
               </button>
             </div>
-            <div className="space-y-2">
+            <div className="scrollbar-soft min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
               {state.workspaces.map((workspace) => {
                 const active = workspace.id === state.activeWorkspaceId;
                 return (
@@ -174,15 +174,15 @@ export function AppShell({
                     type="button"
                     onClick={() => setState((current) => ({ ...current, activeWorkspaceId: workspace.id }))}
                     aria-pressed={active}
-                    className={`w-full rounded-lg border p-3 text-left transition ${
-                      active ? 'border-ink/12 bg-paper/85 shadow-sm' : 'border-transparent hover:border-ink/8 hover:bg-paper/55'
+                    className={`w-full rounded-lg p-3 text-left transition ${
+                      active ? 'bg-paper/90' : 'hover:bg-paper/55'
                     }`}
                   >
                     <div className="flex items-start gap-3">
                       <span className={`mt-1.5 size-2 rounded-full ${workspace.color}`} />
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-semibold text-ink">{workspace.name}</span>
-                        <span className="mt-1 block text-xs leading-5 text-graphite/70">{getWorkspaceDocumentCount(workspace.id)} documents</span>
+                        <span className="mt-1 block text-xs leading-5 text-graphite/80">{getWorkspaceDocumentCount(workspace.id)} documents</span>
                       </span>
                     </div>
                   </button>
@@ -194,24 +194,24 @@ export function AppShell({
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <header className="flex flex-col gap-3 border-b border-ink/6 bg-[#fbfaf7]/92 px-4 py-3 sm:px-6 xl:px-8">
+          <header className="flex shrink-0 flex-col gap-3 border-b border-ink/[0.055] bg-[#faf9f6]/95 px-4 py-3 backdrop-blur-sm sm:px-6 xl:px-8">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{activePillar.label}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">{activePillar.label}</p>
                 <h1 className="mt-1 truncate text-base font-semibold text-ink sm:text-lg">{activeWorkspace?.name}</h1>
               </div>
               {showAddSource ? (
                 <button
                   type="button"
                   onClick={() => setActivePage('upload')}
-                  className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-graphite"
+                  className="inline-flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-ink/10 bg-white px-3.5 py-2 text-sm font-semibold text-graphite shadow-sm hover:border-ink/20 hover:text-ink"
                 >
                   <UploadCloud size={17} />
                   Add source
                 </button>
               ) : null}
             </div>
-            <div className="grid grid-cols-2 gap-2 lg:hidden">
+            <div className="grid grid-cols-4 gap-1 lg:hidden">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -220,8 +220,8 @@ export function AppShell({
                     type="button"
                     onClick={() => setActivePage(item.target)}
                     aria-current={activePillar.id === item.id ? 'page' : undefined}
-                    className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
-                      activePillar.id === item.id ? 'bg-paper text-ink ring-1 ring-ink/8' : 'bg-white/70 text-graphite'
+                    className={`flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[11px] font-semibold ${
+                      activePillar.id === item.id ? 'bg-paper text-ink ring-1 ring-ink/10' : 'text-graphite/80 hover:bg-paper/55 hover:text-ink'
                     }`}
                   >
                     <Icon size={15} />
@@ -241,8 +241,8 @@ export function AppShell({
                       type="button"
                       onClick={() => setActivePage(tab.id)}
                       aria-current={active ? 'page' : undefined}
-                      className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
-                        active ? 'bg-ink text-white shadow-sm' : 'bg-transparent text-graphite hover:bg-paper hover:text-ink'
+                      className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
+                        active ? 'bg-paper text-ink ring-1 ring-ink/10' : 'bg-transparent text-graphite/80 hover:bg-paper/65 hover:text-ink'
                       }`}
                     >
                       <Icon size={15} />
@@ -254,8 +254,8 @@ export function AppShell({
             ) : null}
           </header>
 
-          <div className="scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-7 sm:px-6 xl:px-10 2xl:px-12">
-            <div key={activePage} className="page-enter">
+          <div className="scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-7 sm:px-6 sm:py-8 xl:px-10 2xl:px-12">
+            <div key={activePage} className={`page-enter ${activePage === 'chat' ? 'h-full' : ''}`}>
               {activePage === 'settings' ? (
                 <SettingsPage
                   state={state}
@@ -313,9 +313,8 @@ function SettingsPage({
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       <section>
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Settings</p>
-        <h2 className="mt-3 font-serif text-4xl font-semibold leading-tight text-ink">Account and data</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-7 text-graphite/70">Manage your account, saved work, and workspace data.</p>
+        <h2 className="font-serif text-4xl font-semibold leading-tight text-ink">Account and data</h2>
+        <p className="mt-3 max-w-2xl text-sm leading-7 text-graphite/80">Manage your account, saved work, and workspace data.</p>
       </section>
 
       <div className={`grid gap-6 ${storageStatus !== 'missing-env' ? 'lg:grid-cols-[1fr_1fr]' : ''}`}>
@@ -328,10 +327,10 @@ function SettingsPage({
           onImportClaimableLocalData={onImportClaimableLocalData}
           onDismissClaimableLocalData={onDismissClaimableLocalData}
         />
-        {storageStatus !== 'missing-env' ? <section className="rounded-lg bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Storage</p>
+        {storageStatus !== 'missing-env' ? <section className="surface-raised p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Storage</p>
           <h3 className="mt-2 text-lg font-semibold text-ink">{storageLabel}</h3>
-          <p className="mt-3 text-sm leading-7 text-graphite/72">
+          <p className="mt-3 text-sm leading-7 text-graphite/80">
             {storageStatus === 'connected'
               ? 'Your work is syncing to your account.'
               : storageStatus === 'connection-failed'
@@ -341,7 +340,7 @@ function SettingsPage({
         </section> : null}
       </div>
 
-      <details className="rounded-lg bg-white p-5 shadow-sm">
+      <details className="surface-raised p-5">
         <summary className="cursor-pointer text-sm font-semibold text-ink">Advanced</summary>
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
           <ResetResearchOS state={state} setState={setState} storageStatus={storageStatus} user={user} />
@@ -453,25 +452,25 @@ function AccountDataControls({
   }
 
   return (
-    <div className="rounded-lg border border-ink/8 bg-white p-4">
+    <div className="surface-raised p-4">
       <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
         <span>
-          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Account</span>
+          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Account</span>
           <span className="mt-1 block truncate text-sm font-semibold text-ink">{user?.email ?? 'Saved in this browser'}</span>
         </span>
-        <UserCircle size={17} className="text-graphite/60" />
+        <UserCircle size={17} className="text-graphite/80" />
       </button>
       {isOpen ? (
         <div className="mt-4 space-y-3">
-          {message ? <p className="rounded-lg bg-paper px-3 py-2 text-xs leading-5 text-graphite/75">{message}</p> : null}
+          {message ? <p className="rounded-lg bg-paper px-3 py-2 text-xs leading-5 text-graphite/80">{message}</p> : null}
           {summary ? (
             <div className="rounded-lg border border-brass/25 bg-brass/10 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/60">Local data found</p>
-              <p className="mt-2 text-xs leading-5 text-graphite/72">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Local data found</p>
+              <p className="mt-2 text-xs leading-5 text-graphite/80">
                 {summary.documents} documents, {summary.performanceRecords} progress records, {summary.tutorSessions} Tutor sessions, {summary.collections} source labels.
               </p>
               <div className="mt-3 grid gap-2">
-                <button type="button" disabled={!hasCloud || isImporting} onClick={importLocalData} className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white disabled:bg-graphite/45">
+                <button type="button" disabled={!hasCloud || isImporting} onClick={importLocalData} className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-graphite disabled:bg-graphite/45">
                   {isImporting ? 'Importing...' : 'Import local data to my account'}
                 </button>
                 <button type="button" onClick={onDismissClaimableLocalData} className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
@@ -550,14 +549,14 @@ function ResetResearchOS({
     <div className={`rounded-lg bg-paper/60 ${compact ? 'p-4' : 'p-3'}`}>
       <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
         <span>
-          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Maintenance</span>
+          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Maintenance</span>
           <span className="mt-1 block text-sm font-semibold text-ink">Reset or clear data</span>
         </span>
-        <AlertTriangle size={17} className="text-graphite/55" />
+        <AlertTriangle size={17} className="text-graphite/80" />
       </button>
       {isOpen ? (
         <div className="mt-4 space-y-3">
-          {message ? <p className="rounded-lg bg-white px-3 py-2 text-xs leading-5 text-graphite/75">{message}</p> : null}
+          {message ? <p className="rounded-lg bg-white px-3 py-2 text-xs leading-5 text-graphite/80">{message}</p> : null}
           <div className="grid gap-2">
             {resetOptions.map((option) => {
               const disabled = option.scope === 'supabase' && !hasSupabase;
@@ -576,19 +575,19 @@ function ResetResearchOS({
                     }
                     className={`inline-flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-semibold ${
                       option.scope === 'full'
-                        ? 'border-red-700 bg-red-700 text-white disabled:border-ink/8 disabled:bg-paper disabled:text-graphite/45'
-                        : 'border-red-200 bg-white text-red-700 disabled:cursor-not-allowed disabled:border-ink/8 disabled:bg-paper disabled:text-graphite/45'
+                        ? 'border-red-700 bg-red-700 text-white disabled:border-ink/10 disabled:bg-paper disabled:text-graphite/45'
+                        : 'border-red-200 bg-white text-red-700 disabled:cursor-not-allowed disabled:border-ink/10 disabled:bg-paper disabled:text-graphite/45'
                     }`}
                   >
                     <Trash2 size={14} />
                     {option.label}
                   </button>
-                  {disabled ? <p className="mt-1 text-xs leading-5 text-graphite/60">Cloud sync is not connected.</p> : null}
+                  {disabled ? <p className="mt-1 text-xs leading-5 text-graphite/80">Cloud sync is not connected.</p> : null}
                 </div>
               );
             })}
           </div>
-          <p className="text-xs leading-5 text-graphite/65">Each option keeps unrelated sources, learning history, and progress data.</p>
+          <p className="text-xs leading-5 text-graphite/80">Each option keeps unrelated sources, learning history, and progress data.</p>
         </div>
       ) : null}
       <DeveloperConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
@@ -792,17 +791,17 @@ function DeveloperTools({
   }
 
   return (
-    <div className="rounded-lg border border-ink/8 bg-white p-4">
+    <div className="rounded-lg border border-ink/10 bg-white p-4">
       <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
         <span>
-          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Developer Tools</span>
+          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Developer Tools</span>
           <span className="mt-1 block text-sm font-semibold text-ink">Diagnostics and resets</span>
         </span>
-        <Wrench size={17} className="text-graphite/60" />
+        <Wrench size={17} className="text-graphite/80" />
       </button>
       {isOpen ? (
         <div className="mt-4 space-y-4">
-          {message ? <p className="rounded-lg bg-paper px-3 py-2 text-xs leading-5 text-graphite/75">{message}</p> : null}
+          {message ? <p className="rounded-lg bg-paper px-3 py-2 text-xs leading-5 text-graphite/80">{message}</p> : null}
           <DeveloperStatGrid
             items={[
               ['Version', import.meta.env.VITE_APP_VERSION ?? '0.1.0'],
@@ -953,7 +952,7 @@ function DeveloperStatGrid({ items }: { items: Array<[string, string]> }) {
     <div className="grid gap-2">
       {items.map(([label, value]) => (
         <div key={label} className="flex justify-between gap-3 rounded-lg bg-paper/65 px-3 py-2 text-xs">
-          <span className="text-graphite/65">{label}</span>
+          <span className="text-graphite/80">{label}</span>
           <span className="max-w-[130px] truncate font-semibold text-ink">{value}</span>
         </div>
       ))}
@@ -963,8 +962,8 @@ function DeveloperStatGrid({ items }: { items: Array<[string, string]> }) {
 
 function DeveloperSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border-t border-ink/8 pt-3">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">{title}</p>
+    <section className="border-t border-ink/10 pt-3">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">{title}</p>
       <div className="space-y-2">{children}</div>
     </section>
   );
@@ -981,7 +980,7 @@ function DeveloperActionButton({ label, onClick, disabled = false, reason }: { l
       >
         {label}
       </button>
-      {disabled && reason ? <p className="mt-1 text-xs leading-5 text-graphite/60">{reason}</p> : null}
+      {disabled && reason ? <p className="mt-1 text-xs leading-5 text-graphite/80">{reason}</p> : null}
     </div>
   );
 }
@@ -1003,16 +1002,16 @@ function DeveloperConfirmModal({ action, onClose }: { action: DeveloperConfirmAc
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="developer-dialog-title" aria-describedby="developer-dialog-body" className="w-full max-w-lg rounded-lg border border-ink/10 bg-white p-5 shadow-soft">
+      <div role="dialog" aria-modal="true" aria-labelledby="developer-dialog-title" aria-describedby="developer-dialog-body" className="w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Developer confirmation</p>
         <h2 id="developer-dialog-title" className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
-        <p id="developer-dialog-body" className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
-        <div className="mt-6 flex justify-end gap-3">
-          <button type="button" onClick={onClose} disabled={isWorking} className="rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink">
+        <p id="developer-dialog-body" className="mt-3 text-sm leading-7 text-graphite/80">{action.body}</p>
+        <div className="mt-6 grid gap-2 sm:flex sm:justify-end">
+          <button type="button" onClick={onClose} disabled={isWorking} className="min-h-10 rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink hover:bg-paper/50">
             Cancel
           </button>
-          <button type="button" onClick={confirm} disabled={isWorking} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:bg-red-400">
-            {isWorking ? 'Working...' : action.confirmLabel}
+          <button type="button" onClick={confirm} disabled={isWorking} className="min-h-10 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:bg-red-400">
+            {isWorking ? 'Working…' : action.confirmLabel}
           </button>
         </div>
       </div>

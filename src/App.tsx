@@ -51,16 +51,16 @@ class AuthenticatedAppErrorBoundary extends Component<{ children: ReactNode }, {
     if (this.state.error) {
       return (
         <div className="grid min-h-screen place-items-center bg-ivory px-4 text-ink">
-          <section className="w-full max-w-lg rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
+          <section className="surface-raised w-full max-w-lg p-6">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Unable to open workspace</p>
             <h1 className="mt-3 font-serif text-3xl font-semibold text-ink">Research OS could not open this workspace.</h1>
-            <p className="mt-4 text-sm leading-7 text-graphite/72">
+            <p className="mt-4 text-sm leading-7 text-graphite/80">
               Your data is safe. Reload the workspace, or sign out and back in if the problem continues.
             </p>
-            <button type="button" onClick={() => window.location.reload()} className="mt-6 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+            <button type="button" onClick={() => window.location.reload()} className="mt-6 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite">
               Reload workspace
             </button>
-            {import.meta.env.DEV ? <pre className="mt-4 max-h-40 overflow-auto rounded-lg bg-paper p-3 text-xs text-graphite/75">{this.state.error.message}</pre> : null}
+            {import.meta.env.DEV ? <pre className="mt-4 max-h-40 overflow-auto rounded-lg bg-paper p-3 text-xs text-graphite/80">{this.state.error.message}</pre> : null}
           </section>
         </div>
       );
@@ -90,7 +90,7 @@ function App() {
   if (isSupabaseEnabled && (auth.authLoading || storageStatus === 'client-created')) {
     return (
       <div className="grid min-h-screen place-items-center bg-ivory px-4 text-ink">
-        <div role="status" className="inline-flex items-center gap-3 rounded-lg border border-ink/8 bg-white px-4 py-3 text-sm font-semibold shadow-sm">
+        <div role="status" className="inline-flex items-center gap-3 px-4 py-3 text-sm font-semibold text-graphite/80">
           <span className="size-2 animate-pulse rounded-full bg-moss" />
           Opening your workspace…
         </div>
@@ -242,15 +242,7 @@ function Dashboard({
       ...academicPerformanceRecords.map((record) => record.subject),
     ]),
   ].slice(0, 8);
-  const percentages = academicPerformanceRecords
-    .map((record) => getRecordPercentage(record))
-    .filter((percentage): percentage is number => typeof percentage === 'number');
-  const latestAverage = percentages.length ? Math.round(percentages.reduce((total, value) => total + value, 0) / percentages.length) : undefined;
   const activeLesson = state.tutorLessons.find((lesson) => lesson.status === 'in_progress') ?? state.tutorLessons[0];
-  const reportCount = documents.filter((document) => {
-    const category = getDocumentMetadata(document, state.performanceRecords).documentCategory;
-    return category === 'Report' || category === 'Exam result' || category === 'Mark sheet';
-  }).length;
   const weakTopics = [
     ...new Set(
       academicPerformanceRecords
@@ -264,12 +256,6 @@ function Dashboard({
   const hasTimeline = timeline.length > 0;
   const hasSubjects = subjects.length > 0;
   const hasPerformance = academicPerformanceRecords.length > 0;
-  const metrics = [
-    hasSubjects ? ['Subjects', subjects.length.toLocaleString()] : null,
-    reportCount ? ['Reports', reportCount.toLocaleString()] : null,
-    hasDocuments ? ['Sources', documents.length.toLocaleString()] : null,
-    latestAverage !== undefined ? ['Average', `${latestAverage}%`] : null,
-  ].filter((item): item is [string, string] => Boolean(item));
   const nextAction = !hasDocuments
     ? { label: 'Upload first source', page: 'upload' as PageId, detail: 'Start with a report, notes file, exam paper, or source document.' }
     : weakTopics.length
@@ -279,14 +265,14 @@ function Dashboard({
         : { label: 'Ask your archive', page: 'chat' as PageId, detail: 'Use your saved sources, reports, and feedback to answer a study question.' };
 
   return (
-    <div className="space-y-7">
-      <section className={`grid gap-8 ${metrics.length ? 'xl:grid-cols-[minmax(0,1.25fr)_360px]' : ''}`}>
+    <div className="mx-auto max-w-7xl space-y-10">
+      <section>
         <div className="py-3 sm:py-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/52">Academic profile</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Academic profile</p>
           <h2 className="mt-4 max-w-3xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-5xl">
             {hasReadySources ? `${readyCount} source${readyCount === 1 ? ' is' : 's are'} ready to study.` : 'Start with one source.'}
           </h2>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/72">
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/80">
             {hasReadySources
               ? 'Use your reports, notes, and assessments to ask questions, study a topic, or review progress.'
               : hasDocuments
@@ -294,7 +280,7 @@ function Dashboard({
                 : 'Upload your first report to begin tracking academic progress.'}
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <button type="button" onClick={() => setActivePage(nextAction.page)} className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+            <button type="button" onClick={() => setActivePage(nextAction.page)} className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite">
               {nextAction.label}
               <ArrowRight size={17} />
             </button>
@@ -303,20 +289,12 @@ function Dashboard({
             </button> : null}
           </div>
         </div>
-        {metrics.length ? (
-          <div className="rounded-lg bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Workspace at a glance</p>
-            <div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4">
-              {metrics.map(([label, value]) => <MetricCard key={label} label={label} value={value} />)}
-            </div>
-          </div>
-        ) : null}
       </section>
 
       {hasSubjects || hasTimeline ? <section className="grid gap-8 xl:grid-cols-[1fr_1fr]">
         {hasSubjects ? <div>
           <SectionHeader eyebrow="Subjects" title="What am I studying?" />
-          <div className="rounded-lg bg-white p-5 shadow-sm">
+          <div className="border-y border-ink/[0.055] py-5">
             <ChipCloud items={subjects} />
           </div>
         </div> : null}
@@ -330,7 +308,7 @@ function Dashboard({
 
       {hasDocuments ? <section className="grid gap-7 xl:grid-cols-[1.1fr_0.9fr]">
         <div>
-          <SectionHeader eyebrow="Recent uploads" title="Source intake" />
+          <SectionHeader eyebrow="Recent uploads" title="Recent sources" />
           <div className="space-y-4">
             {newestDocuments.map((document) => <DocumentCard key={document.id} document={document} records={state.performanceRecords} />)}
           </div>
@@ -338,7 +316,7 @@ function Dashboard({
 
         {hasPerformance ? <div>
           <SectionHeader eyebrow="Performance" title="Progress overview" />
-          <div className="rounded-lg bg-white p-5 shadow-sm">
+          <div className="border-t border-ink/[0.055] pt-5">
             <div className="space-y-4">
               <TrendChart records={academicPerformanceRecords} documents={documents} selectedSubject="All Subjects" />
               {weakTopics.length ? <TagList label="Priority themes" items={weakTopics} /> : null}
@@ -407,22 +385,22 @@ function Library({
   }
 
   return (
-    <div className="space-y-7">
+    <div className="mx-auto max-w-7xl space-y-8">
       <SectionHeader
         eyebrow="Academic archive"
         title="Sources"
         copy="Your reports, assessments, notes, and papers — organised around what they mean for your learning."
+        compact
       />
       {message ? <StatusNote message={message} /> : null}
       {documents.length ? (
         <section className="border-y border-ink/[0.055] py-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-graphite/48">Filter archive</p>
-              <p className="mt-1 text-sm text-graphite/65">Narrow the collection by academic context.</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-graphite/80">Filter archive</p>
             </div>
             <div className="flex items-center gap-3">
-              <p className="text-sm font-medium tabular-nums text-graphite/65">
+              <p className="text-sm font-medium tabular-nums text-graphite/80">
                 {filteredDocuments.length} of {documents.length} document{documents.length === 1 ? '' : 's'}
               </p>
               <button
@@ -445,7 +423,7 @@ function Library({
           </div>
           {hasActiveFilters ? (
             <div className="mt-4 flex justify-end">
-              <button type="button" onClick={clearFilters} className="rounded-md px-2 py-2 text-xs font-semibold text-graphite/70 transition hover:bg-white hover:text-ink focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ink/10">
+              <button type="button" onClick={clearFilters} className="rounded-md px-2 py-2 text-xs font-semibold text-graphite/80 transition hover:bg-white hover:text-ink">
               Clear filters
               </button>
             </div>
@@ -517,7 +495,7 @@ type ConfirmAction = {
 
 function StatusNote({ message }: { message: string }) {
   return (
-    <div className="status-enter rounded-lg border border-ink/8 bg-paper/70 px-4 py-3 text-sm leading-6 text-graphite/76">
+    <div className="status-enter rounded-lg border border-ink/10 bg-paper/70 px-4 py-3 text-sm leading-6 text-graphite/80">
       {message}
     </div>
   );
@@ -526,7 +504,7 @@ function StatusNote({ message }: { message: string }) {
 function SourceFilter({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
   return (
     <label className="block min-w-0">
-      <span className="text-xs font-semibold uppercase tracking-[0.1em] text-graphite/55">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-[0.1em] text-graphite/80">{label}</span>
       <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 h-11 w-full min-w-0 rounded-lg border border-ink/[0.08] bg-white px-3 text-sm font-medium text-ink shadow-sm outline-none ring-ink/10 transition focus:border-ink/20 focus:ring-4">
         <option value="All">All</option>
         {options.map((option) => (
@@ -622,16 +600,16 @@ function ConfirmModal({ action, onClose }: { action: ConfirmAction | null; onClo
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body" className="w-full max-w-lg rounded-lg border border-ink/10 bg-white p-5 shadow-soft">
+      <div role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body" className="w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Confirm destructive action</p>
         <h2 id="confirm-dialog-title" className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
-        <p id="confirm-dialog-body" className="mt-3 text-sm leading-7 text-graphite/75">{action.body}</p>
-        <div className="mt-6 flex flex-wrap justify-end gap-3">
-          <button type="button" onClick={onClose} disabled={isWorking} className="rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink">
+        <p id="confirm-dialog-body" className="mt-3 text-sm leading-7 text-graphite/80">{action.body}</p>
+        <div className="mt-6 grid gap-2 sm:flex sm:justify-end">
+          <button type="button" onClick={onClose} disabled={isWorking} className="min-h-10 rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink hover:bg-paper/50">
             Cancel
           </button>
-          <button type="button" onClick={confirm} disabled={isWorking} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:bg-red-400">
-            {isWorking ? 'Working...' : action.confirmLabel}
+          <button type="button" onClick={confirm} disabled={isWorking} className="min-h-10 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:bg-red-400">
+            {isWorking ? 'Working…' : action.confirmLabel}
           </button>
         </div>
       </div>
@@ -702,10 +680,10 @@ function ManagedDocumentCard({
         chunkCount={chunkCount}
         actions={(
           <>
-            <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-semibold text-graphite/65 transition hover:bg-paper hover:text-ink focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ink/10">
+            <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-semibold text-graphite/80 transition hover:bg-paper hover:text-ink">
               <Edit3 size={14} /> Edit details
             </button>
-            <button type="button" onClick={() => onDelete(document)} className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-semibold text-graphite/52 transition hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100">
+            <button type="button" onClick={() => onDelete(document)} className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-semibold text-graphite/80 transition hover:bg-red-50 hover:text-red-700">
               <Trash2 size={14} /> Delete
             </button>
           </>
@@ -714,13 +692,13 @@ function ManagedDocumentCard({
       />
       {isEditing ? (
         <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-ink/[0.055]">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Edit archive details</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Edit archive details</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <FormField label="Document title" className="md:col-span-2"><input value={title} onChange={(event) => setTitle(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
             <FormField label="Academic year"><input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
             <FormField label="Term"><select value={term} onChange={(event) => setTerm(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4">{[...academicTerms, term].filter((value, index, values) => value && values.indexOf(value) === index).map((value) => <option key={value} value={value}>{value}</option>)}</select></FormField>
             <FormField label="Assessment or report name" className="md:col-span-2"><input value={linkedAssessmentName} onChange={(event) => setLinkedAssessmentName(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
-            <details className="rounded-lg border border-ink/8 bg-paper/70 p-3 md:col-span-2">
+            <details className="rounded-lg border border-ink/10 bg-paper/70 p-3 md:col-span-2">
               <summary className="cursor-pointer text-sm font-semibold text-ink">Add exact date (optional)</summary>
               <FormField label="Exact date" className="mt-3"><input type="date" value={sourceDate} onChange={(event) => setSourceDate(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
             </details>
@@ -733,13 +711,13 @@ function ManagedDocumentCard({
             <EditListField label="Teacher names" value={teacherNames} setValue={setTeacherNames} />
             <EditListField label="Skills" value={skills} setValue={setSkills} />
             <EditListField label="Tags" value={tags} setValue={setTags} />
-            <label className="flex gap-3 rounded-lg border border-ink/8 bg-paper/70 p-3 text-sm leading-6 text-graphite/75 md:col-span-2">
+            <label className="flex gap-3 rounded-lg border border-ink/10 bg-paper/70 p-3 text-sm leading-6 text-graphite/80 md:col-span-2">
               <input type="checkbox" checked={ignoreInstrumentalMusic} onChange={(event) => setIgnoreInstrumentalMusic(event.target.checked)} className="mt-1 size-4 shrink-0 accent-ink" />
               <span>Keep instrumental or performance lesson content out of academic progress.</span>
             </label>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" onClick={save} className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white">Save changes</button>
+            <button type="button" onClick={save} className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-graphite">Save changes</button>
             <button type="button" onClick={() => setIsEditing(false)} className="rounded-lg border border-ink/10 px-4 py-2 text-sm font-semibold text-ink">Cancel</button>
           </div>
         </div>
@@ -758,11 +736,11 @@ function ExtractionReviewPanel({ records, onSaveRecord }: { records: Performance
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brass">May need a quick check</p>
-          <p className="mt-2 text-sm leading-6 text-graphite/74">
+          <p className="mt-2 text-sm leading-6 text-graphite/80">
             Check {reviewRecords.length} subject {reviewRecords.length === 1 ? 'entry' : 'entries'} before {reviewRecords.length === 1 ? 'it affects' : 'they affect'} Progress.
           </p>
         </div>
-        <span className="rounded-full bg-brass/12 px-2.5 py-1 text-xs font-semibold text-brass">Review required</span>
+        <span className="rounded-full bg-brass/10 px-2.5 py-1 text-xs font-semibold text-brass">Review required</span>
       </div>
       <div className="mt-4 space-y-3">
         {reviewRecords.map((record) => (
@@ -833,11 +811,11 @@ function ExtractionRecordEditor({ record, onSaveRecord }: { record: PerformanceR
   ].filter(Boolean);
 
   return (
-    <article className={`rounded-lg border p-4 ${confidence === 'Low' ? 'border-red-200 bg-red-50/45' : 'border-brass/18 bg-paper/55'}`}>
+    <article className={`rounded-lg border p-4 ${confidence === 'Low' ? 'border-red-200 bg-red-50/45' : 'border-brass/20 bg-paper/55'}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-semibold text-ink">{record.subject}</p>
-          <p className="mt-1 text-sm leading-6 text-graphite/72">{values.length ? values.join(' / ') : 'Teacher comments only'}</p>
+          <p className="mt-1 text-sm leading-6 text-graphite/80">{values.length ? values.join(' / ') : 'Teacher comments only'}</p>
           {reviewReasons.length ? <p className="mt-2 text-sm font-semibold leading-6 text-brass">{reviewReasons.join(' ')}</p> : null}
         </div>
         <button type="button" onClick={() => setIsEditing((value) => !value)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${confidence === 'Low' ? 'bg-ink text-white' : 'border border-ink/10 bg-white text-ink'}`}>
@@ -855,7 +833,7 @@ function ExtractionRecordEditor({ record, onSaveRecord }: { record: PerformanceR
           <FormField label="Effort"><input value={effort} onChange={(event) => setEffort(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
           <FormField label="Attainment"><input value={attainment} onChange={(event) => setAttainment(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
           <FormField label="Teacher comment" className="md:col-span-2"><textarea value={teacherComment} onChange={(event) => setTeacherComment(event.target.value)} rows={4} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
-          <button type="button" onClick={save} className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white md:col-span-2">
+          <button type="button" onClick={save} className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-graphite md:col-span-2">
             Save reviewed values
           </button>
         </div>
@@ -867,23 +845,25 @@ function ExtractionRecordEditor({ record, onSaveRecord }: { record: PerformanceR
 function EditListField({ label, value, setValue }: { label: string; value: string; setValue: (value: string) => void }) {
   return (
     <label className="block">
-      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">{label}</span>
       <textarea value={value} onChange={(event) => setValue(event.target.value)} rows={2} className="mt-2 w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" />
     </label>
   );
 }
 
-function IconTextButton({ icon: Icon, label, onClick, danger = false }: { icon: typeof Edit3; label: string; onClick: () => void; danger?: boolean }) {
+function IconTextButton({ icon: Icon, label, onClick, danger = false, iconOnly = false }: { icon: typeof Edit3; label: string; onClick: () => void; danger?: boolean; iconOnly?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
-        danger ? 'border-red-200 bg-red-50 text-red-700' : 'border-ink/10 bg-white text-ink'
+      aria-label={iconOnly ? label : undefined}
+      title={iconOnly ? label : undefined}
+      className={`inline-flex min-h-9 items-center justify-center gap-2 rounded-lg text-xs font-semibold ${iconOnly ? 'size-9 p-0' : 'px-3 py-2'} ${
+        danger ? 'text-graphite/80 hover:bg-red-50 hover:text-red-700' : 'text-ink hover:bg-paper'
       }`}
     >
       <Icon size={14} />
-      {label}
+      {iconOnly ? <span className="sr-only">{label}</span> : label}
     </button>
   );
 }
@@ -2079,11 +2059,11 @@ function PerformancePage({
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
-      <SectionHeader eyebrow="Progress" title="Your learning, clearly explained" copy="A tutor's view of what is going well, what has changed, what teachers repeat, and what to do next." />
+      <SectionHeader title="Your learning, clearly explained" copy="A tutor's view of what is going well, what has changed, what teachers repeat, and what to do next." compact />
 
       {records.length > 0 ? <div className="border-y border-ink/[0.06] py-5">
         <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
-          <label className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
+          <label className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">
             Focus
             <select value={selectedSubject} onChange={(event) => setSelectedSubject(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-ink/[0.08] bg-white px-3 text-sm font-medium normal-case tracking-normal text-ink shadow-sm outline-none ring-ink/10 focus:ring-4">
               {subjectOptions.map((subject) => (
@@ -2094,7 +2074,7 @@ function PerformancePage({
               {!subjectOptions.includes('Music') ? <option value="Music">Music</option> : null}
             </select>
           </label>
-          <label className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
+          <label className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">
             Period
             <select value={selectedPeriod} onChange={(event) => setSelectedPeriod(event.target.value as ProgressPeriod)} className="mt-2 h-11 w-full rounded-lg border border-ink/[0.08] bg-white px-3 text-sm font-medium normal-case tracking-normal text-ink shadow-sm outline-none ring-ink/10 focus:ring-4">
               {progressPeriods.map((period) => (
@@ -2104,7 +2084,7 @@ function PerformancePage({
               ))}
             </select>
           </label>
-          <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || filteredRecords.filter(isAcademicPerformanceRecord).length === 0} className="h-11 self-end rounded-lg bg-ink px-4 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+          <button type="button" onClick={handleGenerateAdvice} disabled={isGeneratingAdvice || filteredRecords.filter(isAcademicPerformanceRecord).length === 0} className="h-11 self-end rounded-lg border border-ink/10 bg-white px-4 text-sm font-semibold text-ink shadow-sm hover:border-ink/20 hover:bg-paper/50 disabled:cursor-not-allowed disabled:bg-paper disabled:text-graphite/45">
             {isGeneratingAdvice ? 'Reading reports…' : 'Refresh tutor view'}
           </button>
         </div>
@@ -2114,7 +2094,7 @@ function PerformancePage({
             <FormField label="To"><input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
           </div>
         ) : null}
-        {statusMessage ? <p key={statusMessage} role="status" className="status-enter mt-3 text-sm leading-7 text-graphite/74">{statusMessage}</p> : null}
+        {statusMessage ? <p key={statusMessage} role="status" className="status-enter mt-3 text-sm leading-7 text-graphite/80">{statusMessage}</p> : null}
       </div> : null}
 
       {records.length === 0 ? (
@@ -2124,14 +2104,18 @@ function PerformancePage({
         />
       ) : null}
 
-      {records.length > 0 ? (
+      {records.length > 0 && filteredRecords.length === 0 ? (
+        <EmptyState title="No evidence in this view" copy="Choose another subject or time period to return to the reports and teacher feedback already in Progress." />
+      ) : null}
+
+      {filteredRecords.length > 0 ? (
         <>
-          <section className="rounded-xl bg-white px-6 py-7 shadow-[0_18px_48px_rgba(43,40,35,0.06)] ring-1 ring-ink/[0.045] sm:px-8 sm:py-8">
+          <section className="surface-raised px-6 py-7 sm:px-8 sm:py-8">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brass">How am I doing?</p>
             <div className="mt-4 max-w-4xl">
-              <p className="text-sm font-semibold text-graphite/58">{selectedSubject} · {selectedPeriod}</p>
+              <p className="text-sm font-semibold text-graphite/80">{selectedSubject} · {selectedPeriod}</p>
               <h2 className="mt-2 font-serif text-3xl font-semibold leading-tight text-ink sm:text-4xl">{learningSummary.headline}</h2>
-              <p className="mt-4 text-base leading-8 text-graphite/76 sm:text-lg">{learningSummary.body}</p>
+              <p className="mt-4 text-base leading-8 text-graphite/80 sm:text-lg">{learningSummary.body}</p>
             </div>
           </section>
 
@@ -2150,7 +2134,7 @@ function PerformancePage({
                 {teacherInsights.slice(0, 3).map((insight) => <TeacherInsightCard key={`${insight.theme}-${insight.classification}`} insight={insight} />)}
               </div>
             ) : (
-              <p className="mt-5 rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/70">There is not enough written teacher feedback in this view to identify a repeated message yet.</p>
+              <p className="mt-5 rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/80">There is not enough written teacher feedback in this view to identify a repeated message yet.</p>
             )}
           </section>
 
@@ -2165,9 +2149,9 @@ function PerformancePage({
                   <span className="font-serif text-2xl text-brass">{index + 1}</span>
                   <div className="max-w-4xl">
                     <h3 className="text-lg font-semibold text-ink">{recommendation.title}</h3>
-                    <p className="mt-2 text-sm leading-7 text-graphite/74">{recommendation.action}</p>
-                    <p className="mt-3 text-sm leading-7 text-graphite/68"><span className="font-semibold text-ink">Why this now:</span> {recommendation.why}</p>
-                    {recommendation.evidence ? <p className="mt-2 border-l-2 border-brass/35 pl-3 text-sm italic leading-6 text-graphite/62">{recommendation.evidence}</p> : null}
+                    <p className="mt-2 text-sm leading-7 text-graphite/80">{recommendation.action}</p>
+                    <p className="mt-3 text-sm leading-7 text-graphite/80"><span className="font-semibold text-ink">Why this now:</span> {recommendation.why}</p>
+                    {recommendation.evidence ? <p className="mt-2 border-l-2 border-brass/35 pl-3 text-sm italic leading-6 text-graphite/80">{recommendation.evidence}</p> : null}
                   </div>
                 </article>
               ))}
@@ -2176,11 +2160,11 @@ function PerformancePage({
         </>
       ) : null}
 
-      <details className="border-t border-ink/[0.06] pt-5">
-        <summary className="cursor-pointer text-sm font-semibold text-graphite/68">{records.length ? 'Manage the evidence behind this view' : 'Add a progress record'}</summary>
+      <details className={`${records.length ? 'border-t border-ink/[0.06]' : ''} pt-5`}>
+        <summary className="cursor-pointer text-sm font-semibold text-graphite/80">{records.length ? 'Manage the evidence behind this view' : 'Add a progress record'}</summary>
         <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-          <form onSubmit={handleManualSubmit} className="rounded-lg border border-ink/8 bg-paper/50 p-5">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+          <form onSubmit={handleManualSubmit} className="rounded-lg border border-ink/10 bg-paper/50 p-5">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">
             <ClipboardList size={15} />
             Manual entry
           </div>
@@ -2191,7 +2175,7 @@ function PerformancePage({
             <FormField label="Term"><input value={form.term} onChange={(event) => updateForm('term', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
             <FormField label="Assessment type"><select value={form.assessmentType} onChange={(event) => updateForm('assessmentType', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4">{assessmentTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></FormField>
             <FormField label="Teacher"><input value={form.teacher} onChange={(event) => updateForm('teacher', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
-            <details className="rounded-lg border border-ink/8 bg-white p-3 sm:col-span-2">
+            <details className="rounded-lg border border-ink/10 bg-white p-3 sm:col-span-2">
               <summary className="cursor-pointer text-sm font-semibold text-ink">Add exact date (optional)</summary>
               <FormField label="Exact date" className="mt-3"><input type="date" value={form.date} onChange={(event) => updateForm('date', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
             </details>
@@ -2209,7 +2193,7 @@ function PerformancePage({
             <FormField label="Areas to improve" hint="Separate items with commas or new lines"><textarea value={form.weaknesses} onChange={(event) => updateForm('weaknesses', event.target.value)} rows={2} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
             <FormField label="Action points" className="sm:col-span-2"><textarea value={form.actionPoints} onChange={(event) => updateForm('actionPoints', event.target.value)} rows={2} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
           </div>
-          <button type="submit" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+          <button type="submit" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite">
             <FilePlus2 size={17} />
             {editingRecordId ? 'Save changes' : 'Save record'}
           </button>
@@ -2247,20 +2231,20 @@ function PerformancePage({
           </form>
 
         <div className="space-y-6">
-          <div className="rounded-lg border border-ink/8 bg-paper/50 p-5">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">
+          <div className="rounded-lg border border-ink/10 bg-paper/50 p-5">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">
               <Sparkles size={15} />
               Analyse uploaded report
             </div>
-            <p className="mt-3 text-sm leading-7 text-graphite/72">Select an uploaded report. Research OS will look for academic records and will not invent missing marks.</p>
+            <p className="mt-3 text-sm leading-7 text-graphite/80">Select an uploaded report. Research OS will look for academic records and will not invent missing marks.</p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <FormField label="Uploaded report" className="min-w-0 flex-1"><select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4"><option value="">Choose a document</option>{analysableDocuments.map((document) => <option key={document.id} value={document.id}>{document.title}</option>)}</select></FormField>
-              <button type="button" onClick={handleAnalyseDocument} disabled={isAnalysing || analysableDocuments.length === 0} className="self-end rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+              <button type="button" onClick={handleAnalyseDocument} disabled={isAnalysing || analysableDocuments.length === 0} className="self-end rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/55">
                 {isAnalysing ? 'Analysing...' : 'Analyse'}
               </button>
             </div>
             {analysableDocuments.length === 0 ? (
-              <p className="mt-3 rounded-lg bg-paper/70 p-3 text-sm leading-6 text-graphite/70">Upload a TXT, PDF, or DOCX report first.</p>
+              <p className="mt-3 rounded-lg bg-paper/70 p-3 text-sm leading-6 text-graphite/80">Upload a TXT, PDF, or DOCX report first.</p>
             ) : null}
           </div>
 
@@ -2270,16 +2254,16 @@ function PerformancePage({
         <div className="mt-8 grid gap-3">
           {records.length ? (
             records.map((record) => (
-              <article key={record.id} className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
+              <article key={record.id} className="rounded-lg border border-ink/10 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold text-ink">{record.title}</p>
                       {!isAcademicPerformanceRecord(record) ? (
-                        <span className="rounded-full bg-paper px-2.5 py-1 text-xs font-semibold text-graphite/70">Ignored in academic trends</span>
+                        <span className="rounded-full bg-paper px-2.5 py-1 text-xs font-semibold text-graphite/80">Ignored in academic trends</span>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-sm text-graphite/70">
+                    <p className="mt-1 text-sm text-graphite/80">
                       {[record.subject, record.date, record.academicYear, record.term, formatResult(record)].filter(Boolean).join(' / ')}
                     </p>
                   </div>
@@ -2312,21 +2296,12 @@ function PerformancePage({
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/50">{label}</p>
-      <p className="mt-2 truncate text-2xl font-semibold text-ink">{value}</p>
-    </div>
-  );
-}
-
 function FormField({ label, hint, className = '', children }: { label: string; hint?: string; className?: string; children: ReactNode }) {
   return (
     <label className={`block ${className}`}>
-      <span className="flex min-h-5 items-baseline justify-between gap-3 text-xs font-semibold text-graphite/70">
+      <span className="flex min-h-5 items-baseline justify-between gap-3 text-xs font-semibold text-graphite/80">
         <span>{label}</span>
-        {hint ? <span className="font-normal text-graphite/55">{hint}</span> : null}
+        {hint ? <span className="font-normal text-graphite/80">{hint}</span> : null}
       </span>
       <span className="mt-2 block">{children}</span>
     </label>
@@ -3044,13 +3019,13 @@ function ProgressTimeline({ snapshots, documents, selectedKey, onSelect }: { sna
           const sourceTitle = documents.find((document) => document.id === snapshot.records[0]?.sourceDocumentId)?.title;
 
           return (
-          <article key={snapshot.key} className={`rounded-lg border p-4 transition ${selected ? 'border-ink/24 bg-paper/65' : 'border-ink/8 bg-white hover:border-ink/18'}`}>
+          <article key={snapshot.key} className={`rounded-lg border p-4 transition ${selected ? 'border-ink/25 bg-paper/65' : 'border-ink/10 bg-white hover:border-ink/20'}`}>
             <button type="button" onClick={() => onSelect(snapshot.key)} className="block w-full text-left">
               <span className="flex flex-wrap items-start justify-between gap-4">
                 <span className="min-w-0">
-                  <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{getRecordTimelineLabel(snapshot.records[0])}</span>
+                  <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">{getRecordTimelineLabel(snapshot.records[0])}</span>
                   <span className="mt-1 block font-semibold text-ink">{sourceTitle || snapshot.title}</span>
-                  <span className="mt-1 block text-sm leading-6 text-graphite/65">
+                  <span className="mt-1 block text-sm leading-6 text-graphite/80">
                     {reportLabel} / {subjects.length} subject{subjects.length === 1 ? '' : 's'} / {percentages.length} mark{percentages.length === 1 ? '' : 's'} / {teacherComments.length} teacher comment{teacherComments.length === 1 ? '' : 's'}
                   </span>
                 </span>
@@ -3058,15 +3033,15 @@ function ProgressTimeline({ snapshots, documents, selectedKey, onSelect }: { sna
               </span>
             </button>
             <details className="mt-3">
-              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Expand Report</summary>
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">Expand Report</summary>
               <div className="mt-3 grid gap-2">
                 {snapshot.records.slice(0, 12).map((record) => (
                   <div key={record.id} className="rounded-lg bg-white px-3 py-3 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="font-semibold text-ink">{record.subject}</span>
-                      <span className="text-graphite/70">{[formatCompactMark(record), record.teacher].filter(Boolean).join(' / ') || 'Teacher comments only'}</span>
+                      <span className="text-graphite/80">{[formatCompactMark(record), record.teacher].filter(Boolean).join(' / ') || 'Teacher comments only'}</span>
                     </div>
-                    {record.teacherComment ? <p className="mt-2 leading-6 text-graphite/72">{record.teacherComment}</p> : null}
+                    {record.teacherComment ? <p className="mt-2 leading-6 text-graphite/80">{record.teacherComment}</p> : null}
                   </div>
                 ))}
               </div>
@@ -3077,7 +3052,7 @@ function ProgressTimeline({ snapshots, documents, selectedKey, onSelect }: { sna
       </div>
     </div>
   ) : (
-    <p className="mt-5 rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">No records match this subject and time period yet.</p>
+    <p className="mt-5 rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/80">No records match this subject and time period yet.</p>
   );
 }
 
@@ -3118,7 +3093,7 @@ function TimelineDetail({ snapshot, documents }: { snapshot: ReportSnapshot; doc
     <div className="mt-4 space-y-4">
       <div>
         <h3 className="text-xl font-semibold text-ink">{source?.title || snapshot.title}</h3>
-        <p className="mt-1 text-sm text-graphite/70">{[snapshot.records[0]?.academicYear, snapshot.records[0]?.term, getRecordTimelineLabel(snapshot.records[0])].filter(Boolean).join(' / ')}</p>
+        <p className="mt-1 text-sm text-graphite/80">{[snapshot.records[0]?.academicYear, snapshot.records[0]?.term, getRecordTimelineLabel(snapshot.records[0])].filter(Boolean).join(' / ')}</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <DetailPill label="Subjects" value={String(subjects.length)} />
@@ -3135,15 +3110,15 @@ function TimelineDetail({ snapshot, documents }: { snapshot: ReportSnapshot; doc
       </div>
       {commentHighlights.length ? (
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Teacher comment highlights</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">Teacher comment highlights</p>
           <div className="mt-2 space-y-2">
             {commentHighlights.map((record) => (
-              <p key={record.id} className="rounded-lg bg-paper/70 p-3 text-sm leading-6 text-graphite/74"><span className="font-semibold text-ink">{record.subject}:</span> {record.teacherComment}</p>
+              <p key={record.id} className="rounded-lg bg-paper/70 p-3 text-sm leading-6 text-graphite/80"><span className="font-semibold text-ink">{record.subject}:</span> {record.teacherComment}</p>
             ))}
           </div>
         </div>
       ) : null}
-      {source ? <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Source: {source.title}</p> : null}
+      {source ? <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">Source: {source.title}</p> : null}
     </div>
   );
 }
@@ -3151,7 +3126,7 @@ function TimelineDetail({ snapshot, documents }: { snapshot: ReportSnapshot; doc
 function DetailPill({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-paper/70 p-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">{label}</p>
       <p className="mt-1 text-sm font-semibold text-ink">{value}</p>
     </div>
   );
@@ -3162,14 +3137,14 @@ function TeacherInsightCard({ insight }: { insight: TeacherInsight }) {
   return (
     <article className="grid gap-3 py-6 md:grid-cols-[170px_1fr]">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/52">{label}</p>
-        {insight.subjects.length ? <p className="mt-2 text-xs leading-5 text-graphite/58">{insight.subjects.join(' · ')}</p> : null}
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">{label}</p>
+        {insight.subjects.length ? <p className="mt-2 text-xs leading-5 text-graphite/80">{insight.subjects.join(' · ')}</p> : null}
       </div>
       <div className="max-w-3xl">
         <h3 className="text-xl font-semibold text-ink">{insight.theme}</h3>
-        <p className="mt-2 text-sm leading-7 text-graphite/74">{insight.summary}</p>
-        <p className="mt-2 text-sm leading-7 text-graphite/66"><span className="font-semibold text-ink">Why it matters:</span> {insight.why}</p>
-        {insight.quote ? <blockquote className="mt-3 border-l-2 border-brass/35 pl-3 text-sm italic leading-6 text-graphite/62">{insight.quote}</blockquote> : null}
+        <p className="mt-2 text-sm leading-7 text-graphite/80">{insight.summary}</p>
+        <p className="mt-2 text-sm leading-7 text-graphite/80"><span className="font-semibold text-ink">Why it matters:</span> {insight.why}</p>
+        {insight.quote ? <blockquote className="mt-3 border-l-2 border-brass/35 pl-3 text-sm italic leading-6 text-graphite/80">{insight.quote}</blockquote> : null}
       </div>
     </article>
   );
@@ -3194,13 +3169,13 @@ function ReportSnapshotStory({ snapshot, documents }: { snapshot: ReportSnapshot
     <div className="mt-5 rounded-xl bg-white p-5 shadow-sm ring-1 ring-ink/[0.045] sm:p-7">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-ink/[0.06] pb-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/50">One report · snapshot</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">One report · snapshot</p>
           <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">{sourceTitle}</h3>
-          <p className="mt-2 text-sm text-graphite/62">{[snapshot.records[0]?.term, snapshot.records[0]?.academicYear].filter(Boolean).join(' · ') || 'Current report'}</p>
+          <p className="mt-2 text-sm text-graphite/80">{[snapshot.records[0]?.term, snapshot.records[0]?.academicYear].filter(Boolean).join(' · ') || 'Current report'}</p>
         </div>
-        {average !== undefined ? <p className="font-serif text-4xl font-semibold text-ink">{average}% <span className="font-sans text-xs font-semibold uppercase tracking-[0.1em] text-graphite/50">average</span></p> : null}
+        {average !== undefined ? <p className="font-serif text-4xl font-semibold text-ink">{average}% <span className="font-sans text-xs font-semibold uppercase tracking-[0.1em] text-graphite/80">average</span></p> : null}
       </div>
-      <p className="mt-5 max-w-3xl text-base leading-7 text-graphite/76">{story}</p>
+      <p className="mt-5 max-w-3xl text-base leading-7 text-graphite/80">{story}</p>
       {marked.length ? (
         <div className="mt-6 space-y-4">
           {marked.map(({ record, percentage }) => (
@@ -3277,9 +3252,9 @@ function TrendChart({
       {seriesEntries.length ? (
         <>
           <div className="mb-5 max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/50">One subject · timeline</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">One subject · timeline</p>
             <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">{timelineStory.headline}</h3>
-            <p className="mt-2 text-sm leading-7 text-graphite/70">{timelineStory.body}</p>
+            <p className="mt-2 text-sm leading-7 text-graphite/80">{timelineStory.body}</p>
           </div>
           <div className="overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-ink/[0.045] sm:p-5">
           <svg className="h-[300px] w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${selectedSubject} marks across comparable reports`}>
@@ -3316,9 +3291,9 @@ function TrendChart({
           </div>
         </>
       ) : records.length ? (
-        <p className="mt-5 rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/70">There are reports here, but not yet two comparable marked results for {selectedSubject}. Read the teacher messages as the main guide for now.</p>
+        <p className="mt-5 rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/80">There are reports here, but not yet two comparable marked results for {selectedSubject}. Read the teacher messages as the main guide for now.</p>
       ) : (
-        <p className="mt-5 rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/70">No reports match this focus and period yet.</p>
+        <p className="mt-5 rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/80">No reports match this focus and period yet.</p>
       )}
     </div>
   );
@@ -3354,17 +3329,17 @@ function CompactSubjectMovementComparison({ records }: { records: PerformanceRec
   return (
     <div className="mt-5">
       <p className="mb-2 text-sm font-semibold text-ink">Subject movement from first to latest report</p>
-      <p className="mb-4 text-sm leading-6 text-graphite/70">All Subjects is shown as a comparison so lines and labels do not overlap. Each row compares the first and latest marked report for that same subject.</p>
+      <p className="mb-4 text-sm leading-6 text-graphite/80">Each row compares the first and latest marked report for the same subject.</p>
       {rows.length ? (
         <div className="space-y-3">
           {rows.map((row) => {
             const width = Math.min(100, Math.round((Math.abs(row.delta) / maxDelta) * 100));
             return (
-              <div key={row.subject} className="rounded-lg border border-ink/8 bg-paper/55 p-3">
+              <div key={row.subject} className="rounded-lg border border-ink/10 bg-paper/55 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-ink">{row.subject}</p>
-                    <p className="mt-1 text-xs text-graphite/62">{`${getShortReportAxisLabel(row.first.records[0])}: ${row.first.percentage}% · ${getShortReportAxisLabel(row.latest.records[0])}: ${row.latest.percentage}%`}</p>
+                    <p className="mt-1 text-xs text-graphite/80">{`${getShortReportAxisLabel(row.first.records[0])}: ${row.first.percentage}% · ${getShortReportAxisLabel(row.latest.records[0])}: ${row.latest.percentage}%`}</p>
                   </div>
                   <p className={`text-lg font-semibold ${row.delta >= 0 ? 'text-moss' : 'text-red-700'}`}>{row.delta > 0 ? '+' : ''}{Math.round(row.delta)}</p>
                 </div>
@@ -3376,9 +3351,9 @@ function CompactSubjectMovementComparison({ records }: { records: PerformanceRec
           })}
         </div>
       ) : records.length ? (
-        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">Add a later report for the same subject to see subject movement.</p>
+        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/80">Add a later report for the same subject to see subject movement.</p>
       ) : (
-        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">No marked academic records match this view yet.</p>
+        <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/80">No marked academic records match this view yet.</p>
       )}
     </div>
   );
@@ -3402,9 +3377,9 @@ function SubjectMovementComparison({ records }: { records: PerformanceRecord[] }
   return (
     <div className="mt-5">
       <div className="mb-5 max-w-3xl">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/50">All subjects · comparison</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">All subjects · comparison</p>
         <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">{story}</h3>
-        <p className="mt-2 text-sm leading-7 text-graphite/70">Each subject is compared only with itself, from its first marked report in this view to its latest.</p>
+        <p className="mt-2 text-sm leading-7 text-graphite/80">Each subject is compared only with itself, from its first marked report in this view to its latest.</p>
       </div>
       {rows.length ? (
         <div className="divide-y divide-ink/[0.06] border-y border-ink/[0.06]">
@@ -3416,7 +3391,7 @@ function SubjectMovementComparison({ records }: { records: PerformanceRecord[] }
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-ink">{row.subject}</p>
-                    <p className="mt-1 text-sm text-graphite/62">
+                    <p className="mt-1 text-sm text-graphite/80">
                       {row.first && row.latest ? `${getShortReportAxisLabel(row.first.records[0])} ${row.first.percentage}% → ${getShortReportAxisLabel(row.latest.records[0])} ${row.latest.percentage}%` : 'One marked report'}
                     </p>
                   </div>
@@ -3430,27 +3405,27 @@ function SubjectMovementComparison({ records }: { records: PerformanceRecord[] }
           })}
         </div>
       ) : records.length ? (
-        <p className="rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/70">There is only one marked report per subject here, so this view is a snapshot rather than a comparison.</p>
+        <p className="rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/80">There is only one marked report per subject here, so this view is a snapshot rather than a comparison.</p>
       ) : (
-        <p className="rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/70">No marked reports match this view yet.</p>
+        <p className="rounded-lg bg-paper/55 p-4 text-sm leading-7 text-graphite/80">No marked reports match this view yet.</p>
       )}
     </div>
   );
 }
 
 function TrendDataNotice() {
-  return <p className="rounded-lg bg-paper/70 p-3 text-sm leading-6 text-graphite/70">Add another assessment for this subject to see progress over time.</p>;
+  return <p className="rounded-lg bg-paper/70 p-3 text-sm leading-6 text-graphite/80">Add another assessment for this subject to see progress over time.</p>;
 }
 
 function TrendCallout({ label, change }: { label: string; change?: TrendChange }) {
   if (!change) {
-    return <p className="rounded-lg bg-paper/70 p-3 text-sm text-graphite/70">{label}: more data needed.</p>;
+    return <p className="rounded-lg bg-paper/70 p-3 text-sm text-graphite/80">{label}: more data needed.</p>;
   }
 
   return (
     <div className="rounded-lg bg-paper/70 p-3 text-sm">
       <p className="font-semibold text-ink">{label}: {change.delta > 0 ? '+' : ''}{Math.round(change.delta)} points</p>
-      <p className="mt-1 text-graphite/70">{change.subject}: {getRecordAxisLabel(change.from.records[0])} to {getRecordAxisLabel(change.to.records[0])}</p>
+      <p className="mt-1 text-graphite/80">{change.subject}: {getRecordAxisLabel(change.from.records[0])} to {getRecordAxisLabel(change.to.records[0])}</p>
     </div>
   );
 }
@@ -3505,8 +3480,8 @@ function SubjectChangeChart({ records }: { records: PerformanceRecord[] }) {
   if (!rows.length) return null;
 
   return (
-    <article className="rounded-lg border border-ink/8 bg-paper/50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">Which Subjects Changed Most?</p>
+    <article className="rounded-lg border border-ink/10 bg-paper/50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">Which Subjects Changed Most?</p>
       <div className="mt-5 space-y-3">
         {rows.map((row) => {
           const width = Math.max(8, Math.round((Math.abs(row.delta) / maxDelta) * 100));
@@ -3525,7 +3500,7 @@ function SubjectChangeChart({ records }: { records: PerformanceRecord[] }) {
                   {row.delta >= 0 ? <div className="h-full rounded-full bg-moss" style={{ width: `${width}%` }} /> : null}
                 </div>
               </div>
-              <p className="mt-1 text-xs text-graphite/62">{row.first.percentage}% to {row.latest.percentage}%</p>
+              <p className="mt-1 text-xs text-graphite/80">{row.first.percentage}% to {row.latest.percentage}%</p>
             </div>
           );
         })}
@@ -3545,8 +3520,8 @@ function MarkConsistencyChart({ records, selectedSubject }: { records: Performan
   const clampedMax = Math.max(0, Math.min(100, max));
 
   return (
-    <article className="rounded-lg border border-ink/8 bg-paper/50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">How Consistent Are My Marks?</p>
+    <article className="rounded-lg border border-ink/10 bg-paper/50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">How Consistent Are My Marks?</p>
       <h3 className="mt-2 text-lg font-semibold text-ink">{selectedSubject}</h3>
       <div className="mt-5 rounded-lg bg-white p-4">
         <div className="relative h-8 rounded-full bg-paper">
@@ -3555,12 +3530,12 @@ function MarkConsistencyChart({ records, selectedSubject }: { records: Performan
             <span key={getReportSnapshotKey(point.records[0])} className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-ink shadow-sm" style={{ left: `${Math.max(0, Math.min(100, point.percentage))}%` }} />
           ))}
         </div>
-        <div className="mt-3 flex items-center justify-between text-xs font-semibold text-graphite/65">
+        <div className="mt-3 flex items-center justify-between text-xs font-semibold text-graphite/80">
           <span>{min}% low</span>
           <span>{max}% high</span>
         </div>
       </div>
-      <p className="mt-3 text-sm leading-6 text-graphite/72">The marks span {range} point{range === 1 ? '' : 's'} across {points.length} reports.</p>
+      <p className="mt-3 text-sm leading-6 text-graphite/80">The marks span {range} point{range === 1 ? '' : 's'} across {points.length} reports.</p>
     </article>
   );
 }
@@ -3571,14 +3546,14 @@ function EvidenceSupportChart({ records }: { records: PerformanceRecord[] }) {
   if (!rows.length) return null;
 
   return (
-    <article className="rounded-lg border border-ink/8 bg-paper/50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">How Much Evidence Supports This?</p>
+    <article className="rounded-lg border border-ink/10 bg-paper/50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">How Much Evidence Supports This?</p>
       <div className="mt-5 space-y-3">
         {rows.map((row) => (
           <div key={row.subject}>
             <div className="mb-1 flex items-center justify-between gap-3 text-sm">
               <span className="font-semibold text-ink">{row.subject}</span>
-              <span className="shrink-0 text-xs font-semibold text-graphite/65">{row.reportCount} report{row.reportCount === 1 ? '' : 's'} / {row.commentCount} comment{row.commentCount === 1 ? '' : 's'}</span>
+              <span className="shrink-0 text-xs font-semibold text-graphite/80">{row.reportCount} report{row.reportCount === 1 ? '' : 's'} / {row.commentCount} comment{row.commentCount === 1 ? '' : 's'}</span>
             </div>
             <div className="h-2.5 overflow-hidden rounded-full bg-white">
               <div className="h-full rounded-full bg-brass" style={{ width: `${Math.max(10, (row.total / max) * 100)}%` }} />
@@ -3593,17 +3568,17 @@ function EvidenceSupportChart({ records }: { records: PerformanceRecord[] }) {
 function TagList({ label, items }: { label: string; items: string[] }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">{label}</p>
       {items.length ? (
         <div className="mt-2 flex flex-wrap gap-2">
           {items.map((item) => (
-            <span key={item} className="rounded-full bg-paper px-2.5 py-1 text-xs font-medium text-graphite/75">
+            <span key={item} className="rounded-full bg-paper px-2.5 py-1 text-xs font-medium text-graphite/80">
               {item}
             </span>
           ))}
         </div>
       ) : (
-        <p className="mt-2 text-sm text-graphite/60">No clear pattern yet.</p>
+        <p className="mt-2 text-sm text-graphite/80">No clear pattern yet.</p>
       )}
     </div>
   );
@@ -3613,7 +3588,7 @@ function ChipCloud({ items }: { items: string[] }) {
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((item) => (
-        <span key={item} className="rounded-full bg-paper px-3 py-1.5 text-xs font-semibold text-graphite/75">
+        <span key={item} className="rounded-full bg-paper px-3 py-1.5 text-xs font-semibold text-graphite/80">
           {item}
         </span>
       ))}
@@ -3625,33 +3600,33 @@ function TimelineRow({ event, compact = false, showContext = true }: { event: Ti
   const [expanded, setExpanded] = useState(false);
   const hasSubjectRecords = event.subjectRecords.length > 0;
   return (
-    <article className="rounded-lg border border-ink/8 bg-white p-4 shadow-sm">
+    <article className="border-t border-ink/[0.055] py-4">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          {showContext ? <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{event.academicYear} / {event.term} / {event.type}</p> : <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">{event.type}</p>}
+          {showContext ? <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">{event.academicYear} / {event.term} / {event.type}</p> : <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">{event.type}</p>}
           <h3 className={`${compact ? 'mt-2 text-sm' : 'mt-3 text-lg'} font-semibold text-ink`}>{event.title}</h3>
-          <p className={`${compact ? 'line-clamp-2' : ''} mt-2 text-sm leading-6 text-graphite/72`}>{event.detail}</p>
+          <p className={`${compact ? 'line-clamp-2' : ''} mt-2 text-sm leading-6 text-graphite/80`}>{event.detail}</p>
           {!compact && event.subjects.length ? <div className="mt-3"><ChipCloud items={event.subjects.slice(0, 6)} /></div> : null}
         </div>
-        {showContext ? <time className="shrink-0 whitespace-pre-line rounded-full bg-paper px-3 py-1 text-xs font-semibold text-graphite/70">{event.date || 'Undated'}</time> : null}
+        {showContext ? <time className="shrink-0 whitespace-pre-line rounded-full bg-paper px-3 py-1 text-xs font-semibold text-graphite/80">{event.date || 'Undated'}</time> : null}
       </div>
       {!compact && hasSubjectRecords ? (
         <>
-          <button type="button" onClick={() => setExpanded((current) => !current)} className="mt-4 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+          <button type="button" onClick={() => setExpanded((current) => !current)} className="mt-4 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink hover:border-ink/20 hover:bg-paper/50">
             {expanded ? 'Hide subjects' : 'Show subjects'}
           </button>
           {expanded ? (
-            <div className="mt-4 space-y-3 border-t border-ink/6 pt-4">
+            <div className="mt-4 space-y-3 border-t border-ink/10 pt-4">
               {event.subjectRecords.map((record) => (
                 <div key={record.id} className="rounded-lg bg-paper/60 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold text-ink">{record.subject}</p>
-                      <p className="mt-1 text-sm text-graphite/68">{[record.teacher, record.effort ? `Effort ${record.effort}` : undefined, record.attainment ? `Attainment ${record.attainment}` : undefined].filter(Boolean).join(' / ')}</p>
+                      <p className="mt-1 text-sm text-graphite/80">{[record.teacher, record.effort ? `Effort ${record.effort}` : undefined, record.attainment ? `Attainment ${record.attainment}` : undefined].filter(Boolean).join(' / ')}</p>
                     </div>
                     <span className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-ink shadow-sm">{formatTimelineSubjectResult(record)}</span>
                   </div>
-                  {record.teacherComment ? <p className="mt-3 text-sm leading-7 text-graphite/74">{record.teacherComment}</p> : null}
+                  {record.teacherComment ? <p className="mt-3 text-sm leading-7 text-graphite/80">{record.teacherComment}</p> : null}
                 </div>
               ))}
             </div>
@@ -3684,11 +3659,11 @@ function TimelinePage({ events }: { events: TimelineEvent[] }) {
   }, {});
 
   return (
-    <div className="space-y-7">
+    <div className="mx-auto max-w-6xl space-y-8">
       <SectionHeader
-        eyebrow="Timeline"
         title="Reports over time"
         copy="Each uploaded report or assessment appears once. Open it to see the subjects inside."
+        compact
       />
       {events.length ? (
         <div className="space-y-8">
@@ -3697,11 +3672,11 @@ function TimelinePage({ events }: { events: TimelineEvent[] }) {
               <h2 className="font-serif text-3xl font-semibold text-ink">{academicYear}</h2>
               {Object.entries(termGroups).map(([term, dateGroups]) => (
                 <div key={`${academicYear}-${term}`} className="border-l border-ink/10 pl-4">
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-graphite/55">{term}</h3>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-graphite/80">{term}</h3>
                   <div className="space-y-3">
                     {Object.entries(dateGroups).map(([date, dateEvents]) => (
                       <div key={`${term}-${date}`} className="grid gap-3 xl:grid-cols-[140px_1fr]">
-                        <time className="pt-4 text-sm font-semibold text-graphite/70">{date}</time>
+                        <time className="pt-4 text-sm font-semibold text-graphite/80">{date}</time>
                         <div className="space-y-3">
                           {dateEvents.map((event) => (
                             <TimelineRow key={event.id} event={event} showContext={false} />
@@ -3724,11 +3699,11 @@ function TimelinePage({ events }: { events: TimelineEvent[] }) {
 
 function EmptyState({ title, copy, action, onClick }: { title: string; copy: string; action?: string; onClick?: () => void }) {
   return (
-    <div className="rounded-lg bg-paper/45 p-10 text-center">
-      <p className="font-serif text-2xl font-semibold text-ink">{title}</p>
-      <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-graphite/70">{copy}</p>
+    <div className="empty-state">
+      <p className="font-serif text-2xl font-semibold leading-tight text-ink sm:text-[1.75rem]">{title}</p>
+      <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-graphite/80">{copy}</p>
       {action && onClick ? (
-        <button type="button" onClick={onClick} className="mt-5 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm">
+        <button type="button" onClick={onClick} className="mt-6 min-h-11 rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-graphite">
           {action}
         </button>
       ) : null}
@@ -4497,18 +4472,17 @@ function Upload({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <section>
+      <section className="space-y-7">
         <SectionHeader
-          eyebrow="Upload"
           title="Add a source"
           copy="Choose a document and add the academic context you want tracked."
+          compact
         />
-        <div className="space-y-4">
-          <section className="rounded-lg bg-white p-5 shadow-sm">
-            <h3 className="mt-2 text-xl font-semibold text-ink">Choose document</h3>
-            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-              <FormField label="Display name" hint="Optional"><input value={fileName} onChange={(event) => setFileName(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4" /></FormField>
-              <label className="inline-flex cursor-pointer items-center justify-center gap-2 self-end rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-graphite shadow-sm hover:text-ink">
+        <div className="surface-raised divide-y divide-ink/[0.055] overflow-hidden">
+          <section className="p-5 sm:p-6">
+            <h3 className="text-xl font-semibold text-ink">Choose document</h3>
+            <div className="mt-4">
+              <label className="flex min-h-16 cursor-pointer items-center justify-between gap-4 rounded-lg bg-paper/55 px-4 py-3 text-sm font-semibold text-graphite ring-1 ring-inset ring-ink/10 hover:bg-paper hover:text-ink focus-within:ring-2 focus-within:ring-ink/20">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -4521,21 +4495,22 @@ function Upload({
                     setFileName(file?.name ?? fileName);
                   }}
                 />
-                Choose file
+                <span>Choose file</span>
+                <span className="text-right text-xs font-medium text-graphite/80">TXT, PDF, DOCX or image</span>
               </label>
             </div>
-            {selectedFile ? <p className="mt-4 text-sm font-medium text-ink">{selectedFile.name}</p> : null}
+            {selectedFile ? <p className="mt-4 truncate text-sm font-medium text-ink">{selectedFile.name}</p> : null}
           </section>
 
           {hasSelectedFile ? (
-            <section className="rounded-lg bg-white p-5 shadow-sm">
-              <h3 className="mt-2 text-xl font-semibold text-ink">Academic time</h3>
+            <section className="p-5 sm:p-6">
+              <h3 className="text-xl font-semibold text-ink">Academic time</h3>
               <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px]">
                 <FormField label="Academic year" hint="e.g. 2025-2026"><input value={metadataDraft.academicYear} onChange={(event) => updateUploadMetadata('academicYear', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
                 <FormField label="Term"><select value={metadataDraft.term} onChange={(event) => updateUploadMetadata('term', event.target.value as AcademicTerm)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">{academicTerms.map((term) => <option key={term} value={term}>{term}</option>)}</select></FormField>
                 <FormField label="Assessment or report name" hint="e.g. Michaelmas Report" className="sm:col-span-2"><input value={metadataDraft.linkedAssessmentName} onChange={(event) => updateUploadMetadata('linkedAssessmentName', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
               </div>
-              <details className="mt-3 rounded-lg border border-ink/8 bg-paper/50 p-3">
+              <details className="mt-3 rounded-lg border border-ink/10 bg-paper/50 p-3">
                 <summary className="cursor-pointer text-sm font-semibold text-ink">Add exact date (optional)</summary>
                 <FormField label="Exact date" className="mt-3"><input type="date" value={metadataDraft.sourceDate} onChange={(event) => updateUploadMetadata('sourceDate', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
               </details>
@@ -4543,8 +4518,8 @@ function Upload({
           ) : null}
 
           {hasSelectedFile && hasAcademicTime ? (
-            <section className="rounded-lg bg-white p-5 shadow-sm">
-              <h3 className="mt-2 text-xl font-semibold text-ink">Document type</h3>
+            <section className="p-5 sm:p-6">
+              <h3 className="text-xl font-semibold text-ink">Document type</h3>
               <div className="mt-4 grid gap-3">
                 <FormField label="Type"><select value={metadataDraft.documentCategory} onChange={(event) => updateUploadMetadata('documentCategory', event.target.value as DocumentCategory)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">{documentCategories.map((category) => <option key={category} value={category}>{category}</option>)}</select></FormField>
               </div>
@@ -4552,17 +4527,17 @@ function Upload({
           ) : null}
 
           {hasSelectedFile && hasAcademicTime && hasDocumentKind ? (
-            <section className="rounded-lg bg-white p-5 shadow-sm">
-              <h3 className="mt-2 text-xl font-semibold text-ink">Subjects</h3>
+            <section className="p-5 sm:p-6">
+              <h3 className="text-xl font-semibold text-ink">Subjects</h3>
               <div className="mt-4 flex flex-wrap gap-2">
                 {defaultSubjectOptions.map((subject) => (
-                  <button key={subject} type="button" aria-pressed={metadataDraft.subjectsIncluded.includes(subject)} onClick={() => toggleUploadSubject(subject)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${metadataDraft.subjectsIncluded.includes(subject) ? 'border-ink bg-ink text-white' : 'border-ink/10 bg-paper text-graphite/75'}`}>
+                  <button key={subject} type="button" aria-pressed={metadataDraft.subjectsIncluded.includes(subject)} onClick={() => toggleUploadSubject(subject)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${metadataDraft.subjectsIncluded.includes(subject) ? 'border-ink bg-ink text-white' : 'border-ink/10 bg-paper text-graphite/80'}`}>
                     {subject}
                   </button>
                 ))}
               </div>
               <FormField label="Other subjects" hint="Optional" className="mt-3"><textarea value={metadataDraft.customSubjects} onChange={(event) => updateUploadMetadata('customSubjects', event.target.value)} rows={2} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
-              <label className="mt-3 flex gap-3 rounded-lg bg-paper/60 p-3 text-sm leading-6 text-graphite/75">
+              <label className="mt-3 flex gap-3 rounded-lg bg-paper/60 p-3 text-sm leading-6 text-graphite/80">
                 <input type="checkbox" checked={metadataDraft.ignoreInstrumentalMusic} onChange={(event) => updateUploadMetadata('ignoreInstrumentalMusic', event.target.checked)} className="mt-1 size-4 shrink-0 accent-ink" />
                 <span>Keep instrumental or performance lesson content out of academic progress.</span>
               </label>
@@ -4570,12 +4545,12 @@ function Upload({
           ) : null}
 
           {hasSelectedFile && hasAcademicTime && hasDocumentKind ? (
-            <section className="rounded-lg bg-white p-5 shadow-sm">
-              <button type="button" onClick={handleUpload} disabled={isReading || !canUpload} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-graphite/55">
+            <section className="p-5 sm:p-6">
+              <button type="button" onClick={handleUpload} disabled={isReading || !canUpload} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/55">
                 <FilePlus2 size={18} />
                 {isReading ? 'Importing...' : 'Import document'}
               </button>
-              {isReading || note !== 'Choose a document to add to this workspace.' ? <p key={note} role="status" className="status-enter mt-4 text-center text-sm font-medium text-graphite/74">{note}</p> : null}
+              {isReading || note !== 'Choose a document to add to this workspace.' ? <p key={note} role="status" className="status-enter mt-4 text-center text-sm font-medium text-graphite/80">{note}</p> : null}
               {failedUpload ? (
                 <button
                   type="button"
@@ -4587,7 +4562,7 @@ function Upload({
                         : processImageUpload(failedUpload)
                   }
                   disabled={isReading}
-                  className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition disabled:cursor-not-allowed disabled:text-graphite/55"
+                  className="mt-3 w-full rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:bg-paper/50 disabled:cursor-not-allowed disabled:bg-paper disabled:text-graphite/45"
                 >
                   Retry import
                 </button>
@@ -4726,7 +4701,8 @@ function ResearchChat({
   const searchableDocuments = documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed');
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'end' });
   }, [chat.length, isLoading]);
 
   async function sendMessage() {
@@ -4849,33 +4825,36 @@ function ResearchChat({
   }
 
   return (
-    <div className={`mx-auto grid gap-5 ${searchableDocuments.length ? 'min-h-[620px] max-w-7xl sm:h-[calc(100vh-12rem)] sm:min-h-[480px] xl:grid-cols-[minmax(0,1fr)_360px]' : 'max-w-5xl'}`}>
-      <section className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-white shadow-sm">
-        <div className="shrink-0 border-b border-ink/6 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <SectionHeader eyebrow="Chat" title="Ask your sources" copy="Ask about a report, teacher feedback, a weak topic, or a contradiction." />
+    <div className={`mx-auto grid gap-5 ${searchableDocuments.length ? `h-full min-h-[20rem] max-w-7xl ${latestCitations.length ? 'xl:grid-cols-[minmax(0,1fr)_340px]' : ''}` : 'max-w-5xl'}`}>
+      <section className={`flex min-h-0 flex-col overflow-hidden ${searchableDocuments.length ? 'surface-raised' : ''}`}>
+        <div className={`shrink-0 ${searchableDocuments.length ? 'border-b border-ink/10 p-4 sm:p-5' : 'pb-7'}`}>
+          <div className="relative">
+            <SectionHeader title="Ask your sources" copy="Ask about a report, teacher feedback, a weak topic, or a contradiction." compact />
             {chat.length ? (
-              <IconTextButton
-                icon={Trash2}
-                label="Clear chat"
-                danger
-                onClick={() =>
-                  setConfirmAction({
-                    title: 'Clear chat history?',
-                    body: 'This deletes all chat messages in the current Research OS history. Documents, Tutor sessions, and performance records are kept.',
-                    confirmLabel: 'Clear chat',
-                    onConfirm: clearChatHistory,
-                  })
-                }
-              />
+              <div className="absolute right-0 top-0">
+                <IconTextButton
+                  icon={Trash2}
+                  label="Clear chat"
+                  danger
+                  iconOnly
+                  onClick={() =>
+                    setConfirmAction({
+                      title: 'Clear chat history?',
+                      body: 'This deletes all chat messages in the current Research OS history. Documents, Tutor sessions, and performance records are kept.',
+                      confirmLabel: 'Clear chat',
+                      onConfirm: clearChatHistory,
+                    })
+                  }
+                />
+              </div>
             ) : null}
           </div>
         </div>
-        <div className="scrollbar-soft min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
+        <div className={`scrollbar-soft min-h-0 flex-1 space-y-4 overflow-y-auto ${searchableDocuments.length ? 'px-4 py-4 sm:px-6 sm:py-5' : ''}`}>
           {chat.length ? (
             chat.map((message) => (
-              <div key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[70ch]' : 'mr-auto max-w-[78ch]'}>
-                <div className={`rounded-lg p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'bg-paper/70 text-ink'}`}>
+              <div key={message.id} className={`group ${message.role === 'user' ? 'ml-auto max-w-[70ch]' : 'mr-auto max-w-[78ch]'}`}>
+                <div className={`rounded-lg p-4 sm:p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'bg-paper/70 text-ink'}`}>
                   <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
                 </div>
                 <button
@@ -4888,14 +4867,14 @@ function ResearchChat({
                       onConfirm: () => deleteMessage(message),
                     })
                   }
-                  className="mt-2 text-xs font-semibold text-graphite/60 hover:text-red-700"
+                  className="mt-1.5 text-xs font-semibold text-graphite/80 transition-opacity hover:text-red-700 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                 >
                   Delete message
                 </button>
                 {message.citations ? (
-                  <details className="mt-3 rounded-lg border border-ink/8 bg-white p-3 xl:hidden">
-                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/55">
-                      {message.citations.length} sources
+                  <details className="mt-3 rounded-lg border border-ink/10 bg-white p-3 xl:hidden">
+                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">
+                      {message.citations.length} source{message.citations.length === 1 ? '' : 's'}
                     </summary>
                     <div className="mt-3 space-y-3">
                       {message.citations.map((citation) => (
@@ -4914,19 +4893,19 @@ function ResearchChat({
           )}
           {isLoading ? (
             <div className="mr-auto max-w-[820px]">
-              <div className="rounded-lg border border-ink/8 bg-paper/70 p-5 text-ink">
-                <div className="flex items-center gap-3 text-sm font-semibold text-graphite/72">
+              <div className="rounded-lg border border-ink/10 bg-paper/70 p-5 text-ink">
+                <div className="flex items-center gap-3 text-sm font-semibold text-graphite/80">
                   <span className="size-2 animate-pulse rounded-full bg-brass" />
                   <span className="size-2 animate-pulse rounded-full bg-brass [animation-delay:120ms]" />
                   <span className="size-2 animate-pulse rounded-full bg-brass [animation-delay:240ms]" />
-                  <span className="ml-1">Reading your archive...</span>
+                  <span className="ml-1">Reading your sources…</span>
                 </div>
               </div>
             </div>
           ) : null}
           <div ref={bottomRef} />
         </div>
-        {searchableDocuments.length ? <div className="shrink-0 border-t border-ink/6 bg-white p-4">
+        {searchableDocuments.length ? <div className="shrink-0 border-t border-ink/10 bg-white p-4">
           {errorMessage ? (
             <div role="status" className="status-enter mb-3 rounded-lg border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
               Research chat could not answer right now. {errorMessage}
@@ -4950,7 +4929,7 @@ function ResearchChat({
               title="Send research question"
               onClick={sendMessage}
               disabled={isLoading || searchableDocuments.length === 0}
-              className="grid size-12 place-items-center rounded-lg bg-ink text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-graphite/55"
+              className="grid size-12 place-items-center rounded-lg bg-ink text-white shadow-sm transition hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/55"
             >
               <Send size={18} />
             </button>
@@ -4958,16 +4937,16 @@ function ResearchChat({
         </div> : null}
       </section>
 
-      {searchableDocuments.length ? <aside className="hidden min-h-0 overflow-hidden rounded-lg bg-white shadow-sm xl:flex xl:flex-col">
-        <div className="shrink-0 border-b border-ink/6 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Evidence</p>
+      {searchableDocuments.length && latestCitations.length ? <aside className="surface-raised hidden min-h-0 overflow-hidden xl:flex xl:flex-col">
+        <div className="shrink-0 border-b border-ink/10 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Evidence</p>
           <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">Related sources</h3>
         </div>
         <div className="scrollbar-soft min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {latestCitations.length ? (
             latestCitations.map((citation) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} />)
           ) : (
-            <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/70">
+            <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/80">
               Related sources appear here after an answer.
             </p>
           )}
@@ -4990,14 +4969,15 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
   ];
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-6xl space-y-7">
       <SectionHeader
         eyebrow="Study tools"
         title="Prepare from your sources"
         copy="Choose a study format and see which sources are ready to support it."
+        compact
       />
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-        <div className="space-y-4">
+        <div className="surface-raised divide-y divide-ink/[0.055] overflow-hidden">
           {tools.map((tool) => {
             const Icon = tool.icon;
             return (
@@ -5005,16 +4985,16 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
                 key={tool.label}
                 type="button"
                 onClick={() => setActiveTool(tool.label)}
-                className={`flex w-full items-start gap-4 rounded-lg border p-5 text-left transition ${
-                  activeTool === tool.label ? 'border-ink/14 bg-paper text-ink shadow-sm' : 'border-ink/8 bg-white text-ink shadow-sm hover:border-ink/14'
+                className={`flex w-full items-start gap-4 p-4 text-left transition sm:p-5 ${
+                  activeTool === tool.label ? 'bg-paper text-ink' : 'bg-white text-ink hover:bg-paper/50'
                 }`}
               >
-                <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-ink/8 bg-white text-graphite">
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-paper text-graphite">
                   <Icon size={20} />
                 </span>
                 <span>
                   <span className="block font-semibold">{tool.label}</span>
-                  <span className="mt-1 block text-sm leading-6 text-graphite/70">
+                  <span className="mt-1 block text-sm leading-6 text-graphite/80">
                     {tool.label === 'Summary'
                       ? 'Condense a source set into durable notes.'
                       : tool.label === 'Flashcards'
@@ -5030,20 +5010,20 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
             );
           })}
         </div>
-        <div className="rounded-lg border border-ink/8 bg-white p-6 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/55">Selected format</p>
+        <div className="surface-raised p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Selected format</p>
           <h3 className="mt-3 font-serif text-4xl font-semibold text-ink">{activeTool}</h3>
-          <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/72">
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/80">
             {sourceDocuments.length
               ? `${sourceDocuments.length} readable source${sourceDocuments.length === 1 ? ' is' : 's are'} ready for ${activeTool.toLowerCase()} work.`
               : 'Upload readable documents before using study workflows. Summaries, flashcards, essay plans, quizzes, and timelines should be based on real workspace sources.'}
           </p>
-          <div className="mt-7 space-y-3">
+          <div className="mt-7 divide-y divide-ink/[0.055] border-y border-ink/[0.055]">
             {sourceDocuments.length ? (
               sourceDocuments.slice(0, 4).map((document) => (
-                <div key={document.id} className="rounded-lg border border-ink/8 bg-paper/65 p-4">
+                <div key={document.id} className="py-4">
                   <p className="font-semibold text-ink">{document.title}</p>
-                  <p className="mt-2 line-clamp-2 text-sm leading-7 text-graphite/72">{document.summary}</p>
+                  <p className="mt-2 line-clamp-2 text-sm leading-7 text-graphite/80">{document.summary}</p>
                 </div>
               ))
             ) : (
@@ -5088,17 +5068,18 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
   };
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-6xl space-y-7">
       <SectionHeader
         eyebrow="Knowledge map"
         title="Connected topic graph"
         copy="Topics found across your sources, connected by shared context."
+        compact
       />
       {mapNodes.length === 0 ? (
         <EmptyState title="Create a topic map" copy="Upload documents and Research OS will use their topics to start a workspace map." />
       ) : (
       <div>
-        <div className="relative min-h-[460px] overflow-hidden rounded-lg border border-ink/8 bg-white shadow-sm sm:min-h-[560px]">
+        <div className="relative min-h-[460px] overflow-hidden rounded-lg border border-ink/10 bg-white shadow-sm sm:min-h-[560px]">
           <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             {mapEdges.map((edge) => {
               const from = nodeById[edge.from];
@@ -5107,7 +5088,7 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
               return <line key={`${edge.from}-${edge.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="rgba(68,81,94,0.18)" strokeWidth="0.28" />;
             })}
           </svg>
-          <div className="absolute left-5 top-5 z-10 rounded-lg border border-ink/8 bg-paper/80 px-4 py-3 text-ink">
+          <div className="absolute left-5 top-5 z-10 rounded-lg border border-ink/10 bg-paper/80 px-4 py-3 text-ink">
             <div className="flex items-center gap-2">
               <Network size={18} />
               <span className="text-sm font-semibold">
