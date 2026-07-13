@@ -268,14 +268,32 @@ function Dashboard({
         : { label: 'Ask your sources', page: 'chat' as PageId, detail: 'Use your saved sources, reports, and feedback to answer a study question.' };
 
   return (
-    <div className="home-command mx-auto max-w-7xl space-y-12 sm:space-y-16">
-      <section className="home-command-hero overflow-hidden">
-        <div className="home-command-hero__primary">
-          <p className="home-command-kicker text-xs font-semibold uppercase tracking-[0.14em]">Academic profile</p>
-          <h2 className="home-command-title mt-4 max-w-4xl font-serif text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
+    <div className="home-field">
+      <section className="home-opening" aria-labelledby="home-academic-state">
+        <div className="home-opening__index">
+          <p className="home-kicker">Academic profile</p>
+          <dl className="home-ledger" aria-label="Academic workspace status">
+            <div className="home-ledger__item">
+              <dt className="home-ledger__label">Ready sources</dt>
+              <dd className="home-ledger__value">{readyCount}</dd>
+            </div>
+            <div className="home-ledger__item">
+              <dt className="home-ledger__label">Subjects</dt>
+              <dd className="home-ledger__value">{subjects.length}</dd>
+            </div>
+            <div className="home-ledger__item">
+              <dt className="home-ledger__label">Academic records</dt>
+              <dd className="home-ledger__value">{academicPerformanceRecords.length}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="home-opening__focus">
+          <span className="home-opening__anchor" aria-hidden="true" />
+          <h2 id="home-academic-state" className="home-opening__title">
             {hasReadySources ? `${readyCount} source${readyCount === 1 ? ' is' : 's are'} ready to study.` : 'Start with one source.'}
           </h2>
-          <p className="home-command-summary mt-5 max-w-2xl text-sm leading-7 sm:text-base">
+          <p className="home-opening__summary">
             {hasReadySources
               ? 'Use your reports, notes, and assessments to ask questions, study a topic, or review progress.'
               : hasDocuments
@@ -283,120 +301,115 @@ function Dashboard({
                 : 'Upload your first report to begin tracking academic progress.'}
           </p>
 
-          <dl className="home-state-ledger mt-9 grid grid-cols-3 gap-4" aria-label="Academic workspace status">
-            <div className="home-state-ledger__item">
-              <dt className="home-state-ledger__label text-xs font-semibold uppercase tracking-[0.12em]">Ready sources</dt>
-              <dd className="home-state-ledger__value mt-2 text-2xl font-semibold sm:text-3xl">{readyCount}</dd>
+          <div className="home-primary-action">
+            <div className="home-primary-action__copy">
+              <p className="home-primary-action__label">Next action</p>
+              <p className="home-primary-action__detail">{nextAction.detail}</p>
             </div>
-            <div className="home-state-ledger__item">
-              <dt className="home-state-ledger__label text-xs font-semibold uppercase tracking-[0.12em]">Subjects</dt>
-              <dd className="home-state-ledger__value mt-2 text-2xl font-semibold sm:text-3xl">{subjects.length}</dd>
-            </div>
-            <div className="home-state-ledger__item">
-              <dt className="home-state-ledger__label text-xs font-semibold uppercase tracking-[0.12em]">Academic records</dt>
-              <dd className="home-state-ledger__value mt-2 text-2xl font-semibold sm:text-3xl">{academicPerformanceRecords.length}</dd>
-            </div>
-          </dl>
-
-          <div className="home-next-action mt-10">
-            <div className="home-next-action__copy">
-              <p className="home-next-action__label text-xs font-semibold uppercase tracking-[0.14em]">Next action</p>
-              <p className="home-next-action__detail mt-2 max-w-xl text-sm leading-6">{nextAction.detail}</p>
-            </div>
-            <button type="button" onClick={() => setActivePage(nextAction.page)} className="home-next-action__button inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold">
-              {nextAction.label}
-              <ArrowRight size={17} />
+            <button type="button" onClick={() => setActivePage(nextAction.page)} className="home-primary-action__button">
+              <span>{nextAction.label}</span>
+              <ArrowRight size={18} aria-hidden="true" />
             </button>
           </div>
         </div>
 
-        <aside className="home-command-rail">
-          <div className="home-signal home-signal--recent">
-            <p className="home-signal__eyebrow text-xs font-semibold uppercase tracking-[0.14em]">Changed recently</p>
+        <aside className="home-opening__notes" aria-label="Academic workspace notes">
+          <section className="home-note home-note--recent">
+            <p className="home-note__eyebrow">Changed recently</p>
             {latestTimelineEvent ? (
-              <div className="home-signal__content mt-3">
+              <div className="home-note__content">
                 <TimelineRow event={latestTimelineEvent} compact />
               </div>
             ) : (
-              <p className="home-signal__empty mt-3 text-sm leading-6">No academic activity has been recorded yet.</p>
+              <p className="home-note__empty">No academic activity has been recorded yet.</p>
             )}
             {hasTimeline ? (
-              <button type="button" onClick={() => setActivePage('timeline')} className="home-signal__link mt-3 inline-flex items-center gap-2 text-sm font-semibold">
+              <button type="button" onClick={() => setActivePage('timeline')} className="home-note__link">
                 View timeline
-                <ArrowRight size={15} />
+                <ArrowRight size={15} aria-hidden="true" />
               </button>
             ) : null}
-          </div>
+          </section>
 
-          <div className="home-signal home-signal--attention">
-            <p className="home-signal__eyebrow text-xs font-semibold uppercase tracking-[0.14em]">Needs attention</p>
+          <section className="home-note home-note--attention">
+            <p className="home-note__eyebrow">Needs attention</p>
             {hasDocuments && hasPerformance && weakTopics.length ? (
-              <div className="home-signal__content mt-4">
+              <div className="home-note__content home-note__content--themes">
                 <TagList label="Priority themes" items={weakTopics} />
               </div>
             ) : sourcesNeedingAttention > 0 ? (
               <>
-                <h3 className="home-signal__title mt-3 text-lg font-semibold">Source readiness</h3>
-                <p className="home-signal__detail mt-2 text-sm leading-6">
+                <h3 className="home-note__title">Source readiness</h3>
+                <p className="home-note__detail">
                   {sourcesNeedingAttention} source{sourcesNeedingAttention === 1 ? ' needs' : 's need'} attention before {sourcesNeedingAttention === 1 ? 'it' : 'they'} can support learning.
                 </p>
               </>
             ) : !hasDocuments ? (
               <>
-                <h3 className="home-signal__title mt-3 text-lg font-semibold">Academic picture</h3>
-                <p className="home-signal__detail mt-2 text-sm leading-6">Your first source will establish the evidence for this workspace.</p>
+                <h3 className="home-note__title">Academic picture</h3>
+                <p className="home-note__detail">Your first source will establish the evidence for this workspace.</p>
               </>
             ) : (
               <>
-                <h3 className="home-signal__title mt-3 text-lg font-semibold">No priority theme yet</h3>
-                <p className="home-signal__detail mt-2 text-sm leading-6">No recurring weakness has been identified in your academic records.</p>
+                <h3 className="home-note__title">No priority theme yet</h3>
+                <p className="home-note__detail">No recurring weakness has been identified in your academic records.</p>
               </>
             )}
-          </div>
+          </section>
         </aside>
       </section>
 
       {(hasDocuments && hasPerformance) || hasSubjects ? (
-        <section className={`home-section home-section--academic grid gap-8 ${hasDocuments && hasPerformance && hasSubjects ? 'xl:grid-cols-[minmax(0,1.45fr)_minmax(17rem,0.55fr)]' : ''}`}>
-          {hasDocuments && hasPerformance ? (
-            <div className="home-section__primary home-progress-field">
-              <SectionHeader eyebrow="Performance" title="Progress overview" />
-              <div className="home-progress-field__content mt-5">
-                <TrendChart records={academicPerformanceRecords} documents={documents} selectedSubject="All Subjects" />
-              </div>
+        <section className="home-plane home-progress-plane" aria-labelledby="home-progress-heading">
+          <header className="home-plane__heading">
+            <div>
+              <p className="home-plane__eyebrow">Performance</p>
+              <h2 id="home-progress-heading" className="home-plane__title">Progress overview</h2>
             </div>
-          ) : null}
-
-          {hasSubjects ? (
-            <aside className={`${hasDocuments && hasPerformance ? 'home-section__secondary' : 'home-section__primary'} home-subject-field`}>
-              <SectionHeader eyebrow="Subjects" title="What am I studying?" />
-              <div className="home-subject-field__content mt-5">
-                <ChipCloud items={subjects} />
+            {hasSubjects ? (
+              <div className="home-subject-index">
+                <p className="home-subject-index__label">What am I studying?</p>
+                <div className="home-subject-index__items">
+                  <ChipCloud items={subjects} />
+                </div>
               </div>
-            </aside>
+            ) : null}
+          </header>
+          {hasDocuments && hasPerformance ? (
+            <div className="home-progress-plane__content">
+              <TrendChart records={academicPerformanceRecords} documents={documents} selectedSubject="All Subjects" />
+            </div>
           ) : null}
         </section>
       ) : null}
 
       {hasDocuments || earlierTimelineEvents.length ? (
-        <section className={`home-section home-section--activity grid gap-8 ${hasDocuments && earlierTimelineEvents.length ? 'xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]' : 'home-section--solo'}`}>
-          {hasDocuments ? (
-            <div className="home-section__primary home-source-stream">
-              <SectionHeader eyebrow="Recent uploads" title="Recent sources" />
-              <div className="home-source-stream__content mt-5 space-y-4">
+        <section className="home-plane home-evidence-plane" aria-labelledby="home-evidence-heading">
+          <header className="home-plane__heading home-plane__heading--evidence">
+            <div>
+              <p className="home-plane__eyebrow">Recent uploads</p>
+              <h2 id="home-evidence-heading" className="home-plane__title">Recent sources</h2>
+            </div>
+            <p className="home-plane__caption">The newest evidence in this workspace, followed by the academic activity it produced.</p>
+          </header>
+
+          <div className={`home-evidence-flow ${hasDocuments && earlierTimelineEvents.length ? 'home-evidence-flow--split' : ''}`}>
+            {hasDocuments ? (
+              <div className="home-source-list">
                 {newestDocuments.map((document) => <DocumentCard key={document.id} document={document} records={state.performanceRecords} />)}
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {earlierTimelineEvents.length ? (
-            <aside className={`${hasDocuments ? 'home-section__secondary' : 'home-section__primary'} home-activity-stream`}>
-              <SectionHeader eyebrow="Continue" title="Recent activity" />
-              <div className="home-activity-stream__content mt-2 space-y-1">
-                {earlierTimelineEvents.map((event) => <TimelineRow key={event.id} event={event} compact />)}
-              </div>
-            </aside>
-          ) : null}
+            {earlierTimelineEvents.length ? (
+              <aside className="home-activity-notes" aria-labelledby="home-activity-heading">
+                <p className="home-plane__eyebrow">Continue</p>
+                <h2 id="home-activity-heading" className="home-activity-notes__title">Recent activity</h2>
+                <div className="home-activity-notes__content">
+                  {earlierTimelineEvents.map((event) => <TimelineRow key={event.id} event={event} compact />)}
+                </div>
+              </aside>
+            ) : null}
+          </div>
         </section>
       ) : null}
     </div>

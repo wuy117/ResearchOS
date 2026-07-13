@@ -112,7 +112,7 @@ export function AppShell({
   }
 
   return (
-    <div className="app-shell relative h-[100dvh] overflow-hidden text-ink">
+    <div className={`app-shell relative h-[100dvh] overflow-hidden text-ink ${activePage === 'dashboard' ? 'app-shell--home' : ''}`}>
       <div className="app-frame flex h-full overflow-hidden bg-ivory">
         <aside className="app-sidebar hidden w-[17rem] shrink-0 flex-col border-r border-ink/[0.055] bg-paper px-5 py-6 lg:flex">
           <div className="app-brand mb-9 flex items-center gap-3.5">
