@@ -19,7 +19,7 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
     Ready: 'bg-moss/10 text-moss',
     Extracting: 'bg-brass/10 text-brass',
     Analysing: 'bg-brass/10 text-brass',
-    Failed: 'bg-red-50 text-red-700',
+    Failed: 'bg-brass/10 text-brass',
     'Needs review': 'bg-ink/10 text-graphite',
   };
   const statusLabels = {
@@ -32,10 +32,10 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
   };
 
   return (
-    <article className="surface-raised p-5 transition hover:border-ink/15">
+    <article className="document-card-compact surface-raised p-5 transition hover:border-ink/15 sm:p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="truncate text-base font-semibold text-ink">{document.title}</h3>
+          <h3 className="truncate font-sans text-base font-semibold text-ink">{document.title}</h3>
           <p className="mt-1 text-sm text-graphite/80">
             {[metadata?.linkedAssessmentName, metadata?.academicYear ?? metadata?.academicYears?.[0], metadata?.term ?? metadata?.terms?.[0]].filter(Boolean).join(' / ') || document.type}
           </p>
@@ -59,7 +59,7 @@ export function DocumentCard({ document, records = [], chunkCount = 0 }: { docum
           Instrumental or performance lesson content is ignored for academic performance analysis.
         </p>
       ) : null}
-      {document.status === 'Failed' && document.extractionError && document.extractionError !== document.summary ? <p className="mt-3 text-sm font-semibold text-red-700">{document.extractionError}</p> : null}
+      {document.status === 'Failed' && document.extractionError && document.extractionError !== document.summary ? <p className="mt-3 text-sm font-semibold text-brass">{document.extractionError}</p> : null}
       <details className="mt-4 border-t border-ink/10 pt-3">
         <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80"><span className="inline-flex items-center gap-2"><span className="disclosure-icon" aria-hidden="true">＋</span> More details</span></summary>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -175,40 +175,40 @@ export function SourceArchiveCard({
   const hasLearningEvidence = teacherComments.length > 0 || themes.length > 0 || subjects.length > 0;
 
   return (
-    <article className="surface-raised overflow-hidden">
-      <div className="px-5 py-6 sm:px-7 sm:py-7">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+    <article className="document-card surface-raised overflow-hidden">
+      <div className="px-5 py-6 sm:px-8 sm:py-8">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brass">{documentKind}</p>
-            <h2 className="mt-2 font-serif text-2xl font-semibold leading-tight text-ink sm:text-3xl">{document.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-graphite/80">
+            <h2 className="mt-2 max-w-3xl text-balance font-sans text-2xl font-semibold leading-tight text-ink sm:text-3xl">{document.title}</h2>
+            <p className="mt-2.5 text-sm leading-6 text-graphite/80">
               {context.length ? context.join(' · ') : `Added ${formatAddedDate(document.addedAt)}`}
             </p>
           </div>
-          {actions ? <div className="flex shrink-0 flex-wrap items-center gap-1 text-sm">{actions}</div> : null}
+          {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm sm:justify-end">{actions}</div> : null}
         </div>
 
         {leadSummary ? (
-          <section className="mt-7 border-t border-ink/[0.055] pt-6">
+          <section className="mt-8 border-t border-ink/[0.055] pt-6 sm:pt-7">
             <p className="eyebrow">{displaySummary ? 'Summary' : 'Teacher feedback'}</p>
-            <p className="mt-3 max-w-4xl text-[0.9375rem] leading-7 text-graphite/80">{leadSummary}</p>
+            <p className="mt-3.5 max-w-4xl text-pretty text-[0.9375rem] leading-7 text-graphite/80">{leadSummary}</p>
           </section>
         ) : null}
 
-        <div className="mt-6 flex flex-wrap gap-x-8 gap-y-3 border-t border-ink/[0.055] pt-5 text-sm text-graphite/80">
+        <div className="mt-7 flex flex-wrap gap-x-8 gap-y-3 border-t border-ink/[0.055] pt-5 text-sm text-graphite/80">
           {subjects.length ? <p><span className="font-semibold text-ink">Subjects</span> · {subjects.slice(0, 5).join(', ')}{subjects.length > 5 ? ` +${subjects.length - 5}` : ''}</p> : null}
           <p><span className="font-semibold text-ink">Added</span> · {formatAddedDate(document.addedAt)}</p>
           {chunkCount ? <p><span className="font-semibold text-ink">Study access</span> · Available</p> : null}
         </div>
       </div>
 
-      <div className="border-t border-ink/[0.055] bg-paper/[0.38] px-4 py-3 sm:px-6">
-        <div className="grid gap-1 sm:grid-cols-3">
+      <div className="border-t border-ink/[0.055] bg-paper/[0.38] px-4 py-4 sm:px-8">
+        <div className="grid gap-1.5 sm:grid-cols-3">
           <details className="group rounded-lg px-1 py-1 sm:open:col-span-3">
-            <summary className="cursor-pointer list-none rounded-md px-2 py-2 text-sm font-semibold text-ink transition hover:bg-white/70">
+            <summary className="flex min-h-10 cursor-pointer list-none items-center rounded-md px-2.5 py-2 text-sm font-semibold text-ink transition hover:bg-white/70">
               <span className="inline-flex items-center gap-2"><span className="disclosure-icon" aria-hidden="true">＋</span> Open document</span>
             </summary>
-            <div className="mt-3 rounded-lg bg-[#fdfcf8] p-4 shadow-inner ring-1 ring-ink/[0.055] sm:p-7">
+            <div className="document-reader mt-3 rounded-lg bg-ivory p-4 ring-1 ring-ink/[0.055] sm:p-8 lg:p-10">
               <div className="mx-auto max-w-4xl">
                 <div className="mb-5 border-b border-ink/10 pb-4 text-center">
                   <p className="eyebrow">{documentKind}</p>
@@ -231,10 +231,10 @@ export function SourceArchiveCard({
 
           {hasLearningEvidence ? (
             <details className="group rounded-lg px-1 py-1 sm:open:col-span-3">
-              <summary className="cursor-pointer list-none rounded-md px-2 py-2 text-sm font-semibold text-graphite/80 transition hover:bg-white/70">
+              <summary className="flex min-h-10 cursor-pointer list-none items-center rounded-md px-2.5 py-2 text-sm font-semibold text-graphite/80 transition hover:bg-white/70">
                 Learning evidence
               </summary>
-              <div className="mt-3 grid gap-6 rounded-lg bg-white/70 p-4 sm:p-5 lg:grid-cols-2">
+              <div className="mt-3 grid gap-7 rounded-lg bg-white/70 p-5 sm:p-6 lg:grid-cols-2">
                 {teacherComments.length ? (
                   <section className="lg:col-span-2">
                     <p className="eyebrow">Teacher feedback</p>
@@ -257,8 +257,8 @@ export function SourceArchiveCard({
           ) : null}
 
           <details className="group rounded-lg px-1 py-1 sm:open:col-span-3">
-            <summary className="cursor-pointer list-none rounded-md px-2 py-2 text-sm font-semibold text-graphite/80 transition hover:bg-white/70">File details</summary>
-            <div className="mt-3 space-y-4 rounded-lg border border-ink/[0.055] bg-white/70 p-4 text-sm leading-6 text-graphite/80">
+            <summary className="flex min-h-10 cursor-pointer list-none items-center rounded-md px-2.5 py-2 text-sm font-semibold text-graphite/80 transition hover:bg-white/70">File details</summary>
+            <div className="mt-3 space-y-5 rounded-lg border border-ink/[0.055] bg-white/70 p-5 text-sm leading-6 text-graphite/80 sm:p-6">
               <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
                 <TechnicalFact label="Status" value={formatArchiveStatus(document.status)} />
                 <TechnicalFact label="File" value={originalFile ? `${originalFile.fileName} · ${formatBytes(originalFile.size)}` : document.type} />

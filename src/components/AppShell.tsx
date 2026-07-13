@@ -112,20 +112,20 @@ export function AppShell({
   }
 
   return (
-    <div className="h-[100dvh] text-ink">
-      <div className="flex h-full overflow-hidden bg-ivory">
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-ink/[0.055] bg-[#faf9f6] px-5 py-6 lg:flex">
-          <div className="mb-9 flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-lg bg-paper text-ink">
+    <div className="app-shell relative h-[100dvh] overflow-hidden text-ink">
+      <div className="app-frame flex h-full overflow-hidden bg-ivory">
+        <aside className="app-sidebar hidden w-[17rem] shrink-0 flex-col border-r border-ink/[0.055] bg-paper px-5 py-6 lg:flex">
+          <div className="app-brand mb-9 flex items-center gap-3.5">
+            <div className="app-brand-mark grid size-9 place-items-center rounded-lg bg-paper text-ink">
               <BookOpen size={19} />
             </div>
-            <div>
-              <p className="text-sm font-semibold text-ink">Research OS</p>
-              <p className="text-xs text-graphite/80">Learning workspace</p>
+            <div className="app-brand-copy">
+              <p className="app-brand-name text-sm font-semibold text-ink">Research OS</p>
+              <p className="app-brand-meta text-xs text-graphite/80">Learning workspace</p>
             </div>
           </div>
 
-          <nav className="space-y-1.5">
+          <nav className="app-primary-nav space-y-1.5" aria-label="Primary navigation">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = activePillar.id === item.id;
@@ -135,9 +135,9 @@ export function AppShell({
                   type="button"
                   onClick={() => setActivePage(item.target)}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium ${
+                  className={`app-primary-nav-item flex min-h-11 w-full items-center gap-3.5 rounded-lg px-3.5 py-2.5 text-left text-sm font-medium ${
                     active ? 'bg-paper text-ink' : 'text-graphite/80 hover:bg-paper/65 hover:text-ink'
-                  }`}
+                  } ${active ? 'is-active' : ''}`}
                 >
                   <Icon size={17} className={active ? 'text-ink' : 'text-graphite/80'} />
                   {item.label}
@@ -146,11 +146,11 @@ export function AppShell({
             })}
           </nav>
 
-          <div className="mt-8 flex min-h-0 flex-1 flex-col">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Workspaces</p>
+          <div className="workspace-rail mt-8 flex min-h-0 flex-1 flex-col">
+            <div className="workspace-rail-header mb-3 flex items-center justify-between">
+              <p className="workspace-rail-label text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Workspaces</p>
             </div>
-            <div className="mb-3 flex gap-2">
+            <div className="workspace-create mb-3 flex gap-2">
               <input
                 value={workspaceName}
                 aria-label="New workspace name"
@@ -159,13 +159,13 @@ export function AppShell({
                   if (event.key === 'Enter') createWorkspace();
                 }}
                 placeholder="New workspace"
-                className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4"
+                className="workspace-create-input min-h-10 min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4"
               />
-              <button type="button" onClick={createWorkspace} aria-label="Create workspace" title="Create workspace" className="grid size-9 place-items-center rounded-lg bg-ink text-white hover:bg-graphite">
+              <button type="button" onClick={createWorkspace} aria-label="Create workspace" title="Create workspace" className="workspace-create-button grid size-10 shrink-0 place-items-center rounded-lg bg-ink text-white hover:bg-graphite">
                 <Plus size={16} />
               </button>
             </div>
-            <div className="scrollbar-soft min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+            <div className="workspace-list scrollbar-soft min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
               {state.workspaces.map((workspace) => {
                 const active = workspace.id === state.activeWorkspaceId;
                 return (
@@ -174,9 +174,9 @@ export function AppShell({
                     type="button"
                     onClick={() => setState((current) => ({ ...current, activeWorkspaceId: workspace.id }))}
                     aria-pressed={active}
-                    className={`w-full rounded-lg p-3 text-left transition ${
+                    className={`workspace-item w-full rounded-lg px-3 py-2.5 text-left transition ${
                       active ? 'bg-paper/90' : 'hover:bg-paper/55'
-                    }`}
+                    } ${active ? 'is-active' : ''}`}
                   >
                     <div className="flex items-start gap-3">
                       <span className={`mt-1.5 size-2 rounded-full ${workspace.color}`} />
@@ -193,25 +193,25 @@ export function AppShell({
 
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col">
-          <header className="flex shrink-0 flex-col gap-3 border-b border-ink/[0.055] bg-[#faf9f6]/95 px-4 py-3 backdrop-blur-sm sm:px-6 xl:px-8">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">{activePillar.label}</p>
-                <h1 className="mt-1 truncate text-base font-semibold text-ink sm:text-lg">{activeWorkspace?.name}</h1>
+        <main className="app-main flex min-w-0 flex-1 flex-col">
+          <header className="app-topbar flex shrink-0 flex-col gap-3 border-b border-ink/[0.055] bg-ivory/95 px-4 py-3 backdrop-blur-sm sm:px-6 xl:px-8">
+            <div className="app-topbar-primary flex items-center justify-between gap-4">
+              <div className="app-context min-w-0">
+                <p className="app-context-label text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">{activePillar.label}</p>
+                <h1 className="app-context-title mt-1 truncate !font-sans text-base font-semibold text-ink sm:text-lg">{activeWorkspace?.name}</h1>
               </div>
               {showAddSource ? (
                 <button
                   type="button"
                   onClick={() => setActivePage('upload')}
-                  className="inline-flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-ink/10 bg-white px-3.5 py-2 text-sm font-semibold text-graphite shadow-sm hover:border-ink/20 hover:text-ink"
+                  className="app-add-source inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-graphite shadow-sm hover:border-ink/20 hover:text-ink"
                 >
                   <UploadCloud size={17} />
                   Add source
                 </button>
               ) : null}
             </div>
-            <div className="grid grid-cols-4 gap-1 lg:hidden">
+            <nav className="app-mobile-nav grid grid-cols-4 gap-1 lg:hidden" aria-label="Primary navigation">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -220,18 +220,18 @@ export function AppShell({
                     type="button"
                     onClick={() => setActivePage(item.target)}
                     aria-current={activePillar.id === item.id ? 'page' : undefined}
-                    className={`flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[11px] font-semibold ${
+                    className={`app-mobile-nav-item flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[11px] font-semibold ${
                       activePillar.id === item.id ? 'bg-paper text-ink ring-1 ring-ink/10' : 'text-graphite/80 hover:bg-paper/55 hover:text-ink'
-                    }`}
+                    } ${activePillar.id === item.id ? 'is-active' : ''}`}
                   >
                     <Icon size={15} />
                     {item.label}
                   </button>
                 );
               })}
-            </div>
+            </nav>
             {visibleTabs.length > 1 ? (
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <nav className="app-section-tabs flex gap-6 overflow-x-auto pb-1" aria-label={`${activePillar.label} sections`}>
                 {visibleTabs.map((tab) => {
                   const Icon = tab.icon;
                   const active = activePage === tab.id;
@@ -241,21 +241,21 @@ export function AppShell({
                       type="button"
                       onClick={() => setActivePage(tab.id)}
                       aria-current={active ? 'page' : undefined}
-                      className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
+                      className={`app-section-tab inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
                         active ? 'bg-paper text-ink ring-1 ring-ink/10' : 'bg-transparent text-graphite/80 hover:bg-paper/65 hover:text-ink'
-                      }`}
+                      } ${active ? 'is-active' : ''}`}
                     >
                       <Icon size={15} />
                       {tab.label}
                     </button>
                   );
                 })}
-              </div>
+              </nav>
             ) : null}
           </header>
 
-          <div className="scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-7 sm:px-6 sm:py-8 xl:px-10 2xl:px-12">
-            <div key={activePage} className={`page-enter ${activePage === 'chat' ? 'h-full' : ''}`}>
+          <div className="app-content-canvas scrollbar-soft min-h-0 flex-1 overflow-auto px-4 py-8 sm:px-8 sm:py-10 xl:px-12 2xl:px-16">
+            <div key={activePage} className={`app-page page-enter ${activePage === 'chat' ? 'h-full' : ''}`}>
               {activePage === 'settings' ? (
                 <SettingsPage
                   state={state}
@@ -311,13 +311,13 @@ function SettingsPage({
   showDeveloperTools: boolean;
 }) {
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      <section>
-        <h2 className="font-serif text-4xl font-semibold leading-tight text-ink">Account and data</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-7 text-graphite/80">Manage your account, saved work, and workspace data.</p>
+    <div className="settings-page mx-auto max-w-6xl space-y-10">
+      <section className="settings-header">
+        <h2 className="settings-title font-serif text-4xl font-semibold leading-tight text-ink">Account and data</h2>
+        <p className="settings-copy mt-3 max-w-2xl text-sm leading-7 text-graphite/80">Manage your account, saved work, and workspace data.</p>
       </section>
 
-      <div className={`grid gap-6 ${storageStatus !== 'missing-env' ? 'lg:grid-cols-[1fr_1fr]' : ''}`}>
+      <div className={`settings-summary-grid grid gap-6 ${storageStatus !== 'missing-env' ? 'lg:grid-cols-[1fr_1fr]' : ''}`}>
         <AccountDataControls
           state={state}
           storageStatus={storageStatus}
@@ -327,9 +327,9 @@ function SettingsPage({
           onImportClaimableLocalData={onImportClaimableLocalData}
           onDismissClaimableLocalData={onDismissClaimableLocalData}
         />
-        {storageStatus !== 'missing-env' ? <section className="surface-raised p-5">
+        {storageStatus !== 'missing-env' ? <section className="settings-storage surface-raised p-5 sm:p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Storage</p>
-          <h3 className="mt-2 text-lg font-semibold text-ink">{storageLabel}</h3>
+          <h3 className="mt-2 font-sans text-lg font-semibold text-ink">{storageLabel}</h3>
           <p className="mt-3 text-sm leading-7 text-graphite/80">
             {storageStatus === 'connected'
               ? 'Your work is syncing to your account.'
@@ -340,9 +340,9 @@ function SettingsPage({
         </section> : null}
       </div>
 
-      <details className="surface-raised p-5">
-        <summary className="cursor-pointer text-sm font-semibold text-ink">Advanced</summary>
-        <div className="mt-5 grid gap-5 lg:grid-cols-2">
+      <details className="settings-advanced surface-raised p-5 sm:p-6">
+        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-ink">Advanced</summary>
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <ResetResearchOS state={state} setState={setState} storageStatus={storageStatus} user={user} />
           {showDeveloperTools ? <DeveloperTools state={state} setState={setState} storageStatus={storageStatus} storageLabel={storageLabel} user={user} /> : null}
         </div>
@@ -452,8 +452,8 @@ function AccountDataControls({
   }
 
   return (
-    <div className="surface-raised p-4">
-      <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
+    <div className="account-data-controls surface-raised p-5 sm:p-6">
+      <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex min-h-11 w-full items-center justify-between gap-4 text-left">
         <span>
           <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Account</span>
           <span className="mt-1 block truncate text-sm font-semibold text-ink">{user?.email ?? 'Saved in this browser'}</span>
@@ -461,8 +461,8 @@ function AccountDataControls({
         <UserCircle size={17} className="text-graphite/80" />
       </button>
       {isOpen ? (
-        <div className="mt-4 space-y-3">
-          {message ? <p className="rounded-lg bg-paper px-3 py-2 text-xs leading-5 text-graphite/80">{message}</p> : null}
+        <div className="mt-5 space-y-3">
+          {message ? <p className="status-strip rounded-lg bg-paper px-4 py-3 text-xs leading-5 text-graphite/80">{message}</p> : null}
           {summary ? (
             <div className="rounded-lg border border-brass/25 bg-brass/10 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Local data found</p>
@@ -470,21 +470,21 @@ function AccountDataControls({
                 {summary.documents} documents, {summary.performanceRecords} progress records, {summary.tutorSessions} Tutor sessions, {summary.collections} source labels.
               </p>
               <div className="mt-3 grid gap-2">
-                <button type="button" disabled={!hasCloud || isImporting} onClick={importLocalData} className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-graphite disabled:bg-graphite/45">
+                <button type="button" disabled={!hasCloud || isImporting} onClick={importLocalData} className="min-h-10 rounded-lg bg-ink px-3.5 py-2.5 text-xs font-semibold text-white hover:bg-graphite disabled:bg-graphite/45">
                   {isImporting ? 'Importing...' : 'Import local data to my account'}
                 </button>
-                <button type="button" onClick={onDismissClaimableLocalData} className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+                <button type="button" onClick={onDismissClaimableLocalData} className="min-h-10 rounded-lg border border-ink/10 bg-white px-3.5 py-2.5 text-xs font-semibold text-ink">
                   Keep local data only for now
                 </button>
               </div>
             </div>
           ) : null}
-          <button type="button" onClick={exportData} className="inline-flex w-full items-center gap-2 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+          <button type="button" onClick={exportData} className="inline-flex min-h-10 w-full items-center gap-2.5 rounded-lg border border-ink/10 bg-white px-3.5 py-2.5 text-xs font-semibold text-ink">
             <Download size={14} />
             Export my data as JSON
           </button>
           {user ? (
-            <button type="button" onClick={onSignOut} className="inline-flex w-full items-center gap-2 rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink">
+            <button type="button" onClick={onSignOut} className="inline-flex min-h-10 w-full items-center gap-2.5 rounded-lg border border-ink/10 bg-white px-3.5 py-2.5 text-xs font-semibold text-ink">
               <LogOut size={14} />
               Sign out
             </button>
@@ -546,8 +546,8 @@ function ResetResearchOS({
   }
 
   return (
-    <div className={`rounded-lg bg-paper/60 ${compact ? 'p-4' : 'p-3'}`}>
-      <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
+    <div className={`maintenance-panel rounded-lg bg-paper/60 ${compact ? 'p-4' : 'p-4 sm:p-5'}`}>
+      <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex min-h-11 w-full items-center justify-between gap-4 text-left">
         <span>
           <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Maintenance</span>
           <span className="mt-1 block text-sm font-semibold text-ink">Reset or clear data</span>
@@ -555,8 +555,8 @@ function ResetResearchOS({
         <AlertTriangle size={17} className="text-graphite/80" />
       </button>
       {isOpen ? (
-        <div className="mt-4 space-y-3">
-          {message ? <p className="rounded-lg bg-white px-3 py-2 text-xs leading-5 text-graphite/80">{message}</p> : null}
+        <div className="mt-5 space-y-3">
+          {message ? <p className="status-strip rounded-lg bg-white px-4 py-3 text-xs leading-5 text-graphite/80">{message}</p> : null}
           <div className="grid gap-2">
             {resetOptions.map((option) => {
               const disabled = option.scope === 'supabase' && !hasSupabase;
@@ -573,7 +573,7 @@ function ResetResearchOS({
                         onConfirm: () => runReset(option.scope),
                       })
                     }
-                    className={`inline-flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-semibold ${
+                    className={`inline-flex min-h-10 w-full items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-left text-xs font-semibold ${
                       option.scope === 'full'
                         ? 'border-red-700 bg-red-700 text-white disabled:border-ink/10 disabled:bg-paper disabled:text-graphite/45'
                         : 'border-red-200 bg-white text-red-700 disabled:cursor-not-allowed disabled:border-ink/10 disabled:bg-paper disabled:text-graphite/45'
@@ -791,8 +791,8 @@ function DeveloperTools({
   }
 
   return (
-    <div className="rounded-lg border border-ink/10 bg-white p-4">
-      <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 text-left">
+    <div className="developer-tools rounded-lg border border-ink/10 bg-white p-4 sm:p-5">
+      <button type="button" onClick={() => setIsOpen((current) => !current)} className="flex min-h-11 w-full items-center justify-between gap-4 text-left">
         <span>
           <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Developer Tools</span>
           <span className="mt-1 block text-sm font-semibold text-ink">Diagnostics and resets</span>
@@ -800,8 +800,8 @@ function DeveloperTools({
         <Wrench size={17} className="text-graphite/80" />
       </button>
       {isOpen ? (
-        <div className="mt-4 space-y-4">
-          {message ? <p className="rounded-lg bg-paper px-3 py-2 text-xs leading-5 text-graphite/80">{message}</p> : null}
+        <div className="mt-5 space-y-5">
+          {message ? <p className="status-strip rounded-lg bg-paper px-4 py-3 text-xs leading-5 text-graphite/80">{message}</p> : null}
           <DeveloperStatGrid
             items={[
               ['Version', import.meta.env.VITE_APP_VERSION ?? '0.1.0'],
@@ -839,7 +839,7 @@ function DeveloperTools({
               reason={!embeddingConfigured ? 'Semantic search is not connected.' : state.chunks.length === 0 ? 'No chunks to embed.' : undefined}
               onClick={() => rerunEmbeddings(state.chunks.map((chunk) => chunk.id), 'All chunk embeddings')}
             />
-            <select value={documentId} onChange={(event) => setDocumentId(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-xs outline-none">
+            <select value={documentId} onChange={(event) => setDocumentId(event.target.value)} className="min-h-10 w-full rounded-lg border border-ink/10 bg-white px-3.5 py-2.5 text-xs outline-none">
               <option value="">Choose document</option>
               {state.documents.map((document) => (
                 <option key={document.id} value={document.id}>{document.title}</option>
@@ -949,9 +949,9 @@ function rebuildMetadata(state: ResearchState): ResearchState {
 
 function DeveloperStatGrid({ items }: { items: Array<[string, string]> }) {
   return (
-    <div className="grid gap-2">
+    <div className="developer-stat-grid grid gap-2">
       {items.map(([label, value]) => (
-        <div key={label} className="flex justify-between gap-3 rounded-lg bg-paper/65 px-3 py-2 text-xs">
+        <div key={label} className="developer-stat-row flex min-h-9 items-center justify-between gap-4 rounded-lg bg-paper/65 px-3.5 py-2 text-xs">
           <span className="text-graphite/80">{label}</span>
           <span className="max-w-[130px] truncate font-semibold text-ink">{value}</span>
         </div>
@@ -962,9 +962,9 @@ function DeveloperStatGrid({ items }: { items: Array<[string, string]> }) {
 
 function DeveloperSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border-t border-ink/10 pt-3">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">{title}</p>
-      <div className="space-y-2">{children}</div>
+    <section className="developer-section border-t border-ink/10 pt-4">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">{title}</p>
+      <div className="space-y-2.5">{children}</div>
     </section>
   );
 }
@@ -976,7 +976,7 @@ function DeveloperActionButton({ label, onClick, disabled = false, reason }: { l
         type="button"
         onClick={onClick}
         disabled={disabled}
-        className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-left text-xs font-semibold text-ink disabled:cursor-not-allowed disabled:bg-paper disabled:text-graphite/45"
+        className="min-h-10 w-full rounded-lg border border-ink/10 bg-white px-3.5 py-2.5 text-left text-xs font-semibold text-ink disabled:cursor-not-allowed disabled:bg-paper disabled:text-graphite/45"
       >
         {label}
       </button>
@@ -1001,16 +1001,16 @@ function DeveloperConfirmModal({ action, onClose }: { action: DeveloperConfirmAc
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="developer-dialog-title" aria-describedby="developer-dialog-body" className="w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Developer confirmation</p>
-        <h2 id="developer-dialog-title" className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
-        <p id="developer-dialog-body" className="mt-3 text-sm leading-7 text-graphite/80">{action.body}</p>
-        <div className="mt-6 grid gap-2 sm:flex sm:justify-end">
-          <button type="button" onClick={onClose} disabled={isWorking} className="min-h-10 rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink hover:bg-paper/50">
+    <div className="dialog-backdrop fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4 py-6 sm:px-6">
+      <div role="dialog" aria-modal="true" aria-labelledby="developer-dialog-title" aria-describedby="developer-dialog-body" className="dialog-panel w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft sm:p-7">
+        <p className="dialog-eyebrow text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Developer confirmation</p>
+        <h2 id="developer-dialog-title" className="dialog-title mt-3 !font-sans text-xl font-semibold text-ink">{action.title}</h2>
+        <p id="developer-dialog-body" className="dialog-body mt-3 text-sm leading-7 text-graphite/80">{action.body}</p>
+        <div className="dialog-actions mt-7 grid gap-2.5 sm:flex sm:justify-end">
+          <button type="button" onClick={onClose} disabled={isWorking} className="dialog-cancel min-h-11 rounded-lg border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink hover:bg-paper/50">
             Cancel
           </button>
-          <button type="button" onClick={confirm} disabled={isWorking} className="min-h-10 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:bg-red-400">
+          <button type="button" onClick={confirm} disabled={isWorking} className="dialog-confirm is-destructive min-h-11 rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-800 disabled:bg-red-400">
             {isWorking ? 'Working…' : action.confirmLabel}
           </button>
         </div>

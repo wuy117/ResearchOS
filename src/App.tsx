@@ -52,7 +52,7 @@ class AuthenticatedAppErrorBoundary extends Component<{ children: ReactNode }, {
       return (
         <div className="grid min-h-screen place-items-center bg-ivory px-4 text-ink">
           <section className="surface-raised w-full max-w-lg p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Unable to open workspace</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brass">Unable to open workspace</p>
             <h1 className="mt-3 font-serif text-3xl font-semibold text-ink">Research OS could not open this workspace.</h1>
             <p className="mt-4 text-sm leading-7 text-graphite/80">
               Your data is safe. Reload the workspace, or sign out and back in if the problem continues.
@@ -90,7 +90,7 @@ function App() {
   if (isSupabaseEnabled && (auth.authLoading || storageStatus === 'client-created')) {
     return (
       <div className="grid min-h-screen place-items-center bg-ivory px-4 text-ink">
-        <div role="status" className="inline-flex items-center gap-3 px-4 py-3 text-sm font-semibold text-graphite/80">
+        <div role="status" className="status-strip inline-flex items-center gap-3 px-4 py-3 text-sm font-semibold text-graphite/80">
           <span className="size-2 animate-pulse rounded-full bg-moss" />
           Opening your workspace…
         </div>
@@ -256,74 +256,149 @@ function Dashboard({
   const hasTimeline = timeline.length > 0;
   const hasSubjects = subjects.length > 0;
   const hasPerformance = academicPerformanceRecords.length > 0;
+  const latestTimelineEvent = timeline[0];
+  const earlierTimelineEvents = timeline.slice(1);
+  const sourcesNeedingAttention = Math.max(0, documents.length - readyCount);
   const nextAction = !hasDocuments
     ? { label: 'Upload first source', page: 'upload' as PageId, detail: 'Start with a report, notes file, exam paper, or source document.' }
     : weakTopics.length
       ? { label: 'Practise weak topic', page: 'tutor' as PageId, detail: `Start a focused Tutor session on ${weakTopics[0]}.` }
       : activeLesson
         ? { label: 'Continue Tutor', page: 'tutor' as PageId, detail: activeLesson.objective }
-        : { label: 'Ask your archive', page: 'chat' as PageId, detail: 'Use your saved sources, reports, and feedback to answer a study question.' };
+        : { label: 'Ask your sources', page: 'chat' as PageId, detail: 'Use your saved sources, reports, and feedback to answer a study question.' };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-10">
-      <section>
-        <div className="py-3 sm:py-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Academic profile</p>
-          <h2 className="mt-4 max-w-3xl font-serif text-4xl font-semibold leading-tight text-ink sm:text-5xl">
+    <div className="home-command mx-auto max-w-7xl space-y-12 sm:space-y-16">
+      <section className="home-command-hero overflow-hidden">
+        <div className="home-command-hero__primary">
+          <p className="home-command-kicker text-xs font-semibold uppercase tracking-[0.14em]">Academic profile</p>
+          <h2 className="home-command-title mt-4 max-w-4xl font-serif text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
             {hasReadySources ? `${readyCount} source${readyCount === 1 ? ' is' : 's are'} ready to study.` : 'Start with one source.'}
           </h2>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-graphite/80">
+          <p className="home-command-summary mt-5 max-w-2xl text-sm leading-7 sm:text-base">
             {hasReadySources
               ? 'Use your reports, notes, and assessments to ask questions, study a topic, or review progress.'
               : hasDocuments
                 ? 'One source needs attention before it can support learning.'
                 : 'Upload your first report to begin tracking academic progress.'}
           </p>
-          <div className="mt-7 flex flex-wrap gap-3">
-            <button type="button" onClick={() => setActivePage(nextAction.page)} className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite">
+
+          <dl className="home-state-ledger mt-9 grid grid-cols-3 gap-4" aria-label="Academic workspace status">
+            <div className="home-state-ledger__item">
+              <dt className="home-state-ledger__label text-xs font-semibold uppercase tracking-[0.12em]">Ready sources</dt>
+              <dd className="home-state-ledger__value mt-2 text-2xl font-semibold sm:text-3xl">{readyCount}</dd>
+            </div>
+            <div className="home-state-ledger__item">
+              <dt className="home-state-ledger__label text-xs font-semibold uppercase tracking-[0.12em]">Subjects</dt>
+              <dd className="home-state-ledger__value mt-2 text-2xl font-semibold sm:text-3xl">{subjects.length}</dd>
+            </div>
+            <div className="home-state-ledger__item">
+              <dt className="home-state-ledger__label text-xs font-semibold uppercase tracking-[0.12em]">Academic records</dt>
+              <dd className="home-state-ledger__value mt-2 text-2xl font-semibold sm:text-3xl">{academicPerformanceRecords.length}</dd>
+            </div>
+          </dl>
+
+          <div className="home-next-action mt-10">
+            <div className="home-next-action__copy">
+              <p className="home-next-action__label text-xs font-semibold uppercase tracking-[0.14em]">Next action</p>
+              <p className="home-next-action__detail mt-2 max-w-xl text-sm leading-6">{nextAction.detail}</p>
+            </div>
+            <button type="button" onClick={() => setActivePage(nextAction.page)} className="home-next-action__button inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold">
               {nextAction.label}
               <ArrowRight size={17} />
             </button>
-            {hasTimeline ? <button type="button" onClick={() => setActivePage('timeline')} className="inline-flex items-center gap-2 rounded-lg border border-ink/10 bg-paper px-4 py-3 text-sm font-semibold text-ink">
-              View timeline
-            </button> : null}
           </div>
         </div>
+
+        <aside className="home-command-rail">
+          <div className="home-signal home-signal--recent">
+            <p className="home-signal__eyebrow text-xs font-semibold uppercase tracking-[0.14em]">Changed recently</p>
+            {latestTimelineEvent ? (
+              <div className="home-signal__content mt-3">
+                <TimelineRow event={latestTimelineEvent} compact />
+              </div>
+            ) : (
+              <p className="home-signal__empty mt-3 text-sm leading-6">No academic activity has been recorded yet.</p>
+            )}
+            {hasTimeline ? (
+              <button type="button" onClick={() => setActivePage('timeline')} className="home-signal__link mt-3 inline-flex items-center gap-2 text-sm font-semibold">
+                View timeline
+                <ArrowRight size={15} />
+              </button>
+            ) : null}
+          </div>
+
+          <div className="home-signal home-signal--attention">
+            <p className="home-signal__eyebrow text-xs font-semibold uppercase tracking-[0.14em]">Needs attention</p>
+            {hasDocuments && hasPerformance && weakTopics.length ? (
+              <div className="home-signal__content mt-4">
+                <TagList label="Priority themes" items={weakTopics} />
+              </div>
+            ) : sourcesNeedingAttention > 0 ? (
+              <>
+                <h3 className="home-signal__title mt-3 text-lg font-semibold">Source readiness</h3>
+                <p className="home-signal__detail mt-2 text-sm leading-6">
+                  {sourcesNeedingAttention} source{sourcesNeedingAttention === 1 ? ' needs' : 's need'} attention before {sourcesNeedingAttention === 1 ? 'it' : 'they'} can support learning.
+                </p>
+              </>
+            ) : !hasDocuments ? (
+              <>
+                <h3 className="home-signal__title mt-3 text-lg font-semibold">Academic picture</h3>
+                <p className="home-signal__detail mt-2 text-sm leading-6">Your first source will establish the evidence for this workspace.</p>
+              </>
+            ) : (
+              <>
+                <h3 className="home-signal__title mt-3 text-lg font-semibold">No priority theme yet</h3>
+                <p className="home-signal__detail mt-2 text-sm leading-6">No recurring weakness has been identified in your academic records.</p>
+              </>
+            )}
+          </div>
+        </aside>
       </section>
 
-      {hasSubjects || hasTimeline ? <section className="grid gap-8 xl:grid-cols-[1fr_1fr]">
-        {hasSubjects ? <div>
-          <SectionHeader eyebrow="Subjects" title="What am I studying?" />
-          <div className="border-y border-ink/[0.055] py-5">
-            <ChipCloud items={subjects} />
-          </div>
-        </div> : null}
-        {hasTimeline ? <div>
-          <SectionHeader eyebrow="Continue" title="Recent activity" />
-          <div className="space-y-3">
-            {timeline.map((event) => <TimelineRow key={event.id} event={event} compact />)}
-          </div>
-        </div> : null}
-      </section> : null}
-
-      {hasDocuments ? <section className="grid gap-7 xl:grid-cols-[1.1fr_0.9fr]">
-        <div>
-          <SectionHeader eyebrow="Recent uploads" title="Recent sources" />
-          <div className="space-y-4">
-            {newestDocuments.map((document) => <DocumentCard key={document.id} document={document} records={state.performanceRecords} />)}
-          </div>
-        </div>
-
-        {hasPerformance ? <div>
-          <SectionHeader eyebrow="Performance" title="Progress overview" />
-          <div className="border-t border-ink/[0.055] pt-5">
-            <div className="space-y-4">
-              <TrendChart records={academicPerformanceRecords} documents={documents} selectedSubject="All Subjects" />
-              {weakTopics.length ? <TagList label="Priority themes" items={weakTopics} /> : null}
+      {(hasDocuments && hasPerformance) || hasSubjects ? (
+        <section className={`home-section home-section--academic grid gap-8 ${hasDocuments && hasPerformance && hasSubjects ? 'xl:grid-cols-[minmax(0,1.45fr)_minmax(17rem,0.55fr)]' : ''}`}>
+          {hasDocuments && hasPerformance ? (
+            <div className="home-section__primary home-progress-field">
+              <SectionHeader eyebrow="Performance" title="Progress overview" />
+              <div className="home-progress-field__content mt-5">
+                <TrendChart records={academicPerformanceRecords} documents={documents} selectedSubject="All Subjects" />
+              </div>
             </div>
-          </div>
-        </div> : null}
-      </section> : null}
+          ) : null}
+
+          {hasSubjects ? (
+            <aside className={`${hasDocuments && hasPerformance ? 'home-section__secondary' : 'home-section__primary'} home-subject-field`}>
+              <SectionHeader eyebrow="Subjects" title="What am I studying?" />
+              <div className="home-subject-field__content mt-5">
+                <ChipCloud items={subjects} />
+              </div>
+            </aside>
+          ) : null}
+        </section>
+      ) : null}
+
+      {hasDocuments || earlierTimelineEvents.length ? (
+        <section className={`home-section home-section--activity grid gap-8 ${hasDocuments && earlierTimelineEvents.length ? 'xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]' : 'home-section--solo'}`}>
+          {hasDocuments ? (
+            <div className="home-section__primary home-source-stream">
+              <SectionHeader eyebrow="Recent uploads" title="Recent sources" />
+              <div className="home-source-stream__content mt-5 space-y-4">
+                {newestDocuments.map((document) => <DocumentCard key={document.id} document={document} records={state.performanceRecords} />)}
+              </div>
+            </div>
+          ) : null}
+
+          {earlierTimelineEvents.length ? (
+            <aside className={`${hasDocuments ? 'home-section__secondary' : 'home-section__primary'} home-activity-stream`}>
+              <SectionHeader eyebrow="Continue" title="Recent activity" />
+              <div className="home-activity-stream__content mt-2 space-y-1">
+                {earlierTimelineEvents.map((event) => <TimelineRow key={event.id} event={event} compact />)}
+              </div>
+            </aside>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -385,19 +460,21 @@ function Library({
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
-      <SectionHeader
-        eyebrow="Academic archive"
-        title="Sources"
-        copy="Your reports, assessments, notes, and papers — organised around what they mean for your learning."
-        compact
-      />
+    <div className="sources-page mx-auto max-w-7xl space-y-10">
+      <div className="sources-page__header max-w-5xl">
+        <SectionHeader
+          eyebrow="Research context"
+          title="Sources"
+          copy="Your reports, assessments, notes, and papers — organised around what they mean for your learning."
+          compact
+        />
+      </div>
       {message ? <StatusNote message={message} /> : null}
       {documents.length ? (
-        <section className="border-y border-ink/[0.055] py-5">
-          <div className="flex flex-wrap items-end justify-between gap-3">
+        <section className="sources-filter-rail border-y border-ink/[0.055] py-6">
+          <div className="sources-filter-rail__header flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-graphite/80">Filter archive</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-graphite/80">Filter sources</p>
             </div>
             <div className="flex items-center gap-3">
               <p className="text-sm font-medium tabular-nums text-graphite/80">
@@ -413,7 +490,7 @@ function Library({
               </button>
             </div>
           </div>
-          <div className={`${mobileFiltersOpen ? 'grid' : 'hidden'} mt-4 gap-x-4 gap-y-4 md:grid md:grid-cols-2 xl:grid-cols-3`}>
+          <div className={`sources-filter-grid ${mobileFiltersOpen ? 'grid' : 'hidden'} mt-5 gap-x-4 gap-y-4 md:grid md:grid-cols-2 xl:grid-cols-3`}>
             <SourceFilter label="Subject" value={filters.subject} options={filterOptions.subjects} onChange={(value) => updateFilter('subject', value)} />
             <SourceFilter label="Academic year" value={filters.academicYear} options={filterOptions.academicYears} onChange={(value) => updateFilter('academicYear', value)} />
             <SourceFilter label="Term" value={filters.term} options={filterOptions.terms} onChange={(value) => updateFilter('term', value)} />
@@ -431,7 +508,7 @@ function Library({
         </section>
       ) : null}
       {documents.length ? (
-        <div className="space-y-6">
+        <div className="sources-stream space-y-7">
           {filteredDocuments.map((document) => (
             <ManagedDocumentCard
               key={document.id}
@@ -495,7 +572,7 @@ type ConfirmAction = {
 
 function StatusNote({ message }: { message: string }) {
   return (
-    <div className="status-enter rounded-lg border border-ink/10 bg-paper/70 px-4 py-3 text-sm leading-6 text-graphite/80">
+    <div className="status-strip status-enter rounded-lg border border-ink/10 bg-paper/70 px-4 py-3 text-sm leading-6 text-graphite/80">
       {message}
     </div>
   );
@@ -600,15 +677,15 @@ function ConfirmModal({ action, onClose }: { action: ConfirmAction | null; onClo
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body" className="w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Confirm destructive action</p>
+      <div role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body" className="dialog-panel w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brass">Confirm destructive action</p>
         <h2 id="confirm-dialog-title" className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
         <p id="confirm-dialog-body" className="mt-3 text-sm leading-7 text-graphite/80">{action.body}</p>
         <div className="mt-6 grid gap-2 sm:flex sm:justify-end">
           <button type="button" onClick={onClose} disabled={isWorking} className="min-h-10 rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink hover:bg-paper/50">
             Cancel
           </button>
-          <button type="button" onClick={confirm} disabled={isWorking} className="min-h-10 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:bg-red-400">
+          <button type="button" onClick={confirm} disabled={isWorking} className="min-h-10 rounded-lg bg-brass px-4 py-2 text-sm font-semibold text-white hover:bg-ink disabled:bg-brass/45">
             {isWorking ? 'Working…' : action.confirmLabel}
           </button>
         </div>
@@ -673,7 +750,7 @@ function ManagedDocumentCard({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="sources-record space-y-3">
       <SourceArchiveCard
         document={document}
         records={records}
@@ -683,7 +760,7 @@ function ManagedDocumentCard({
             <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-semibold text-graphite/80 transition hover:bg-paper hover:text-ink">
               <Edit3 size={14} /> Edit details
             </button>
-            <button type="button" onClick={() => onDelete(document)} className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-semibold text-graphite/80 transition hover:bg-red-50 hover:text-red-700">
+            <button type="button" onClick={() => onDelete(document)} className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-semibold text-graphite/80 transition hover:bg-brass/10 hover:text-brass">
               <Trash2 size={14} /> Delete
             </button>
           </>
@@ -691,8 +768,8 @@ function ManagedDocumentCard({
         technicalDetails={<ExtractionReviewPanel records={records.filter((record) => record.sourceDocumentId === document.id)} onSaveRecord={onSaveRecord} />}
       />
       {isEditing ? (
-        <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-ink/[0.055]">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Edit archive details</p>
+        <div className="sources-edit-panel rounded-xl bg-white p-5 shadow-sm ring-1 ring-ink/[0.055]">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Edit source details</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <FormField label="Document title" className="md:col-span-2"><input value={title} onChange={(event) => setTitle(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
             <FormField label="Academic year"><input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} className="w-full rounded-lg border border-ink/10 px-3 py-2 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
@@ -811,7 +888,7 @@ function ExtractionRecordEditor({ record, onSaveRecord }: { record: PerformanceR
   ].filter(Boolean);
 
   return (
-    <article className={`rounded-lg border p-4 ${confidence === 'Low' ? 'border-red-200 bg-red-50/45' : 'border-brass/20 bg-paper/55'}`}>
+    <article className={`rounded-lg border p-4 ${confidence === 'Low' ? 'border-brass/35 bg-brass/10' : 'border-brass/20 bg-paper/55'}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-semibold text-ink">{record.subject}</p>
@@ -859,7 +936,7 @@ function IconTextButton({ icon: Icon, label, onClick, danger = false, iconOnly =
       aria-label={iconOnly ? label : undefined}
       title={iconOnly ? label : undefined}
       className={`inline-flex min-h-9 items-center justify-center gap-2 rounded-lg text-xs font-semibold ${iconOnly ? 'size-9 p-0' : 'px-3 py-2'} ${
-        danger ? 'text-graphite/80 hover:bg-red-50 hover:text-red-700' : 'text-ink hover:bg-paper'
+        danger ? 'text-graphite/80 hover:bg-brass/10 hover:text-brass' : 'text-ink hover:bg-paper'
       }`}
     >
       <Icon size={14} />
@@ -2058,11 +2135,13 @@ function PerformancePage({
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <SectionHeader title="Your learning, clearly explained" copy="A tutor's view of what is going well, what has changed, what teachers repeat, and what to do next." compact />
+    <div className="progress-page mx-auto max-w-6xl space-y-10">
+      <div className="progress-page__header max-w-5xl">
+        <SectionHeader title="Your learning, clearly explained" copy="A tutor's view of what is going well, what has changed, what teachers repeat, and what to do next." compact />
+      </div>
 
-      {records.length > 0 ? <div className="border-y border-ink/[0.06] py-5">
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
+      {records.length > 0 ? <div className="progress-control-deck border-y border-ink/[0.06] py-6">
+        <div className="progress-control-deck__controls grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <label className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">
             Focus
             <select value={selectedSubject} onChange={(event) => setSelectedSubject(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-ink/[0.08] bg-white px-3 text-sm font-medium normal-case tracking-normal text-ink shadow-sm outline-none ring-ink/10 focus:ring-4">
@@ -2094,7 +2173,7 @@ function PerformancePage({
             <FormField label="To"><input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
           </div>
         ) : null}
-        {statusMessage ? <p key={statusMessage} role="status" className="status-enter mt-3 text-sm leading-7 text-graphite/80">{statusMessage}</p> : null}
+        {statusMessage ? <p key={statusMessage} role="status" className="status-strip status-enter mt-3 text-sm leading-7 text-graphite/80">{statusMessage}</p> : null}
       </div> : null}
 
       {records.length === 0 ? (
@@ -2110,7 +2189,7 @@ function PerformancePage({
 
       {filteredRecords.length > 0 ? (
         <>
-          <section className="surface-raised px-6 py-7 sm:px-8 sm:py-8">
+          <section className="progress-hero surface-raised px-6 py-8 sm:px-9 sm:py-10">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brass">How am I doing?</p>
             <div className="mt-4 max-w-4xl">
               <p className="text-sm font-semibold text-graphite/80">{selectedSubject} · {selectedPeriod}</p>
@@ -2119,18 +2198,18 @@ function PerformancePage({
             </div>
           </section>
 
-          <section className="border-t border-ink/[0.06] pt-8">
+          <section className="progress-story progress-story--change border-t border-ink/[0.06] pt-10">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brass">What changed?</p>
             <TrendChart records={sortedRecords} documents={documents} selectedSubject={selectedSubject} storyMode />
           </section>
 
-          <section className="border-t border-ink/[0.06] pt-8">
+          <section className="progress-story progress-story--teachers border-t border-ink/[0.06] pt-10">
             <div className="max-w-3xl">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brass">What do teachers keep telling me?</p>
               <h2 className="mt-3 font-serif text-2xl font-semibold text-ink sm:text-3xl">The messages worth carrying into the next piece of work.</h2>
             </div>
             {teacherInsights.length ? (
-              <div className="mt-6 divide-y divide-ink/[0.06]">
+              <div className="progress-story__body mt-7 divide-y divide-ink/[0.06]">
                 {teacherInsights.slice(0, 3).map((insight) => <TeacherInsightCard key={`${insight.theme}-${insight.classification}`} insight={insight} />)}
               </div>
             ) : (
@@ -2138,12 +2217,12 @@ function PerformancePage({
             )}
           </section>
 
-          <section className="border-t border-ink/[0.06] pt-8">
+          <section className="progress-story progress-story--plan border-t border-ink/[0.06] pt-10">
             <div className="max-w-3xl">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brass">What should I do next?</p>
               <h2 className="mt-3 font-serif text-2xl font-semibold text-ink sm:text-3xl">A short plan, in priority order.</h2>
             </div>
-            <div className="mt-6 divide-y divide-ink/[0.06] border-y border-ink/[0.06]">
+            <div className="progress-story__body mt-7 divide-y divide-ink/[0.06] border-y border-ink/[0.06]">
               {recommendations.map((recommendation, index) => (
                 <article key={recommendation.title} className="grid gap-4 py-6 sm:grid-cols-[42px_1fr]">
                   <span className="font-serif text-2xl text-brass">{index + 1}</span>
@@ -2160,10 +2239,10 @@ function PerformancePage({
         </>
       ) : null}
 
-      <details className={`${records.length ? 'border-t border-ink/[0.06]' : ''} pt-5`}>
+      <details className={`progress-evidence-manager ${records.length ? 'border-t border-ink/[0.06]' : ''} pt-6`}>
         <summary className="cursor-pointer text-sm font-semibold text-graphite/80">{records.length ? 'Manage the evidence behind this view' : 'Add a progress record'}</summary>
-        <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-          <form onSubmit={handleManualSubmit} className="rounded-lg border border-ink/10 bg-paper/50 p-5">
+        <div className="progress-evidence-manager__workspace mt-7 grid gap-7 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
+          <form onSubmit={handleManualSubmit} className="progress-manual-entry rounded-lg border border-ink/10 bg-paper/50 p-5 sm:p-6">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">
             <ClipboardList size={15} />
             Manual entry
@@ -2230,8 +2309,8 @@ function PerformancePage({
           ) : null}
           </form>
 
-        <div className="space-y-6">
-          <div className="rounded-lg border border-ink/10 bg-paper/50 p-5">
+        <div className="progress-evidence-manager__rail space-y-6">
+          <div className="progress-analysis-panel rounded-lg border border-ink/10 bg-paper/50 p-5">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">
               <Sparkles size={15} />
               Analyse uploaded report
@@ -2251,10 +2330,10 @@ function PerformancePage({
         </div>
         </div>
 
-        <div className="mt-8 grid gap-3">
+        <div className="progress-record-ledger mt-9 grid gap-3">
           {records.length ? (
             records.map((record) => (
-              <article key={record.id} className="rounded-lg border border-ink/10 bg-white p-4 shadow-sm">
+              <article key={record.id} className="progress-record-ledger__item rounded-lg border border-ink/10 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -3166,7 +3245,7 @@ function ReportSnapshotStory({ snapshot, documents }: { snapshot: ReportSnapshot
       : 'This report is best read through the teacher comments; there are no comparable percentage marks in it.';
 
   return (
-    <div className="mt-5 rounded-xl bg-white p-5 shadow-sm ring-1 ring-ink/[0.045] sm:p-7">
+    <div className="chart-frame mt-5 rounded-xl bg-white p-5 shadow-sm ring-1 ring-ink/[0.045] sm:p-7">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-ink/[0.06] pb-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">One report · snapshot</p>
@@ -3244,7 +3323,7 @@ function TrendChart({
     return pad.left + (axisSlots.length <= 1 ? plotWidth / 2 : (index / (axisSlots.length - 1)) * plotWidth);
   };
   const yFor = (percentage: number) => pad.top + plotHeight - (Math.min(100, Math.max(0, percentage)) / 100) * plotHeight;
-  const colors = ['rgb(31 41 51)', 'rgb(111 123 92)', 'rgb(183 142 74)'];
+  const colors = ['var(--ink)', 'var(--moss)', 'var(--brass)'];
   const timelineStory = getSubjectTimelineStory(allPoints, selectedSubject);
 
   return (
@@ -3256,16 +3335,16 @@ function TrendChart({
             <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">{timelineStory.headline}</h3>
             <p className="mt-2 text-sm leading-7 text-graphite/80">{timelineStory.body}</p>
           </div>
-          <div className="overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-ink/[0.045] sm:p-5">
+          <div className="chart-frame overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-ink/[0.045] sm:p-5">
           <svg className="h-[300px] w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${selectedSubject} marks across comparable reports`}>
             {[0, 25, 50, 75, 100].map((tick) => (
               <g key={tick}>
-                <line x1={pad.left} x2={width - pad.right} y1={yFor(tick)} y2={yFor(tick)} stroke="rgba(31,41,51,0.08)" />
+                <line x1={pad.left} x2={width - pad.right} y1={yFor(tick)} y2={yFor(tick)} stroke="var(--rule)" />
                 <text x={pad.left - 10} y={yFor(tick) + 4} textAnchor="end" className="fill-graphite text-[11px]">{tick}%</text>
               </g>
             ))}
-            <line x1={pad.left} x2={pad.left} y1={pad.top} y2={height - pad.bottom} stroke="rgba(31,41,51,0.25)" />
-            <line x1={pad.left} x2={width - pad.right} y1={height - pad.bottom} y2={height - pad.bottom} stroke="rgba(31,41,51,0.25)" />
+            <line x1={pad.left} x2={pad.left} y1={pad.top} y2={height - pad.bottom} stroke="var(--rule-strong)" />
+            <line x1={pad.left} x2={width - pad.right} y1={height - pad.bottom} y2={height - pad.bottom} stroke="var(--rule-strong)" />
             <text x={18} y={pad.top + plotHeight / 2} transform={`rotate(-90 18 ${pad.top + plotHeight / 2})`} className="fill-graphite text-[12px] font-semibold">Percentage</text>
             <text x={pad.left + plotWidth / 2} y={height - 10} textAnchor="middle" className="fill-graphite text-[12px] font-semibold">Report</text>
             {seriesEntries.map(([subject, points], seriesIndex) => {
@@ -3341,10 +3420,10 @@ function CompactSubjectMovementComparison({ records }: { records: PerformanceRec
                     <p className="font-semibold text-ink">{row.subject}</p>
                     <p className="mt-1 text-xs text-graphite/80">{`${getShortReportAxisLabel(row.first.records[0])}: ${row.first.percentage}% · ${getShortReportAxisLabel(row.latest.records[0])}: ${row.latest.percentage}%`}</p>
                   </div>
-                  <p className={`text-lg font-semibold ${row.delta >= 0 ? 'text-moss' : 'text-red-700'}`}>{row.delta > 0 ? '+' : ''}{Math.round(row.delta)}</p>
+                  <p className={`text-lg font-semibold ${row.delta >= 0 ? 'text-moss' : 'text-brass'}`}>{row.delta > 0 ? '+' : ''}{Math.round(row.delta)}</p>
                 </div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
-                  <div className={`h-full rounded-full ${row.delta >= 0 ? 'bg-moss' : 'bg-red-500'}`} style={{ width: `${Math.max(8, width)}%` }} />
+                  <div className={`h-full rounded-full ${row.delta >= 0 ? 'bg-moss' : 'bg-brass'}`} style={{ width: `${Math.max(8, width)}%` }} />
                 </div>
               </div>
             );
@@ -3395,10 +3474,10 @@ function SubjectMovementComparison({ records }: { records: PerformanceRecord[] }
                       {row.first && row.latest ? `${getShortReportAxisLabel(row.first.records[0])} ${row.first.percentage}% → ${getShortReportAxisLabel(row.latest.records[0])} ${row.latest.percentage}%` : 'One marked report'}
                     </p>
                   </div>
-                  <p className={`font-serif text-2xl font-semibold ${delta >= 0 ? 'text-moss' : 'text-red-700'}`}>{delta > 0 ? '+' : ''}{Math.round(delta)} <span className="font-sans text-xs uppercase tracking-[0.1em]">points</span></p>
+                  <p className={`font-serif text-2xl font-semibold ${delta >= 0 ? 'text-moss' : 'text-brass'}`}>{delta > 0 ? '+' : ''}{Math.round(delta)} <span className="font-sans text-xs uppercase tracking-[0.1em]">points</span></p>
                 </div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-paper">
-                  <div className={`h-full rounded-full ${delta >= 0 ? 'bg-moss' : 'bg-red-500'}`} style={{ width: `${Math.max(8, width)}%` }} />
+                  <div className={`h-full rounded-full ${delta >= 0 ? 'bg-moss' : 'bg-brass'}`} style={{ width: `${Math.max(8, width)}%` }} />
                 </div>
               </div>
             );
@@ -3480,7 +3559,7 @@ function SubjectChangeChart({ records }: { records: PerformanceRecord[] }) {
   if (!rows.length) return null;
 
   return (
-    <article className="rounded-lg border border-ink/10 bg-paper/50 p-4">
+    <article className="chart-frame rounded-lg border border-ink/10 bg-paper/50 p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">Which Subjects Changed Most?</p>
       <div className="mt-5 space-y-3">
         {rows.map((row) => {
@@ -3489,11 +3568,11 @@ function SubjectChangeChart({ records }: { records: PerformanceRecord[] }) {
             <div key={row.subject}>
               <div className="mb-1 flex items-center justify-between gap-3 text-sm">
                 <span className="font-semibold text-ink">{row.subject}</span>
-                <span className={`shrink-0 font-semibold ${row.delta >= 0 ? 'text-moss' : 'text-red-700'}`}>{row.delta > 0 ? '+' : ''}{Math.round(row.delta)}</span>
+                <span className={`shrink-0 font-semibold ${row.delta >= 0 ? 'text-moss' : 'text-brass'}`}>{row.delta > 0 ? '+' : ''}{Math.round(row.delta)}</span>
               </div>
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                 <div className="h-2 rounded-full bg-white">
-                  {row.delta < 0 ? <div className="ml-auto h-full rounded-full bg-red-500" style={{ width: `${width}%` }} /> : null}
+                  {row.delta < 0 ? <div className="ml-auto h-full rounded-full bg-brass" style={{ width: `${width}%` }} /> : null}
                 </div>
                 <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-graphite/45">0</span>
                 <div className="h-2 rounded-full bg-white">
@@ -3520,7 +3599,7 @@ function MarkConsistencyChart({ records, selectedSubject }: { records: Performan
   const clampedMax = Math.max(0, Math.min(100, max));
 
   return (
-    <article className="rounded-lg border border-ink/10 bg-paper/50 p-4">
+    <article className="chart-frame rounded-lg border border-ink/10 bg-paper/50 p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">How Consistent Are My Marks?</p>
       <h3 className="mt-2 text-lg font-semibold text-ink">{selectedSubject}</h3>
       <div className="mt-5 rounded-lg bg-white p-4">
@@ -3546,7 +3625,7 @@ function EvidenceSupportChart({ records }: { records: PerformanceRecord[] }) {
   if (!rows.length) return null;
 
   return (
-    <article className="rounded-lg border border-ink/10 bg-paper/50 p-4">
+    <article className="chart-frame rounded-lg border border-ink/10 bg-paper/50 p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">How Much Evidence Supports This?</p>
       <div className="mt-5 space-y-3">
         {rows.map((row) => (
@@ -3600,15 +3679,15 @@ function TimelineRow({ event, compact = false, showContext = true }: { event: Ti
   const [expanded, setExpanded] = useState(false);
   const hasSubjectRecords = event.subjectRecords.length > 0;
   return (
-    <article className="border-t border-ink/[0.055] py-4">
-      <div className="flex items-start justify-between gap-4">
+    <article className={`timeline-event ${compact ? 'is-compact' : ''} border-t border-ink/[0.055] py-4`}>
+      <div className="timeline-event__head flex items-start justify-between gap-4">
         <div className="min-w-0">
-          {showContext ? <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">{event.academicYear} / {event.term} / {event.type}</p> : <p className="text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">{event.type}</p>}
-          <h3 className={`${compact ? 'mt-2 text-sm' : 'mt-3 text-lg'} font-semibold text-ink`}>{event.title}</h3>
-          <p className={`${compact ? 'line-clamp-2' : ''} mt-2 text-sm leading-6 text-graphite/80`}>{event.detail}</p>
+          {showContext ? <p className="timeline-event__context text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">{event.academicYear} / {event.term} / {event.type}</p> : <p className="timeline-event__context text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">{event.type}</p>}
+          <h3 className={`timeline-event__title ${compact ? 'mt-2 text-sm' : 'mt-3 text-lg'} font-semibold text-ink`}>{event.title}</h3>
+          <p className={`timeline-event__detail ${compact ? 'line-clamp-2' : ''} mt-2 text-sm leading-6 text-graphite/80`}>{event.detail}</p>
           {!compact && event.subjects.length ? <div className="mt-3"><ChipCloud items={event.subjects.slice(0, 6)} /></div> : null}
         </div>
-        {showContext ? <time className="shrink-0 whitespace-pre-line rounded-full bg-paper px-3 py-1 text-xs font-semibold text-graphite/80">{event.date || 'Undated'}</time> : null}
+        {showContext ? <time className="timeline-event__date shrink-0 whitespace-pre-line rounded-full bg-paper px-3 py-1 text-xs font-semibold text-graphite/80">{event.date || 'Undated'}</time> : null}
       </div>
       {!compact && hasSubjectRecords ? (
         <>
@@ -3659,24 +3738,26 @@ function TimelinePage({ events }: { events: TimelineEvent[] }) {
   }, {});
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <SectionHeader
-        title="Reports over time"
-        copy="Each uploaded report or assessment appears once. Open it to see the subjects inside."
-        compact
-      />
+    <div className="timeline-page mx-auto max-w-6xl space-y-10">
+      <div className="timeline-page__header max-w-4xl">
+        <SectionHeader
+          title="Reports over time"
+          copy="Each uploaded report or assessment appears once. Open it to see the subjects inside."
+          compact
+        />
+      </div>
       {events.length ? (
-        <div className="space-y-8">
+        <div className="timeline-stream space-y-12">
           {Object.entries(groups).map(([academicYear, termGroups]) => (
-            <section key={academicYear} className="space-y-4">
-              <h2 className="font-serif text-3xl font-semibold text-ink">{academicYear}</h2>
+            <section key={academicYear} className="timeline-year space-y-5">
+              <h2 className="timeline-year__title font-serif text-3xl font-semibold text-ink">{academicYear}</h2>
               {Object.entries(termGroups).map(([term, dateGroups]) => (
-                <div key={`${academicYear}-${term}`} className="border-l border-ink/10 pl-4">
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-graphite/80">{term}</h3>
-                  <div className="space-y-3">
+                <div key={`${academicYear}-${term}`} className="timeline-term border-l border-ink/10 pl-4 sm:pl-7">
+                  <h3 className="timeline-term__title mb-4 text-sm font-semibold uppercase tracking-[0.14em] text-graphite/80">{term}</h3>
+                  <div className="timeline-term__events space-y-4">
                     {Object.entries(dateGroups).map(([date, dateEvents]) => (
-                      <div key={`${term}-${date}`} className="grid gap-3 xl:grid-cols-[140px_1fr]">
-                        <time className="pt-4 text-sm font-semibold text-graphite/80">{date}</time>
+                      <div key={`${term}-${date}`} className="timeline-date-group grid gap-3 xl:grid-cols-[160px_1fr]">
+                        <time className="timeline-date-group__label pt-4 text-sm font-semibold text-graphite/80">{date}</time>
                         <div className="space-y-3">
                           {dateEvents.map((event) => (
                             <TimelineRow key={event.id} event={event} showContext={false} />
@@ -4471,18 +4552,20 @@ function Upload({
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <section className="space-y-7">
-        <SectionHeader
-          title="Add a source"
-          copy="Choose a document and add the academic context you want tracked."
-          compact
-        />
-        <div className="surface-raised divide-y divide-ink/[0.055] overflow-hidden">
-          <section className="p-5 sm:p-6">
+    <div className="upload-page mx-auto max-w-4xl">
+      <section className="upload-workflow space-y-9">
+        <div className="upload-page__header max-w-3xl">
+          <SectionHeader
+            title="Add a source"
+            copy="Choose a document and add the academic context you want tracked."
+            compact
+          />
+        </div>
+        <div className="upload-stage-stack surface-raised divide-y divide-ink/[0.055] overflow-hidden">
+          <section className="upload-stage upload-stage--file p-5 sm:p-7">
             <h3 className="text-xl font-semibold text-ink">Choose document</h3>
             <div className="mt-4">
-              <label className="flex min-h-16 cursor-pointer items-center justify-between gap-4 rounded-lg bg-paper/55 px-4 py-3 text-sm font-semibold text-graphite ring-1 ring-inset ring-ink/10 hover:bg-paper hover:text-ink focus-within:ring-2 focus-within:ring-ink/20">
+              <label className="upload-dropzone flex min-h-20 cursor-pointer items-center justify-between gap-4 rounded-lg bg-paper/55 px-4 py-4 text-sm font-semibold text-graphite ring-1 ring-inset ring-ink/10 hover:bg-paper hover:text-ink focus-within:ring-2 focus-within:ring-ink/20 sm:px-5">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -4503,7 +4586,7 @@ function Upload({
           </section>
 
           {hasSelectedFile ? (
-            <section className="p-5 sm:p-6">
+            <section className="upload-stage upload-stage--time p-5 sm:p-7">
               <h3 className="text-xl font-semibold text-ink">Academic time</h3>
               <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px]">
                 <FormField label="Academic year" hint="e.g. 2025-2026"><input value={metadataDraft.academicYear} onChange={(event) => updateUploadMetadata('academicYear', event.target.value)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4" /></FormField>
@@ -4518,7 +4601,7 @@ function Upload({
           ) : null}
 
           {hasSelectedFile && hasAcademicTime ? (
-            <section className="p-5 sm:p-6">
+            <section className="upload-stage upload-stage--type p-5 sm:p-7">
               <h3 className="text-xl font-semibold text-ink">Document type</h3>
               <div className="mt-4 grid gap-3">
                 <FormField label="Type"><select value={metadataDraft.documentCategory} onChange={(event) => updateUploadMetadata('documentCategory', event.target.value as DocumentCategory)} className="w-full rounded-lg border border-ink/10 bg-white px-3 py-3 text-sm outline-none ring-ink/10 focus:ring-4">{documentCategories.map((category) => <option key={category} value={category}>{category}</option>)}</select></FormField>
@@ -4527,7 +4610,7 @@ function Upload({
           ) : null}
 
           {hasSelectedFile && hasAcademicTime && hasDocumentKind ? (
-            <section className="p-5 sm:p-6">
+            <section className="upload-stage upload-stage--subjects p-5 sm:p-7">
               <h3 className="text-xl font-semibold text-ink">Subjects</h3>
               <div className="mt-4 flex flex-wrap gap-2">
                 {defaultSubjectOptions.map((subject) => (
@@ -4545,12 +4628,12 @@ function Upload({
           ) : null}
 
           {hasSelectedFile && hasAcademicTime && hasDocumentKind ? (
-            <section className="p-5 sm:p-6">
+            <section className="upload-stage upload-stage--commit p-5 sm:p-7">
               <button type="button" onClick={handleUpload} disabled={isReading || !canUpload} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/55">
                 <FilePlus2 size={18} />
                 {isReading ? 'Importing...' : 'Import document'}
               </button>
-              {isReading || note !== 'Choose a document to add to this workspace.' ? <p key={note} role="status" className="status-enter mt-4 text-center text-sm font-medium text-graphite/80">{note}</p> : null}
+              {isReading || note !== 'Choose a document to add to this workspace.' ? <p key={note} role="status" className="status-strip status-enter mt-4 text-center text-sm font-medium text-graphite/80">{note}</p> : null}
               {failedUpload ? (
                 <button
                   type="button"
@@ -4710,7 +4793,7 @@ function ResearchChat({
 
     if (!question || isLoading) return;
     if (searchableDocuments.length === 0) {
-      setErrorMessage('Add a source before asking your archive.');
+      setErrorMessage('Add a source before asking a question.');
       return;
     }
 
@@ -4825,9 +4908,9 @@ function ResearchChat({
   }
 
   return (
-    <div className={`mx-auto grid gap-5 ${searchableDocuments.length ? `h-full min-h-[20rem] max-w-7xl ${latestCitations.length ? 'xl:grid-cols-[minmax(0,1fr)_340px]' : ''}` : 'max-w-5xl'}`}>
-      <section className={`flex min-h-0 flex-col overflow-hidden ${searchableDocuments.length ? 'surface-raised' : ''}`}>
-        <div className={`shrink-0 ${searchableDocuments.length ? 'border-b border-ink/10 p-4 sm:p-5' : 'pb-7'}`}>
+    <div className={`research-chat mx-auto grid gap-6 ${searchableDocuments.length ? `h-full min-h-[20rem] max-w-7xl ${latestCitations.length ? 'xl:grid-cols-[minmax(0,1fr)_360px]' : ''}` : 'max-w-5xl'}`}>
+      <section className={`research-chat__conversation flex min-h-0 flex-col overflow-hidden ${searchableDocuments.length ? 'surface-raised' : 'research-chat__conversation--empty'}`}>
+        <div className={`research-chat__header shrink-0 ${searchableDocuments.length ? 'border-b border-ink/10 p-4 sm:p-6' : 'pb-7'}`}>
           <div className="relative">
             <SectionHeader title="Ask your sources" copy="Ask about a report, teacher feedback, a weak topic, or a contradiction." compact />
             {chat.length ? (
@@ -4850,11 +4933,11 @@ function ResearchChat({
             ) : null}
           </div>
         </div>
-        <div className={`scrollbar-soft min-h-0 flex-1 space-y-4 overflow-y-auto ${searchableDocuments.length ? 'px-4 py-4 sm:px-6 sm:py-5' : ''}`}>
+        <div className={`research-chat__messages scrollbar-soft min-h-0 flex-1 space-y-5 overflow-y-auto ${searchableDocuments.length ? 'px-4 py-5 sm:px-7 sm:py-6' : ''}`}>
           {chat.length ? (
             chat.map((message) => (
-              <div key={message.id} className={`group ${message.role === 'user' ? 'ml-auto max-w-[70ch]' : 'mr-auto max-w-[78ch]'}`}>
-                <div className={`rounded-lg p-4 sm:p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'bg-paper/70 text-ink'}`}>
+              <div key={message.id} className={`research-chat__message ${message.role === 'user' ? 'research-chat__message--user ml-auto max-w-[70ch]' : 'research-chat__message--assistant mr-auto max-w-[78ch]'} group`}>
+                <div className={`research-chat__message-body rounded-lg p-4 sm:p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'bg-paper/70 text-ink'}`}>
                   <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
                 </div>
                 <button
@@ -4867,7 +4950,7 @@ function ResearchChat({
                       onConfirm: () => deleteMessage(message),
                     })
                   }
-                  className="mt-1.5 text-xs font-semibold text-graphite/80 transition-opacity hover:text-red-700 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+                  className="mt-1.5 text-xs font-semibold text-graphite/80 transition-opacity hover:text-brass md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                 >
                   Delete message
                 </button>
@@ -4892,7 +4975,7 @@ function ResearchChat({
             />
           )}
           {isLoading ? (
-            <div className="mr-auto max-w-[820px]">
+            <div className="research-chat__loading mr-auto max-w-[820px]">
               <div className="rounded-lg border border-ink/10 bg-paper/70 p-5 text-ink">
                 <div className="flex items-center gap-3 text-sm font-semibold text-graphite/80">
                   <span className="size-2 animate-pulse rounded-full bg-brass" />
@@ -4905,9 +4988,9 @@ function ResearchChat({
           ) : null}
           <div ref={bottomRef} />
         </div>
-        {searchableDocuments.length ? <div className="shrink-0 border-t border-ink/10 bg-white p-4">
+        {searchableDocuments.length ? <div className="research-chat__composer chat-composer shrink-0 border-t border-ink/10 bg-white p-4 sm:px-6 sm:py-5">
           {errorMessage ? (
-            <div role="status" className="status-enter mb-3 rounded-lg border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
+            <div role="status" className="status-strip status-enter mb-3 rounded-lg border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
               Research chat could not answer right now. {errorMessage}
             </div>
           ) : null}
@@ -4937,7 +5020,7 @@ function ResearchChat({
         </div> : null}
       </section>
 
-      {searchableDocuments.length && latestCitations.length ? <aside className="surface-raised hidden min-h-0 overflow-hidden xl:flex xl:flex-col">
+      {searchableDocuments.length && latestCitations.length ? <aside className="research-chat__evidence surface-raised hidden min-h-0 overflow-hidden xl:flex xl:flex-col">
         <div className="shrink-0 border-b border-ink/10 p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Evidence</p>
           <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">Related sources</h3>
@@ -4969,15 +5052,17 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
   ];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-7">
-      <SectionHeader
-        eyebrow="Study tools"
-        title="Prepare from your sources"
-        copy="Choose a study format and see which sources are ready to support it."
-        compact
-      />
-      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-        <div className="surface-raised divide-y divide-ink/[0.055] overflow-hidden">
+    <div className="study-tools-page mx-auto max-w-6xl space-y-9">
+      <div className="study-tools-page__header max-w-4xl">
+        <SectionHeader
+          eyebrow="Study tools"
+          title="Prepare from your sources"
+          copy="Choose a study format and see which sources are ready to support it."
+          compact
+        />
+      </div>
+      <div className="study-tools-layout grid gap-7 xl:grid-cols-[340px_minmax(0,1fr)]">
+        <div className="study-tools-rail surface-raised divide-y divide-ink/[0.055] overflow-hidden">
           {tools.map((tool) => {
             const Icon = tool.icon;
             return (
@@ -4985,8 +5070,8 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
                 key={tool.label}
                 type="button"
                 onClick={() => setActiveTool(tool.label)}
-                className={`flex w-full items-start gap-4 p-4 text-left transition sm:p-5 ${
-                  activeTool === tool.label ? 'bg-paper text-ink' : 'bg-white text-ink hover:bg-paper/50'
+                className={`study-tools-rail__choice flex w-full items-start gap-4 p-4 text-left transition sm:p-5 ${
+                  activeTool === tool.label ? 'is-active bg-paper text-ink' : 'bg-white text-ink hover:bg-paper/50'
                 }`}
               >
                 <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-paper text-graphite">
@@ -5010,7 +5095,7 @@ function StudyTools({ documents }: { documents: ResearchDocument[] }) {
             );
           })}
         </div>
-        <div className="surface-raised p-6">
+        <div className="study-tools-workspace surface-raised p-6 sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Selected format</p>
           <h3 className="mt-3 font-serif text-4xl font-semibold text-ink">{activeTool}</h3>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/80">
@@ -5068,24 +5153,26 @@ function KnowledgeMap({ documents }: { documents: ResearchDocument[] }) {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-7">
-      <SectionHeader
-        eyebrow="Knowledge map"
-        title="Connected topic graph"
-        copy="Topics found across your sources, connected by shared context."
-        compact
-      />
+    <div className="knowledge-map-page mx-auto max-w-6xl space-y-9">
+      <div className="knowledge-map-page__header max-w-4xl">
+        <SectionHeader
+          eyebrow="Knowledge map"
+          title="Connected topic graph"
+          copy="Topics found across your sources, connected by shared context."
+          compact
+        />
+      </div>
       {mapNodes.length === 0 ? (
         <EmptyState title="Create a topic map" copy="Upload documents and Research OS will use their topics to start a workspace map." />
       ) : (
       <div>
-        <div className="relative min-h-[460px] overflow-hidden rounded-lg border border-ink/10 bg-white shadow-sm sm:min-h-[560px]">
+        <div className="knowledge-map-stage knowledge-map-frame relative min-h-[460px] overflow-hidden rounded-lg border border-ink/10 bg-white shadow-sm sm:min-h-[560px]">
           <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             {mapEdges.map((edge) => {
               const from = nodeById[edge.from];
               const to = nodeById[edge.to];
               if (!from || !to) return null;
-              return <line key={`${edge.from}-${edge.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="rgba(68,81,94,0.18)" strokeWidth="0.28" />;
+              return <line key={`${edge.from}-${edge.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="var(--rule-strong)" strokeWidth="0.28" />;
             })}
           </svg>
           <div className="absolute left-5 top-5 z-10 rounded-lg border border-ink/10 bg-paper/80 px-4 py-3 text-ink">

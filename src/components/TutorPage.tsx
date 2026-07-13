@@ -628,24 +628,24 @@ export function TutorPage({
   }
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-7">
+    <div className="tutor-page mx-auto flex max-w-7xl flex-col gap-8 sm:gap-10">
       <SectionHeader
         title="Tutor"
         copy="Lessons, active recall, Socratic questioning, and exam practice grounded in your sources."
         compact
       />
 
-      {isLoading || status !== idleStatus ? <div role="status" aria-live="polite" className="status-enter flex min-h-12 items-center gap-3 rounded-lg bg-paper/65 px-4 py-3">
+      {isLoading || status !== idleStatus ? <div role="status" aria-live="polite" className="status-strip status-enter flex min-h-12 items-center gap-3 rounded-lg bg-paper/65 px-4 py-3">
         {isLoading ? <span className="size-2 shrink-0 animate-pulse rounded-full bg-brass" /> : null}
         <p className="text-sm leading-6 text-graphite/80">{status}</p>
       </div> : null}
 
-      {hasTutorHistory ? <details className="surface-raised order-last p-5">
-        <summary className="cursor-pointer text-sm font-semibold text-ink">Manage tutor history</summary>
-        <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
+      {hasTutorHistory ? <details className="surface-raised order-last p-5 sm:p-6">
+        <summary className="flex min-h-10 cursor-pointer items-center text-sm font-semibold text-ink">Manage tutor history</summary>
+        <div className="mt-6 flex flex-wrap items-start justify-between gap-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Saved sessions</p>
-            <h3 className="mt-2 text-lg font-semibold text-ink">Sessions and learning memory</h3>
+            <h3 className="mt-2 font-sans text-lg font-semibold text-ink">Sessions and learning memory</h3>
           </div>
           <button
             type="button"
@@ -657,13 +657,13 @@ export function TutorPage({
                 onConfirm: clearTutorMemory,
               })
             }
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-graphite/80 hover:bg-red-50 hover:text-red-700"
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-graphite/80 hover:bg-brass/10 hover:text-brass"
           >
             <Trash2 size={14} />
             Clear memory
           </button>
         </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
           {tutorLessons.slice(0, 3).map((lesson) => (
             <TutorDataCard
               key={lesson.id}
@@ -712,44 +712,44 @@ export function TutorPage({
         </div>
       </details> : null}
 
-      {hasReadableSources || hasTutorHistory ? <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
-        <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+      {hasReadableSources || hasTutorHistory ? <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_12rem]">
           <label className="block text-xs font-semibold text-graphite/80">
             Topic
-            <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={suggestedTopic || 'Topic to study'} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-normal text-ink outline-none ring-ink/10 transition focus:ring-4" />
+            <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={suggestedTopic || 'Topic to study'} className="mt-2 min-h-12 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-normal text-ink outline-none ring-ink/10 transition focus:ring-4" />
           </label>
           <label className="block text-xs font-semibold text-graphite/80">
             Difficulty
-            <select value={difficulty} onChange={(event) => setDifficulty(normalizeDifficulty(event.target.value))} className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-normal text-ink outline-none ring-ink/10 transition focus:ring-4">
+            <select value={difficulty} onChange={(event) => setDifficulty(normalizeDifficulty(event.target.value))} className="mt-2 min-h-12 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-normal text-ink outline-none ring-ink/10 transition focus:ring-4">
               <option>Foundation</option>
               <option>Core</option>
               <option>Stretch</option>
             </select>
           </label>
         </div>
-        <div className="grid gap-2 self-end sm:grid-cols-3">
-          <button type="button" onClick={() => startLesson()} disabled={isLoading} className="min-h-11 rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/55">
+        <div className="grid gap-2.5 self-end sm:grid-cols-3">
+          <button type="button" onClick={() => startLesson()} disabled={isLoading} className="min-h-12 whitespace-nowrap rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/55">
             Start lesson
           </button>
-          <button type="button" onClick={() => askSocratic()} disabled={isLoading} className="min-h-11 rounded-lg border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm hover:border-ink/20 hover:bg-paper/50 disabled:cursor-not-allowed disabled:text-graphite/45">
+          <button type="button" onClick={() => askSocratic()} disabled={isLoading} className="min-h-12 whitespace-nowrap rounded-lg border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm hover:border-ink/20 hover:bg-paper/50 disabled:cursor-not-allowed disabled:text-graphite/45">
             Start Socratic
           </button>
-          <button type="button" onClick={() => generateExam()} disabled={isLoading} className="min-h-11 rounded-lg border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm hover:border-ink/20 hover:bg-paper/50 disabled:cursor-not-allowed disabled:text-graphite/45">
+          <button type="button" onClick={() => generateExam()} disabled={isLoading} className="min-h-12 whitespace-nowrap rounded-lg border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm hover:border-ink/20 hover:bg-paper/50 disabled:cursor-not-allowed disabled:text-graphite/45">
             Generate exam
           </button>
         </div>
       </div> : null}
 
-      {hasReadableSources || hasTutorHistory ? <div className="border-b border-ink/10 pb-3">
-        <p className="eyebrow mb-2">Current view</p>
-        <div className="flex flex-wrap gap-1">
+      {hasReadableSources || hasTutorHistory ? <div className="tutor-view-tabs border-b border-ink/10 pb-0">
+        <p className="eyebrow mb-3">Current view</p>
+        <div className="flex gap-6 overflow-x-auto">
           {(['home', 'lesson', 'socratic', 'exam'] as TutorView[]).map((item) => (
             <button
               key={item}
               type="button"
               onClick={() => setView(item)}
               aria-pressed={view === item}
-              className={`min-h-10 rounded-lg px-3 py-2 text-sm font-semibold capitalize ${view === item ? 'bg-paper text-ink ring-1 ring-ink/10' : 'text-graphite hover:bg-paper/65 hover:text-ink'}`}
+              className={`tutor-view-tab min-h-10 shrink-0 rounded-none border-b-2 px-0 py-2.5 text-sm font-semibold capitalize ${view === item ? 'is-active border-brass text-ink' : 'border-transparent text-graphite hover:border-ink/20 hover:text-ink'}`}
             >
               {item === 'home' ? 'Overview' : item}
             </button>
@@ -839,7 +839,7 @@ function TutorDataCard({ title, detail, onDelete }: { title: string; detail: str
     <article className="rounded-lg border border-ink/10 bg-paper/65 p-4">
       <p className="font-semibold text-ink">{title}</p>
       <p className="mt-2 line-clamp-2 text-sm leading-6 text-graphite/80">{detail}</p>
-      <button type="button" onClick={onDelete} className="mt-3 inline-flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-graphite/80 hover:bg-red-50 hover:text-red-700">
+      <button type="button" onClick={onDelete} className="mt-3 inline-flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-graphite/80 hover:bg-brass/10 hover:text-brass">
         <Trash2 size={14} />
         Delete
       </button>
@@ -870,15 +870,15 @@ function TutorConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="tutor-dialog-title" aria-describedby="tutor-dialog-body" className="w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-700">Confirm destructive action</p>
-        <h2 id="tutor-dialog-title" className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
+      <div role="dialog" aria-modal="true" aria-labelledby="tutor-dialog-title" aria-describedby="tutor-dialog-body" className="dialog-panel w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brass">Confirm destructive action</p>
+        <h2 id="tutor-dialog-title" className="mt-3 font-sans text-xl font-semibold text-ink">{action.title}</h2>
         <p id="tutor-dialog-body" className="mt-3 text-sm leading-7 text-graphite/80">{action.body}</p>
         <div className="mt-6 grid gap-2 sm:flex sm:justify-end">
           <button type="button" onClick={onClose} disabled={isWorking} className="min-h-10 rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink hover:bg-paper/50">
             Cancel
           </button>
-          <button type="button" onClick={confirm} disabled={isWorking} className="min-h-10 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:bg-red-400">
+          <button type="button" onClick={confirm} disabled={isWorking} className="min-h-10 rounded-lg bg-brass px-4 py-2 text-sm font-semibold text-white hover:bg-ink disabled:bg-brass/45">
             {isWorking ? 'Working…' : action.confirmLabel}
           </button>
         </div>
@@ -1043,7 +1043,7 @@ function LessonView({
       <section className="space-y-6">
         <div className="surface-raised p-6">
           <p className="eyebrow">Objective</p>
-          <h3 className="mt-3 max-w-3xl font-serif text-2xl font-semibold leading-tight text-ink sm:text-3xl">{lesson.objective}</h3>
+          <h3 className="mt-3 max-w-3xl font-sans text-2xl font-semibold leading-tight text-ink sm:text-3xl">{lesson.objective}</h3>
           <div className="mt-5 flex flex-wrap gap-x-7 gap-y-3 border-t border-ink/10 pt-4 text-sm text-graphite/80">
             <span className="inline-flex items-center gap-2"><BookMarked size={15} /> {lesson.estimatedDuration}</span>
             <span className="inline-flex items-center gap-2"><GraduationCap size={15} /> {lesson.difficulty}</span>
@@ -1143,7 +1143,7 @@ function SocraticView({
           One question at a time
         </div>
         {turn.feedback ? <p className="mt-5 rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/80">{turn.feedback}</p> : null}
-        <h3 className="mt-5 font-serif text-3xl font-semibold leading-tight text-ink">{turn.question}</h3>
+        <h3 className="mt-5 font-sans text-3xl font-semibold leading-tight text-ink">{turn.question}</h3>
         <textarea
           aria-label={`Answer: ${turn.question}`}
           value={answer}
@@ -1194,7 +1194,7 @@ function ExamView({
                 <span>/</span>
                 <span>{question.marks} marks</span>
               </div>
-              <h3 className="mt-4 text-lg font-semibold leading-7 text-ink">{question.prompt}</h3>
+              <h3 className="mt-4 font-sans text-lg font-semibold leading-7 text-ink">{question.prompt}</h3>
               <details className="mt-4 rounded-lg bg-paper/70 p-4">
                 <summary className="cursor-pointer text-sm font-semibold text-ink">View mark scheme</summary>
                 <p className="mt-3 text-sm leading-7 text-graphite/80">{question.markScheme}</p>
@@ -1243,7 +1243,7 @@ function ExamView({
 function EmptyPanel({ title, copy }: { title: string; copy: string }) {
   return (
     <div className="empty-state">
-      <p className="font-serif text-2xl font-semibold leading-tight text-ink sm:text-[1.75rem]">{title}</p>
+      <p className="font-sans text-2xl font-semibold leading-tight text-ink sm:text-[1.75rem]">{title}</p>
       <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-graphite/80">{copy}</p>
     </div>
   );
