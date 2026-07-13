@@ -44,12 +44,18 @@ import {
 } from '../utils/api';
 import { retrieveChunks, type RetrievedChunk } from '../utils/retrieveChunks';
 import { CitationCard } from './CitationCard';
-import { SectionHeader } from './SectionHeader';
 import { getDocumentMetadata } from '../utils/learningModel';
 import { deleteSupabaseRows } from '../services/researchStore';
 import type { AppStorageStatus } from '../hooks/useResearchState';
 
 type TutorView = 'home' | 'lesson' | 'socratic' | 'exam';
+
+const tutorEnvironments: Array<{ view: TutorView; label: string; shortLabel: string; description: string; icon: LucideIcon }> = [
+  { view: 'home', label: 'Study overview', shortLabel: 'Overview', description: 'Review priorities, memory, and the next useful move.', icon: Target },
+  { view: 'lesson', label: 'Guided lesson', shortLabel: 'Lesson', description: 'Build understanding, then test recall against your sources.', icon: BookMarked },
+  { view: 'socratic', label: 'Socratic inquiry', shortLabel: 'Socratic', description: 'Develop reasoning through one adaptive question at a time.', icon: MessageCircleQuestion },
+  { view: 'exam', label: 'Exam rehearsal', shortLabel: 'Exam', description: 'Practise under a mark scheme and improve the response.', icon: ClipboardCheck },
+];
 
 type TutorPageProps = {
   workspaceId: string;
@@ -301,6 +307,7 @@ export function TutorPage({
 
   const currentLesson = tutorLessons.find((lesson) => lesson.id === currentLessonId) ?? activeLesson;
   const latestSocraticTurn = tutorSocraticTurns.find((turn) => turn.workspaceId === workspaceId);
+  const selectedEnvironment = tutorEnvironments.find((environment) => environment.view === view) ?? tutorEnvironments[0];
 
   async function retrieveForTutor(query: string) {
     let retrieved: RetrievedChunk[] = [];
@@ -627,18 +634,83 @@ export function TutorPage({
     }
   }
 
-  return (
-    <div className="tutor-page mx-auto flex max-w-7xl flex-col gap-8 sm:gap-10">
-      <SectionHeader
-        title="Tutor"
-        copy="Lessons, active recall, Socratic questioning, and exam practice grounded in your sources."
-        compact
-      />
+  function prepareSelectedEnvironment() {
+    if (view === 'lesson') {
+      startLesson();
+    } else if (view === 'socratic') {
+      askSocratic();
+    } else if (view === 'exam') {
+      generateExam();
+    }
+  }
 
-      {isLoading || status !== idleStatus ? <div role="status" aria-live="polite" className="status-strip status-enter flex min-h-12 items-center gap-3 rounded-lg bg-paper/65 px-4 py-3">
-        {isLoading ? <span className="size-2 shrink-0 animate-pulse rounded-full bg-brass" /> : null}
-        <p className="text-sm leading-6 text-graphite/80">{status}</p>
-      </div> : null}
+  return (
+    <div className="tutor-page learn-desk">
+      <header className="tutor-masthead">
+        <div>
+          <p className="learn-kicker">Evidence-led study</p>
+          <h2>Enter a study environment.</h2>
+          <p>Choose how you want to work. Every lesson, question, and mark scheme begins with the sources on this desk.</p>
+        </div>
+        <dl className="tutor-masthead__ledger" aria-label="Tutor study status">
+          <div>
+            <dt>Readable sources</dt>
+            <dd>{documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed').length}</dd>
+          </div>
+          <div>
+            <dt>Lessons complete</dt>
+            <dd>{tutorMemory.lessonsCompleted}</dd>
+          </div>
+          <div>
+            <dt>Revision streak</dt>
+            <dd>{tutorMemory.revisionStreak}d</dd>
+          </div>
+        </dl>
+      </header>
+
+      {isLoading || status !== idleStatus ? (
+        <div role="status" aria-live="polite" className="tutor-thinking status-enter">
+          <p className="learn-kicker">Tutor is preparing the desk</p>
+          <div className="tutor-thinking__rule" aria-hidden="true"><span /></div>
+          <p>{status}</p>
+        </div>
+      ) : null}
+
+      <section className="tutor-environments" aria-labelledby="tutor-environments-title">
+        <div className="tutor-environments__heading">
+          <p id="tutor-environments-title" className="learn-kicker">Study environments</p>
+          <p>Move between ways of thinking without losing the topic or evidence in view.</p>
+        </div>
+        <div className="tutor-environments__desktop">
+          {tutorEnvironments.map((environment, index) => {
+            const Icon = environment.icon;
+            const active = environment.view === view;
+            return (
+              <button
+                key={environment.view}
+                type="button"
+                onClick={() => setView(environment.view)}
+                aria-pressed={active}
+                className={`tutor-environment ${active ? 'is-active' : ''}`}
+              >
+                <span className="tutor-environment__number">0{index + 1}</span>
+                <span className="tutor-environment__icon"><Icon size={17} /></span>
+                <span className="tutor-environment__copy">
+                  <strong>{environment.label}</strong>
+                  <span>{environment.description}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <label className="tutor-environments__mobile">
+          Study environment
+          <select value={view} onChange={(event) => setView(event.target.value as TutorView)}>
+            {tutorEnvironments.map((environment) => <option key={environment.view} value={environment.view}>{environment.label}</option>)}
+          </select>
+          <span>{selectedEnvironment.description}</span>
+        </label>
+      </section>
 
       {hasTutorHistory ? <details className="surface-raised order-last p-5 sm:p-6">
         <summary className="flex min-h-10 cursor-pointer items-center text-sm font-semibold text-ink">Manage tutor history</summary>
@@ -712,50 +784,37 @@ export function TutorPage({
         </div>
       </details> : null}
 
-      {hasReadableSources || hasTutorHistory ? <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_12rem]">
-          <label className="block text-xs font-semibold text-graphite/80">
-            Topic
-            <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={suggestedTopic || 'Topic to study'} className="mt-2 min-h-12 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-normal text-ink outline-none ring-ink/10 transition focus:ring-4" />
-          </label>
-          <label className="block text-xs font-semibold text-graphite/80">
-            Difficulty
-            <select value={difficulty} onChange={(event) => setDifficulty(normalizeDifficulty(event.target.value))} className="mt-2 min-h-12 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-normal text-ink outline-none ring-ink/10 transition focus:ring-4">
-              <option>Foundation</option>
-              <option>Core</option>
-              <option>Stretch</option>
-            </select>
-          </label>
-        </div>
-        <div className="grid gap-2.5 self-end sm:grid-cols-3">
-          <button type="button" onClick={() => startLesson()} disabled={isLoading} className="min-h-12 whitespace-nowrap rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/55">
-            Start lesson
-          </button>
-          <button type="button" onClick={() => askSocratic()} disabled={isLoading} className="min-h-12 whitespace-nowrap rounded-lg border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm hover:border-ink/20 hover:bg-paper/50 disabled:cursor-not-allowed disabled:text-graphite/45">
-            Start Socratic
-          </button>
-          <button type="button" onClick={() => generateExam()} disabled={isLoading} className="min-h-12 whitespace-nowrap rounded-lg border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm hover:border-ink/20 hover:bg-paper/50 disabled:cursor-not-allowed disabled:text-graphite/45">
-            Generate exam
-          </button>
-        </div>
-      </div> : null}
-
-      {hasReadableSources || hasTutorHistory ? <div className="tutor-view-tabs border-b border-ink/10 pb-0">
-        <p className="eyebrow mb-3">Current view</p>
-        <div className="flex gap-6 overflow-x-auto">
-          {(['home', 'lesson', 'socratic', 'exam'] as TutorView[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setView(item)}
-              aria-pressed={view === item}
-              className={`tutor-view-tab min-h-10 shrink-0 rounded-none border-b-2 px-0 py-2.5 text-sm font-semibold capitalize ${view === item ? 'is-active border-brass text-ink' : 'border-transparent text-graphite hover:border-ink/20 hover:text-ink'}`}
-            >
-              {item === 'home' ? 'Overview' : item}
+      {hasReadableSources || hasTutorHistory ? (
+        <section className="tutor-study-brief" aria-labelledby="tutor-study-brief-title">
+          <div className="tutor-study-brief__heading">
+            <p className="learn-kicker">Study brief</p>
+            <h3 id="tutor-study-brief-title">{selectedEnvironment.label}</h3>
+            <p>{selectedEnvironment.description}</p>
+          </div>
+          <div className="tutor-study-brief__fields">
+            <label>
+              Focus topic
+              <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={suggestedTopic || 'Topic to study'} />
+            </label>
+            <label>
+              Level
+              <select value={difficulty} onChange={(event) => setDifficulty(normalizeDifficulty(event.target.value))}>
+                <option>Foundation</option>
+                <option>Core</option>
+                <option>Stretch</option>
+              </select>
+            </label>
+          </div>
+          {view !== 'home' ? (
+            <button type="button" onClick={prepareSelectedEnvironment} disabled={isLoading} className="tutor-study-brief__action">
+              {view === 'lesson' ? 'Prepare guided lesson' : view === 'socratic' ? 'Begin Socratic inquiry' : 'Prepare exam paper'}
+              <ArrowRight size={16} />
             </button>
-          ))}
-        </div>
-      </div> : null}
+          ) : (
+            <p className="tutor-study-brief__overview-note">Choose an environment above to prepare new work, or continue from the overview below.</p>
+          )}
+        </section>
+      ) : null}
 
       {view === 'home' ? (
         <TutorHome
@@ -915,12 +974,12 @@ function TutorHome({
   const latestAttempt = tutorAttempts[0];
 
   return (
-    <div className="space-y-7">
-      <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="py-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Continue learning</p>
-          <h3 className="mt-4 font-serif text-4xl font-semibold text-ink">{activeLesson?.topic || suggestedTopic || 'Build a lesson from your sources'}</h3>
-          <p className="mt-4 max-w-2xl text-sm leading-7 text-graphite/80">
+    <div className="tutor-overview">
+      <section className="tutor-overview__opening">
+        <div className="tutor-overview__focus">
+          <p className="learn-kicker">Continue learning</p>
+          <h3>{activeLesson?.topic || suggestedTopic || 'Build a lesson from your sources'}</h3>
+          <p>
             {activeLesson
               ? activeLesson.objective
               : hasReadableSources
@@ -930,42 +989,42 @@ function TutorHome({
           {activeLesson || hasReadableSources ? <button
             type="button"
             onClick={onContinue}
-            className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-graphite"
+            className="tutor-overview__continue"
           >
             {activeLesson ? 'Continue previous lesson' : 'Start suggested lesson'}
             <ArrowRight size={17} />
           </button> : null}
         </div>
-        {hasReadableSources || tutorMemory.lessonsCompleted > 0 || tutorMemory.revisionStreak > 0 ? <div className="grid gap-5 border-t border-ink/[0.055] pt-5 sm:grid-cols-2 xl:grid-cols-1 xl:border-l xl:border-t-0 xl:pl-7 xl:pt-0">
+        {hasReadableSources || tutorMemory.lessonsCompleted > 0 || tutorMemory.revisionStreak > 0 ? <div className="tutor-overview__metrics">
           <TutorMetric icon={Target} label="Weakest topic" value={weakestTopic} />
           <TutorMetric icon={Flame} label="Revision streak" value={`${tutorMemory.revisionStreak} day${tutorMemory.revisionStreak === 1 ? '' : 's'}`} />
           <TutorMetric icon={CheckCircle2} label="Lessons completed" value={tutorMemory.lessonsCompleted.toLocaleString()} />
         </div> : null}
       </section>
 
-      {hasReadableSources || recentTopics.length ? <section className="grid gap-6 lg:grid-cols-3">
+      {hasReadableSources || recentTopics.length ? <section className="tutor-overview__topics">
         <TopicPanel title="Recommended topics" icon={Sparkles} topics={recommendedTopics} onStartTopic={onStartTopic} emptyCopy="Upload readable documents to create source-grounded recommendations." />
         <TopicPanel title="Weak topics from Performance" icon={Lightbulb} topics={weakTopics} onStartTopic={onStartTopic} emptyCopy={hasReadableSources ? 'Performance weaknesses will appear here.' : 'Upload readable source material before turning performance weaknesses into lessons.'} />
-        <div className="border-t border-ink/[0.055] pt-5">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">
+        <div className="tutor-topic-panel">
+          <div className="tutor-topic-panel__heading">
             <RotateCcw size={15} />
             Recently studied
           </div>
-          <div className="mt-5 space-y-3">
+          <div className="tutor-topic-panel__list">
             {recentTopics.length ? (
               recentTopics.map((topic) => (
-                <button key={topic.topic} type="button" onClick={() => onStartTopic(topic.topic)} className="w-full rounded-lg bg-paper/65 p-4 text-left hover:bg-paper">
-                  <div className="flex items-center justify-between gap-3">
+                <button key={topic.topic} type="button" onClick={() => onStartTopic(topic.topic)} className="tutor-topic-panel__row">
+                  <div>
                     <p className="font-semibold text-ink">{topic.topic}</p>
                     <ArrowRight size={16} className="text-graphite/80" />
                   </div>
                 </button>
               ))
             ) : (
-              <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/80">Recent progress appears after the first recall attempt.</p>
+              <p className="tutor-topic-panel__empty">Recent progress appears after the first recall attempt.</p>
             )}
           </div>
-          {latestAttempt ? <p className="mt-4 text-sm leading-7 text-graphite/80">Recent progress: {latestAttempt.feedback}</p> : null}
+          {latestAttempt ? <p className="tutor-topic-panel__progress">Recent progress: {latestAttempt.feedback}</p> : null}
         </div>
       </section> : null}
     </div>
@@ -974,12 +1033,12 @@ function TutorHome({
 
 function TutorMetric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <div className="min-w-0">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">
+    <div className="tutor-metric">
+      <div className="tutor-metric__label">
         <Icon size={15} />
         {label}
       </div>
-      <p className="mt-2 text-base font-semibold leading-6 text-ink">{value}</p>
+      <p>{value}</p>
     </div>
   );
 }
@@ -998,21 +1057,21 @@ function TopicPanel({
   onStartTopic: (topic: string) => void;
 }) {
   return (
-    <div className="border-t border-ink/[0.055] pt-5">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">
+    <div className="tutor-topic-panel">
+      <div className="tutor-topic-panel__heading">
         <Icon size={15} />
         {title}
       </div>
-      <div className="mt-5 space-y-2">
+      <div className="tutor-topic-panel__list">
         {topics.length ? (
           topics.map((topic) => (
-            <button key={topic} type="button" onClick={() => onStartTopic(topic)} className="flex w-full items-center justify-between gap-3 rounded-lg bg-paper/70 px-4 py-3 text-left text-sm font-semibold text-ink transition hover:bg-paper">
+            <button key={topic} type="button" onClick={() => onStartTopic(topic)} className="tutor-topic-panel__row">
               <span>{topic}</span>
               <ArrowRight size={16} />
             </button>
           ))
         ) : (
-          <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/80">{emptyCopy}</p>
+          <p className="tutor-topic-panel__empty">{emptyCopy}</p>
         )}
       </div>
     </div>
@@ -1039,32 +1098,33 @@ function LessonView({
   onNext: (topic: string) => void;
 }) {
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <section className="space-y-6">
-        <div className="surface-raised p-6">
-          <p className="eyebrow">Objective</p>
-          <h3 className="mt-3 max-w-3xl font-sans text-2xl font-semibold leading-tight text-ink sm:text-3xl">{lesson.objective}</h3>
-          <div className="mt-5 flex flex-wrap gap-x-7 gap-y-3 border-t border-ink/10 pt-4 text-sm text-graphite/80">
+    <div className="tutor-session tutor-session--lesson">
+      <section className="tutor-session__document">
+        <header className="tutor-session__header">
+          <p className="learn-kicker">Lesson objective</p>
+          <h3>{lesson.objective}</h3>
+          <div className="tutor-session__metadata">
             <span className="inline-flex items-center gap-2"><BookMarked size={15} /> {lesson.estimatedDuration}</span>
             <span className="inline-flex items-center gap-2"><GraduationCap size={15} /> {lesson.difficulty}</span>
           </div>
-          <div className="mt-6 border-t border-ink/10 pt-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Explanation</p>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-8 text-graphite/80">{lesson.explanation}</p>
-          </div>
-        </div>
+        </header>
 
-        <div className="surface-raised p-6">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">
+        <section className="tutor-session__section tutor-session__explanation">
+          <p className="learn-kicker">Explanation</p>
+          <p>{lesson.explanation}</p>
+        </section>
+
+        <section className="tutor-session__section tutor-checkpoints">
+          <div className="tutor-session__section-heading">
             <ClipboardCheck size={15} />
             Active recall checkpoints
           </div>
-          <div className="mt-5">
+          <div className="tutor-checkpoints__list">
             {lesson.checkpointQuestions.map((question) => (
-              <div key={question.id} className="border-t border-ink/[0.055] py-5 first:border-t-0 first:pt-0 last:pb-0">
-                <div className="flex items-start justify-between gap-4">
-                  <p className="font-semibold leading-7 text-ink">{question.prompt}</p>
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-graphite/80">{question.difficulty}</span>
+              <div key={question.id} className="tutor-checkpoint">
+                <div className="tutor-checkpoint__prompt">
+                  <p>{question.prompt}</p>
+                  <span>{question.difficulty}</span>
                 </div>
                 <textarea
                   aria-label={`Answer: ${question.prompt}`}
@@ -1072,47 +1132,47 @@ function LessonView({
                   onChange={(event) => onAnswerChange(question.id, event.target.value)}
                   rows={3}
                   placeholder="Attempt from memory before revealing the answer."
-                  className="mt-4 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4"
+                  className="tutor-writing-field"
                 />
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => onRecord(lesson, question.id, checkpointAnswers[question.id] ?? '')} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-graphite">
+                <div className="tutor-checkpoint__actions">
+                  <button type="button" onClick={() => onRecord(lesson, question.id, checkpointAnswers[question.id] ?? '')} className="tutor-action tutor-action--primary">
                     Record attempt
                   </button>
-                  <button type="button" onClick={() => onReveal(question.id)} className="rounded-lg border border-ink/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm hover:border-ink/20 hover:bg-paper/50">
+                  <button type="button" onClick={() => onReveal(question.id)} className="tutor-action">
                     Reveal answer
                   </button>
                 </div>
                 {revealedAnswers[question.id] ? (
-                  <div className="mt-4 rounded-lg bg-paper/60 p-4">
-                    <p className="text-sm font-semibold text-ink">{question.answer}</p>
-                    <p className="mt-2 text-sm leading-7 text-graphite/80">{question.explanation}</p>
+                  <div className="tutor-checkpoint__answer">
+                    <p>{question.answer}</p>
+                    <p>{question.explanation}</p>
                   </div>
                 ) : null}
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        <div className="surface-raised p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Recap</p>
-          <p className="mt-3 text-sm leading-8 text-graphite/80">{lesson.recap}</p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button type="button" onClick={() => onComplete(lesson)} className="rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite">
+        <section className="tutor-session__section tutor-session__recap">
+          <p className="learn-kicker">Recap</p>
+          <p>{lesson.recap}</p>
+          <div className="tutor-session__recap-actions">
+            <button type="button" onClick={() => onComplete(lesson)} className="tutor-action tutor-action--primary">
               Mark lesson complete
             </button>
-            <button type="button" onClick={() => onNext(lesson.nextRecommendation)} className="rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm hover:border-ink/20 hover:bg-paper/50">
+            <button type="button" onClick={() => onNext(lesson.nextRecommendation)} className="tutor-action">
               Study next recommendation
             </button>
           </div>
-        </div>
+        </section>
       </section>
 
-      <aside className="space-y-4">
-        <div className="border-t border-ink/[0.055] pt-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Next recommendation</p>
-          <p className="mt-3 text-sm leading-7 text-graphite/80">{lesson.nextRecommendation}</p>
+      <aside className="tutor-reference-stack">
+        <div className="tutor-reference-stack__next">
+          <p className="learn-kicker">Next recommendation</p>
+          <p>{lesson.nextRecommendation}</p>
         </div>
-        {lesson.citations.length ? lesson.citations.map((citation) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} />) : null}
+        {lesson.citations.length ? lesson.citations.map((citation, index) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} index={index + 1} />) : null}
       </aside>
     </div>
   );
@@ -1136,29 +1196,29 @@ function SocraticView({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <section className="surface-raised p-6">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">
+    <div className="tutor-session tutor-session--socratic">
+      <section className="tutor-session__document tutor-socratic-paper">
+        <div className="tutor-session__section-heading">
           <MessageCircleQuestion size={15} />
           One question at a time
         </div>
-        {turn.feedback ? <p className="mt-5 rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/80">{turn.feedback}</p> : null}
-        <h3 className="mt-5 font-sans text-3xl font-semibold leading-tight text-ink">{turn.question}</h3>
+        {turn.feedback ? <p className="tutor-socratic-paper__feedback">{turn.feedback}</p> : null}
+        <h3>{turn.question}</h3>
         <textarea
           aria-label={`Answer: ${turn.question}`}
           value={answer}
           onChange={(event) => setAnswer(event.target.value)}
           rows={6}
           placeholder="Answer before requesting the next follow-up."
-          className="mt-6 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4"
+          className="tutor-writing-field"
         />
-        <button type="button" onClick={onNext} disabled={disabled} className="mt-4 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/55">
+        <button type="button" onClick={onNext} disabled={disabled} className="tutor-action tutor-action--primary">
           Submit and adapt
         </button>
       </section>
-      <aside className="space-y-4">
+      <aside className="tutor-reference-stack">
         <TutorMetric icon={GraduationCap} label="Difficulty" value={turn.difficulty} />
-        {turn.citations.map((citation) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} />)}
+        {turn.citations.map((citation, index) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} index={index + 1} />)}
       </aside>
     </div>
   );
@@ -1180,24 +1240,29 @@ function ExamView({
   disabled: boolean;
 }) {
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <section className="space-y-5">
+    <div className="tutor-session tutor-session--exam">
+      <section className="tutor-session__document tutor-exam-paper">
+        <header className="tutor-exam-paper__header">
+          <p className="learn-kicker">Exam rehearsal</p>
+          <h3>{exam.topic}</h3>
+          <p>{exam.questions.length} question{exam.questions.length === 1 ? '' : 's'} · answers are marked against source-grounded schemes.</p>
+        </header>
         {exam.questions.map((question, index) => {
           const marked = feedback[question.id];
 
           return (
-            <article key={question.id} className="surface-raised p-6">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">
+            <article key={question.id} className="tutor-exam-question">
+              <div className="tutor-exam-question__metadata">
                 <span>Question {index + 1}</span>
                 <span>/</span>
                 <span>{question.commandWord}</span>
                 <span>/</span>
                 <span>{question.marks} marks</span>
               </div>
-              <h3 className="mt-4 font-sans text-lg font-semibold leading-7 text-ink">{question.prompt}</h3>
-              <details className="mt-4 rounded-lg bg-paper/70 p-4">
-                <summary className="cursor-pointer text-sm font-semibold text-ink">View mark scheme</summary>
-                <p className="mt-3 text-sm leading-7 text-graphite/80">{question.markScheme}</p>
+              <h4>{question.prompt}</h4>
+              <details className="tutor-exam-question__scheme">
+                <summary>View mark scheme</summary>
+                <p>{question.markScheme}</p>
               </details>
               <textarea
                 aria-label={`Exam answer: ${question.prompt}`}
@@ -1205,36 +1270,36 @@ function ExamView({
                 onChange={(event) => onAnswerChange(question.id, event.target.value)}
                 rows={5}
                 placeholder="Write an exam-style answer."
-                className="mt-4 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 focus:ring-4"
+                className="tutor-writing-field"
               />
-              <button type="button" onClick={() => onMark(exam, question)} disabled={disabled} className="mt-3 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/55">
+              <button type="button" onClick={() => onMark(exam, question)} disabled={disabled} className="tutor-action tutor-action--primary">
                 Mark answer
               </button>
               {marked ? (
-                <div className="mt-5 rounded-lg border border-moss/20 bg-paper/60 p-5">
-                  <p className="text-lg font-semibold text-ink">
+                <div className="tutor-exam-question__feedback">
+                  <p className="tutor-exam-question__score">
                     {marked.score}/{marked.maxScore}
                   </p>
-                  <p className="mt-3 text-sm leading-7 text-graphite/80">{marked.feedback}</p>
-                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">Mark scheme reasoning</p>
-                  <p className="mt-2 text-sm leading-7 text-graphite/80">{marked.markSchemeReasoning}</p>
-                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">Suggested improvements</p>
-                  <ul className="mt-2 list-disc space-y-2 pl-5 text-sm leading-7 text-graphite/80">
+                  <p>{marked.feedback}</p>
+                  <p className="learn-kicker">Mark scheme reasoning</p>
+                  <p>{marked.markSchemeReasoning}</p>
+                  <p className="learn-kicker">Suggested improvements</p>
+                  <ul>
                     {marked.suggestedImprovements.map((item) => (
                       <li key={item}>{item}</li>
                     ))}
                   </ul>
-                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">Model answer</p>
-                  <p className="mt-2 text-sm leading-7 text-graphite/80">{marked.modelAnswer}</p>
+                  <p className="learn-kicker">Model answer</p>
+                  <p>{marked.modelAnswer}</p>
                 </div>
               ) : null}
             </article>
           );
         })}
       </section>
-      <aside className="space-y-4">
+      <aside className="tutor-reference-stack">
         <TutorMetric icon={ClipboardCheck} label="Exam topic" value={exam.topic} />
-        {exam.citations.map((citation) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} />)}
+        {exam.citations.map((citation, index) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} index={index + 1} />)}
       </aside>
     </div>
   );

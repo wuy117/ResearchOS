@@ -8,9 +8,7 @@ import {
   FilePlus2,
   LibraryBig,
   Network,
-  MessageSquareText,
   Trash2,
-  Send,
   Sparkles,
   UploadCloud,
 } from 'lucide-react';
@@ -4761,6 +4759,30 @@ function semanticMatchesToRetrievedChunks(matches: SemanticSearchMatch[], docume
   });
 }
 
+type ResearchFolio = {
+  id: string;
+  question?: ChatMessage;
+  note?: ChatMessage;
+};
+
+function buildResearchFolios(messages: ChatMessage[]) {
+  return messages.reduce<ResearchFolio[]>((folios, message) => {
+    if (message.role === 'user') {
+      folios.push({ id: message.id, question: message });
+      return folios;
+    }
+
+    const activeFolio = folios[folios.length - 1];
+    if (activeFolio?.question && !activeFolio.note) {
+      activeFolio.note = message;
+      return folios;
+    }
+
+    folios.push({ id: message.id, note: message });
+    return folios;
+  }, []);
+}
+
 function ResearchChat({
   chat,
   workspaceName,
@@ -4793,10 +4815,16 @@ function ResearchChat({
   const [errorMessage, setErrorMessage] = useState('');
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const previousChatLengthRef = useRef(chat.length);
+  const folios = useMemo(() => buildResearchFolios(chat), [chat]);
   const latestCitations = [...chat].reverse().find((message) => message.citations?.length)?.citations ?? [];
+  const totalReferences = chat.reduce((count, message) => count + (message.citations?.length ?? 0), 0);
   const searchableDocuments = documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed');
 
   useEffect(() => {
+    const hasNewEntry = chat.length > previousChatLengthRef.current;
+    previousChatLengthRef.current = chat.length;
+    if (!hasNewEntry && !isLoading) return;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'end' });
   }, [chat.length, isLoading]);
@@ -4921,133 +4949,181 @@ function ResearchChat({
   }
 
   return (
-    <div className={`research-chat mx-auto grid gap-6 ${searchableDocuments.length ? `h-full min-h-[20rem] max-w-7xl ${latestCitations.length ? 'xl:grid-cols-[minmax(0,1fr)_360px]' : ''}` : 'max-w-5xl'}`}>
-      <section className={`research-chat__conversation flex min-h-0 flex-col overflow-hidden ${searchableDocuments.length ? 'surface-raised' : 'research-chat__conversation--empty'}`}>
-        <div className={`research-chat__header shrink-0 ${searchableDocuments.length ? 'border-b border-ink/10 p-4 sm:p-6' : 'pb-7'}`}>
-          <div className="relative">
-            <SectionHeader title="Ask your sources" copy="Ask about a report, teacher feedback, a weak topic, or a contradiction." compact />
-            {chat.length ? (
-              <div className="absolute right-0 top-0">
-                <IconTextButton
-                  icon={Trash2}
-                  label="Clear chat"
-                  danger
-                  iconOnly
-                  onClick={() =>
-                    setConfirmAction({
-                      title: 'Clear chat history?',
-                      body: 'This deletes all chat messages in the current Research OS history. Documents, Tutor sessions, and performance records are kept.',
-                      confirmLabel: 'Clear chat',
-                      onConfirm: clearChatHistory,
-                    })
-                  }
-                />
-              </div>
-            ) : null}
+    <div className="research-chat learn-desk">
+      <aside className="research-chat__index" aria-label="Research desk index">
+        <p className="learn-kicker">Desk index</p>
+        <dl className="research-chat__ledger">
+          <div>
+            <dt>Questions</dt>
+            <dd>{folios.filter((folio) => folio.question).length}</dd>
           </div>
-        </div>
-        <div className={`research-chat__messages scrollbar-soft min-h-0 flex-1 space-y-5 overflow-y-auto ${searchableDocuments.length ? 'px-4 py-5 sm:px-7 sm:py-6' : ''}`}>
+          <div>
+            <dt>Working notes</dt>
+            <dd>{folios.filter((folio) => folio.note).length}</dd>
+          </div>
+          <div>
+            <dt>References</dt>
+            <dd>{totalReferences}</dd>
+          </div>
+        </dl>
+        <p className="research-chat__method">Questions are read against the evidence already held in {workspaceName}.</p>
+      </aside>
+
+      <section className="research-chat__notebook" aria-labelledby="research-desk-title">
+        <header className="research-chat__masthead">
+          <div>
+            <p className="learn-kicker">Evidence notebook</p>
+            <h2 id="research-desk-title">Interrogate the evidence.</h2>
+            <p>Frame a question, compare what your sources say, and keep the answer as a working academic note.</p>
+          </div>
           {chat.length ? (
-            chat.map((message) => (
-              <div key={message.id} className={`research-chat__message ${message.role === 'user' ? 'research-chat__message--user ml-auto max-w-[70ch]' : 'research-chat__message--assistant mr-auto max-w-[78ch]'} group`}>
-                <div className={`research-chat__message-body rounded-lg p-4 sm:p-5 ${message.role === 'user' ? 'bg-ink text-white' : 'bg-paper/70 text-ink'}`}>
-                  <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setConfirmAction({
-                      title: 'Delete this chat message?',
-                      body: 'This removes one chat message from the conversation history. Other messages are kept.',
-                      confirmLabel: 'Delete message',
-                      onConfirm: () => deleteMessage(message),
-                    })
-                  }
-                  className="mt-1.5 text-xs font-semibold text-graphite/80 transition-opacity hover:text-brass md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
-                >
-                  Delete message
-                </button>
-                {message.citations ? (
-                  <details className="mt-3 rounded-lg border border-ink/10 bg-white p-3 xl:hidden">
-                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-graphite/80">
-                      {message.citations.length} source{message.citations.length === 1 ? '' : 's'}
-                    </summary>
-                    <div className="mt-3 space-y-3">
-                      {message.citations.map((citation) => (
-                        <CitationCard key={`${message.id}-${citation.documentTitle}-${citation.location}`} citation={citation} />
-                      ))}
-                    </div>
-                  </details>
+            <button
+              type="button"
+              className="research-chat__clear"
+              onClick={() =>
+                setConfirmAction({
+                  title: 'Clear research notes?',
+                  body: 'This deletes every question and working note in this Research OS history. Documents, Tutor sessions, and performance records are kept.',
+                  confirmLabel: 'Clear notes',
+                  onConfirm: clearChatHistory,
+                })
+              }
+            >
+              <Trash2 size={14} />
+              Clear notes
+            </button>
+          ) : null}
+        </header>
+
+        <div className="research-chat__folios scrollbar-soft">
+          {folios.length ? (
+            folios.map((folio, index) => (
+              <article key={folio.id} className="research-folio">
+                <p className="research-folio__number">Inquiry {String(index + 1).padStart(2, '0')}</p>
+                {folio.question ? (
+                  <section className="research-folio__question group" aria-label={`Research question ${index + 1}`}>
+                    <p className="research-folio__label">Question</p>
+                    <p className="research-folio__question-text">{folio.question.content}</p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setConfirmAction({
+                          title: 'Delete this research question?',
+                          body: 'This removes the question from the notebook. Other questions and working notes are kept.',
+                          confirmLabel: 'Delete question',
+                          onConfirm: () => deleteMessage(folio.question as ChatMessage),
+                        })
+                      }
+                      className="research-folio__delete"
+                    >
+                      Delete question
+                    </button>
+                  </section>
                 ) : null}
-              </div>
+
+                {folio.note ? (
+                  <section className="research-folio__note group" aria-label={`Working note ${index + 1}`}>
+                    <div className="research-folio__note-heading">
+                      <p className="research-folio__label">Working note</p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setConfirmAction({
+                            title: 'Delete this working note?',
+                            body: 'This removes the evidence-based note from the notebook. Other entries are kept.',
+                            confirmLabel: 'Delete note',
+                            onConfirm: () => deleteMessage(folio.note as ChatMessage),
+                          })
+                        }
+                        className="research-folio__delete"
+                      >
+                        Delete note
+                      </button>
+                    </div>
+                    <p className="research-folio__note-text">{folio.note.content}</p>
+                    {folio.note.citations?.length ? (
+                      <details className="research-folio__references">
+                        <summary>{folio.note.citations.length} reference{folio.note.citations.length === 1 ? '' : 's'} used</summary>
+                        <div className="research-folio__reference-list">
+                          {folio.note.citations.map((citation, citationIndex) => (
+                            <CitationCard key={`${folio.note?.id}-${citation.documentTitle}-${citation.location}`} citation={citation} index={citationIndex + 1} />
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
+                  </section>
+                ) : null}
+              </article>
             ))
           ) : (
-            <EmptyState
-              title="Start with a source"
-              copy="Add a report, note, paper, or assessment before asking a question."
-            />
+            <section className="research-chat__empty" aria-label="Empty research desk">
+              <span aria-hidden="true" />
+              <p className="learn-kicker">Open folio</p>
+              <h3>{searchableDocuments.length ? 'Begin with a question worth keeping.' : 'No source material is open.'}</h3>
+              <p>
+                {searchableDocuments.length
+                  ? 'Ask about a claim, contradiction, teacher comment, or gap. The response will be filed here as a working note with its references.'
+                  : 'Add a report, paper, assessment, or set of notes. Research OS will use that evidence here without turning the workspace into a chatbot.'}
+              </p>
+            </section>
           )}
+
           {isLoading ? (
-            <div className="research-chat__loading mr-auto max-w-[820px]">
-              <div className="rounded-lg border border-ink/10 bg-paper/70 p-5 text-ink">
-                <div className="flex items-center gap-3 text-sm font-semibold text-graphite/80">
-                  <span className="size-2 animate-pulse rounded-full bg-brass" />
-                  <span className="size-2 animate-pulse rounded-full bg-brass [animation-delay:120ms]" />
-                  <span className="size-2 animate-pulse rounded-full bg-brass [animation-delay:240ms]" />
-                  <span className="ml-1">Reading your sources…</span>
-                </div>
-              </div>
-            </div>
+            <section role="status" aria-live="polite" className="research-chat__thinking">
+              <p className="learn-kicker">Working note in progress</p>
+              <div className="research-chat__thinking-rule" aria-hidden="true"><span /></div>
+              <p>Reading evidence · comparing passages · drafting a grounded response</p>
+            </section>
           ) : null}
           <div ref={bottomRef} />
         </div>
-        {searchableDocuments.length ? <div className="research-chat__composer chat-composer shrink-0 border-t border-ink/10 bg-white p-4 sm:px-6 sm:py-5">
-          {errorMessage ? (
-            <div role="status" className="status-strip status-enter mb-3 rounded-lg border border-brass/20 bg-brass/10 px-4 py-3 text-sm font-semibold text-graphite">
-              Research chat could not answer right now. {errorMessage}
-            </div>
-          ) : null}
-          <div className="flex gap-3">
-            <input
-              aria-label="Ask your workspace"
+
+        {searchableDocuments.length ? (
+          <div className="research-chat__composer chat-composer">
+            {errorMessage ? (
+              <div role="status" className="research-chat__error status-enter">
+                The notebook could not prepare a note right now. {errorMessage}
+              </div>
+            ) : null}
+            <label htmlFor="research-question" className="learn-kicker">New research question</label>
+            <textarea
+              id="research-question"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') sendMessage();
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  sendMessage();
+                }
               }}
-              disabled={isLoading || searchableDocuments.length === 0}
-              placeholder={searchableDocuments.length ? 'Ask about claims, contradictions, teacher comments, or gaps...' : 'Add a source before asking...'}
-              className="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm outline-none ring-ink/10 transition focus:ring-4 disabled:cursor-not-allowed disabled:bg-paper"
+              disabled={isLoading}
+              rows={2}
+              placeholder="Write a question about claims, contradictions, teacher comments, or gaps…"
             />
-            <button
-              type="button"
-              aria-label="Send research question"
-              title="Send research question"
-              onClick={sendMessage}
-              disabled={isLoading || searchableDocuments.length === 0}
-              className="grid size-12 place-items-center rounded-lg bg-ink text-white shadow-sm transition hover:bg-graphite disabled:cursor-not-allowed disabled:bg-graphite/55"
-            >
-              <Send size={18} />
-            </button>
+            <div className="research-chat__composer-footer">
+              <p><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> to place on the desk</p>
+              <button type="button" aria-label="Place question on the research desk" onClick={sendMessage} disabled={isLoading || !prompt.trim()}>
+                {isLoading ? 'Preparing note…' : 'Place on desk'}
+                <ArrowRight size={16} />
+              </button>
+            </div>
           </div>
-        </div> : null}
+        ) : null}
       </section>
 
-      {searchableDocuments.length && latestCitations.length ? <aside className="research-chat__evidence surface-raised hidden min-h-0 overflow-hidden xl:flex xl:flex-col">
-        <div className="shrink-0 border-b border-ink/10 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite/80">Evidence</p>
-          <h3 className="mt-2 font-serif text-2xl font-semibold text-ink">Related sources</h3>
+      <aside className="research-chat__evidence" aria-label="Reference stack">
+        <header>
+          <p className="learn-kicker">Reference stack</p>
+          <h3>{latestCitations.length ? 'Evidence for the latest note' : 'References will gather here'}</h3>
+          <p>{latestCitations.length ? 'Open a reference to inspect the passage behind the working note.' : 'Each answer keeps its supporting document and location close at hand.'}</p>
+        </header>
+        <div className="research-chat__evidence-list scrollbar-soft">
+          {latestCitations.map((citation, index) => (
+            <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} index={index + 1} />
+          ))}
         </div>
-        <div className="scrollbar-soft min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          {latestCitations.length ? (
-            latestCitations.map((citation) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} />)
-          ) : (
-            <p className="rounded-lg bg-paper/70 p-4 text-sm leading-7 text-graphite/80">
-              Related sources appear here after an answer.
-            </p>
-          )}
-        </div>
-      </aside> : null}
+      </aside>
+
       <ConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
     </div>
   );
