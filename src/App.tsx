@@ -8,6 +8,8 @@ import {
   FilePlus2,
   LibraryBig,
   Network,
+  Search,
+  SlidersHorizontal,
   Trash2,
   Sparkles,
   UploadCloud,
@@ -433,7 +435,8 @@ function Library({
 }) {
   const [message, setMessage] = useState('');
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState({
     subject: 'All',
     academicYear: 'All',
@@ -442,10 +445,88 @@ function Library({
     teacher: 'All',
     documentType: 'All',
   });
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const archiveHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const refineButtonRef = useRef<HTMLButtonElement | null>(null);
+  const archiveItemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const archiveDetailRef = useRef<HTMLElement | null>(null);
   const filterOptions = useMemo(() => buildSourceFilterOptions(documents, state.performanceRecords), [documents, state.performanceRecords]);
-  const filteredDocuments = useMemo(() => documents.filter((document) => documentMatchesSourceFilters(document, state.performanceRecords, filters)), [documents, filters, state.performanceRecords]);
+  const sourceSearchIndex = useMemo(
+    () => new Map(documents.map((document) => [document.id, buildSourceSearchText(document, state.performanceRecords)])),
+    [documents, state.performanceRecords],
+  );
+  const chunkCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    chunks.forEach((chunk) => counts.set(chunk.documentId, (counts.get(chunk.documentId) ?? 0) + 1));
+    return counts;
+  }, [chunks]);
+  const filteredDocuments = useMemo(
+    () => sortSourceArchiveDocuments(
+      documents.filter((document) => (
+        documentMatchesSourceFilters(document, state.performanceRecords, filters)
+        && sourceSearchTextMatchesQuery(sourceSearchIndex.get(document.id) ?? '', query)
+      )),
+      state.performanceRecords,
+    ),
+    [documents, filters, query, sourceSearchIndex, state.performanceRecords],
+  );
+  const archiveGroups = useMemo(() => buildSourceArchiveGroups(filteredDocuments, state.performanceRecords), [filteredDocuments, state.performanceRecords]);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(() => filteredDocuments[0]?.id ?? null);
   const hasActiveFilters = Object.values(filters).some((value) => value !== 'All');
   const activeFilterCount = Object.values(filters).filter((value) => value !== 'All').length;
+  const activeDocumentId = filteredDocuments.some((document) => document.id === selectedDocumentId)
+    ? selectedDocumentId
+    : filteredDocuments[0]?.id ?? null;
+  const selectedDocument = documents.find((document) => document.id === activeDocumentId);
+  const [mountedDocumentIds, setMountedDocumentIds] = useState<Set<string>>(
+    () => new Set(filteredDocuments[0] ? [filteredDocuments[0].id] : []),
+  );
+
+  useEffect(() => {
+    if (filteredDocuments.some((document) => document.id === selectedDocumentId)) return;
+    setSelectedDocumentId(filteredDocuments[0]?.id ?? null);
+  }, [filteredDocuments, selectedDocumentId]);
+
+  useEffect(() => {
+    if (!activeDocumentId) return;
+    setMountedDocumentIds((current) => {
+      if (current.has(activeDocumentId)) return current;
+      const next = new Set(current);
+      next.add(activeDocumentId);
+      return next;
+    });
+  }, [activeDocumentId]);
+
+  useEffect(() => {
+    function focusArchiveSearch(event: KeyboardEvent) {
+      const target = event.target;
+      const isWriting = target instanceof HTMLInputElement
+        || target instanceof HTMLTextAreaElement
+        || target instanceof HTMLSelectElement
+        || (target instanceof HTMLElement && target.isContentEditable);
+      if (document.querySelector('[role="dialog"]')) return;
+
+      if (event.key === '/' && !isWriting && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+
+      if (event.key === 'Escape' && document.activeElement === searchInputRef.current) {
+        event.preventDefault();
+        if (query) setQuery('');
+        else if (activeDocumentId) archiveItemRefs.current[activeDocumentId]?.focus();
+        return;
+      }
+
+      if (event.key === 'Escape' && !isWriting && activeDocumentId) {
+        event.preventDefault();
+        archiveItemRefs.current[activeDocumentId]?.focus();
+      }
+    }
+
+    window.addEventListener('keydown', focusArchiveSearch);
+    return () => window.removeEventListener('keydown', focusArchiveSearch);
+  }, [activeDocumentId, query]);
 
   function updateFilter(field: keyof typeof filters, value: string) {
     setFilters((current) => ({ ...current, [field]: value }));
@@ -462,116 +543,250 @@ function Library({
     });
   }
 
+  function clearFiltersAndFocus() {
+    clearFilters();
+    window.requestAnimationFrame(() => refineButtonRef.current?.focus());
+  }
+
+  function clearSearch() {
+    setQuery('');
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }
+
+  function clearArchiveView() {
+    setQuery('');
+    clearFilters();
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }
+
+  function handleArchiveItemKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, documentId: string) {
+    const currentIndex = filteredDocuments.findIndex((document) => document.id === documentId);
+    if (currentIndex < 0) return;
+
+    let nextIndex = currentIndex;
+    if (event.key === 'ArrowDown') nextIndex = Math.min(filteredDocuments.length - 1, currentIndex + 1);
+    else if (event.key === 'ArrowUp') nextIndex = Math.max(0, currentIndex - 1);
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = filteredDocuments.length - 1;
+    else return;
+
+    event.preventDefault();
+    const nextDocument = filteredDocuments[nextIndex];
+    if (!nextDocument) return;
+    setSelectedDocumentId(nextDocument.id);
+    archiveItemRefs.current[nextDocument.id]?.focus();
+  }
+
+  function selectArchiveDocument(documentId: string, revealDetail: boolean) {
+    setSelectedDocumentId(documentId);
+    if (!revealDetail || !window.matchMedia('(max-width: 1279px)').matches) return;
+
+    window.requestAnimationFrame(() => {
+      archiveDetailRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      });
+    });
+  }
+
   async function deleteDocument(document: ResearchDocument) {
     try {
       await deleteRemoteDocumentIfNeeded(state, document.id, storageStatus, userId);
+      const deletedIndex = filteredDocuments.findIndex((item) => item.id === document.id);
+      const nextDocument = filteredDocuments[deletedIndex + 1] ?? filteredDocuments[deletedIndex - 1];
       setState((current) => removeDocumentFromState(current, document.id));
+      setSelectedDocumentId(nextDocument?.id ?? null);
       setMessage(`${document.title} was deleted.`);
+      window.requestAnimationFrame(() => {
+        if (nextDocument) archiveItemRefs.current[nextDocument.id]?.focus();
+        else (searchInputRef.current ?? archiveHeadingRef.current)?.focus();
+      });
     } catch (error) {
       setMessage('Document was not deleted. Check your connection and try again.');
     }
   }
 
   return (
-    <div className="sources-page mx-auto max-w-7xl space-y-10">
-      <div className="sources-page__header max-w-5xl">
-        <SectionHeader
-          eyebrow="Research context"
-          title="Sources"
-          copy="Your reports, assessments, notes, and papers — organised around what they mean for your learning."
-          compact
-        />
-      </div>
+    <div className="sources-page mx-auto max-w-[96rem]">
+      <header className="sources-page__header">
+        <div>
+          <p className="eyebrow">Knowledge archive</p>
+          <h2 ref={archiveHeadingRef} tabIndex={-1} className="sources-page__title">What do I know?</h2>
+          <p className="sources-page__copy">Browse the reports, notes, assessments, and ideas that make up this workspace.</p>
+        </div>
+        {documents.length ? (
+          <p className="sources-page__measure" aria-label={`${documents.length} documents in this archive`}>
+            <span>{documents.length}</span> document{documents.length === 1 ? '' : 's'}
+          </p>
+        ) : null}
+      </header>
       {message ? <StatusNote message={message} /> : null}
       {documents.length ? (
-        <section className="sources-filter-rail border-y border-ink/[0.055] py-6">
-          <div className="sources-filter-rail__header flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-graphite/80">Filter sources</p>
+        <>
+          <section className="sources-toolbar" aria-label="Search and refine archive">
+            <div className="sources-search">
+              <Search size={17} aria-hidden="true" />
+              <input
+                ref={searchInputRef}
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search what you know"
+                aria-label="Search your knowledge"
+              />
+              {query ? (
+                <button type="button" onClick={clearSearch} aria-label="Clear search" title="Clear search">
+                  <X size={15} />
+                </button>
+              ) : <kbd aria-hidden="true">/</kbd>}
             </div>
-            <div className="flex items-center gap-3">
-              <p className="text-sm font-medium tabular-nums text-graphite/80">
-                {filteredDocuments.length} of {documents.length} document{documents.length === 1 ? '' : 's'}
-              </p>
-              <button
-                type="button"
-                aria-expanded={mobileFiltersOpen}
-                onClick={() => setMobileFiltersOpen((value) => !value)}
-                className="rounded-md bg-white px-3 py-2 text-xs font-semibold text-ink shadow-sm ring-1 ring-ink/[0.07] md:hidden"
-              >
-                {mobileFiltersOpen ? 'Hide filters' : `Filters${activeFilterCount ? ` · ${activeFilterCount}` : ''}`}
-              </button>
-            </div>
-          </div>
-          <div className={`sources-filter-grid ${mobileFiltersOpen ? 'grid' : 'hidden'} mt-5 gap-x-4 gap-y-4 md:grid md:grid-cols-2 xl:grid-cols-3`}>
-            <SourceFilter label="Subject" value={filters.subject} options={filterOptions.subjects} onChange={(value) => updateFilter('subject', value)} />
-            <SourceFilter label="Academic year" value={filters.academicYear} options={filterOptions.academicYears} onChange={(value) => updateFilter('academicYear', value)} />
-            <SourceFilter label="Term" value={filters.term} options={filterOptions.terms} onChange={(value) => updateFilter('term', value)} />
-            <SourceFilter label="Assessment type" value={filters.assessmentType} options={filterOptions.assessmentTypes} onChange={(value) => updateFilter('assessmentType', value)} />
-            <SourceFilter label="Teacher" value={filters.teacher} options={filterOptions.teachers} onChange={(value) => updateFilter('teacher', value)} />
-            <SourceFilter label="Document type" value={filters.documentType} options={filterOptions.documentTypes} onChange={(value) => updateFilter('documentType', value)} />
-          </div>
-          {hasActiveFilters ? (
-            <div className="mt-4 flex justify-end">
-              <button type="button" onClick={clearFilters} className="rounded-md px-2 py-2 text-xs font-semibold text-graphite/80 transition hover:bg-white hover:text-ink">
-              Clear filters
-              </button>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-      {documents.length ? (
-        <div className="sources-stream space-y-7">
-          {filteredDocuments.map((document) => (
-            <ManagedDocumentCard
-              key={document.id}
-              document={document}
-              records={state.performanceRecords}
-              chunkCount={chunks.filter((chunk) => chunk.documentId === document.id).length}
-              onSave={(documentId, patch) => {
-                setState((current) => applyDocumentEdit(current, documentId, patch));
-                setMessage('Document details were updated.');
-              }}
-              onSaveRecord={(record) => {
-                setState((current) => {
-                  const performanceRecords = current.performanceRecords.map((item) => (item.id === record.id ? record : item));
+            <button
+              ref={refineButtonRef}
+              type="button"
+              aria-expanded={filtersOpen}
+              aria-controls="sources-refinements"
+              onClick={() => setFiltersOpen((value) => !value)}
+              className={`sources-refine-button ${filtersOpen || hasActiveFilters ? 'is-active' : ''}`}
+            >
+              <SlidersHorizontal size={16} />
+              Refine{activeFilterCount ? ` · ${activeFilterCount}` : ''}
+            </button>
+            <p className="sources-result-count" aria-live="polite">
+              {filteredDocuments.length} {query || hasActiveFilters ? 'matching' : 'in view'}
+            </p>
+          </section>
 
-                  return withDerivedCollections({
-                    ...current,
-                    performanceRecords,
-                    documents: current.documents.map((document) => {
-                      const metadata = buildDocumentMetadata(document, performanceRecords);
-                      const extractionSummary = buildExtractionSummary(document, metadata, performanceRecords);
+          <section id="sources-refinements" className="sources-filter-rail" hidden={!filtersOpen}>
+            <div className="sources-filter-rail__header">
+              <div>
+                <p className="eyebrow">Refine the archive</p>
+                <p className="mt-1 text-sm text-graphite/80">Use academic context only when you need to narrow the index.</p>
+              </div>
+              {hasActiveFilters ? (
+                <button type="button" onClick={clearFiltersAndFocus} className="sources-clear-filters">Clear filters</button>
+              ) : null}
+            </div>
+            <div className="sources-filter-grid">
+              <SourceFilter label="Subject" value={filters.subject} options={filterOptions.subjects} onChange={(value) => updateFilter('subject', value)} />
+              <SourceFilter label="Academic year" value={filters.academicYear} options={filterOptions.academicYears} onChange={(value) => updateFilter('academicYear', value)} />
+              <SourceFilter label="Term" value={filters.term} options={filterOptions.terms} onChange={(value) => updateFilter('term', value)} />
+              <SourceFilter label="Assessment type" value={filters.assessmentType} options={filterOptions.assessmentTypes} onChange={(value) => updateFilter('assessmentType', value)} />
+              <SourceFilter label="Teacher" value={filters.teacher} options={filterOptions.teachers} onChange={(value) => updateFilter('teacher', value)} />
+              <SourceFilter label="Document type" value={filters.documentType} options={filterOptions.documentTypes} onChange={(value) => updateFilter('documentType', value)} />
+            </div>
+          </section>
 
-                      return {
-                        ...document,
-                        status: document.status === 'Needs review' && extractionSummary.needsReview === 0 ? 'Ready' : document.status,
-                        metadata,
-                        extractionSummary,
-                      };
-                    }),
-                  });
-                });
-                setMessage(`${record.subject} was confirmed and Progress was updated.`);
-              }}
-              onDelete={(item) =>
-                setConfirmAction({
-                  title: `Delete ${item.title}?`,
-                  body: 'This deletes the document and its learning history links. Performance records are kept but unlinked from this source.',
-                  confirmLabel: 'Delete document',
-                  onConfirm: () => deleteDocument(item),
-                })
-              }
+          {filteredDocuments.length ? (
+            <div className="source-archive-browser">
+              <nav className="source-archive-index" aria-label="Knowledge archive documents">
+                <div className="source-archive-index__heading">
+                  <p className="eyebrow">Archive index</p>
+                  <p>Use ↑ ↓ to browse</p>
+                </div>
+                <div className="source-archive-index__scroll">
+                  {archiveGroups.map((group) => (
+                    <section key={group.key} className="source-period" aria-label={[group.academicYear, group.term].filter(Boolean).join(', ')}>
+                      <header className="source-period__heading">
+                        <span>{group.academicYear}</span>
+                        {group.term ? <span>{group.term}</span> : null}
+                      </header>
+                      <div className="source-period__documents">
+                        {group.documents.map((document) => {
+                          const details = getSourceArchiveIndexDetails(document, state.performanceRecords);
+                          const selected = document.id === activeDocumentId;
+                          return (
+                            <button
+                              key={document.id}
+                              ref={(node) => { archiveItemRefs.current[document.id] = node; }}
+                              type="button"
+                              aria-pressed={selected}
+                              tabIndex={selected ? 0 : -1}
+                              onClick={(event) => selectArchiveDocument(document.id, event.detail > 0)}
+                              onKeyDown={(event) => handleArchiveItemKeyDown(event, document.id)}
+                              className={`source-index-item ${selected ? 'is-selected' : ''}`}
+                            >
+                              <span className="source-index-item__marker" aria-hidden="true" />
+                              <span className="source-index-item__content">
+                                <span className="source-index-item__title">{document.title}</span>
+                                <span className="source-index-item__context">{details.context}</span>
+                                {details.summary ? <span className="source-index-item__summary">{details.summary}</span> : null}
+                                {details.attention ? <span className="source-index-item__attention">{details.attention}</span> : null}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </nav>
+
+              <section ref={archiveDetailRef} className="source-archive-detail" aria-label="Selected document">
+                <div className="source-archive-detail__heading">
+                  <p className="eyebrow">Selected knowledge</p>
+                  <p>{selectedDocument ? 'Read, review, or organise this source.' : 'Choose a source from the archive index.'}</p>
+                </div>
+                <div className="sources-stream">
+                  {documents.filter((document) => mountedDocumentIds.has(document.id) || document.id === activeDocumentId).map((document) => (
+                    <div key={document.id} hidden={document.id !== activeDocumentId}>
+                      <ManagedDocumentCard
+                        document={document}
+                        records={state.performanceRecords}
+                        chunkCount={chunkCounts.get(document.id) ?? 0}
+                        onSave={(documentId, patch) => {
+                          setState((current) => applyDocumentEdit(current, documentId, patch));
+                          setMessage('Document details were updated.');
+                        }}
+                        onSaveRecord={(record) => {
+                          setState((current) => {
+                            const performanceRecords = current.performanceRecords.map((item) => (item.id === record.id ? record : item));
+
+                            return withDerivedCollections({
+                              ...current,
+                              performanceRecords,
+                              documents: current.documents.map((document) => {
+                                const metadata = buildDocumentMetadata(document, performanceRecords);
+                                const extractionSummary = buildExtractionSummary(document, metadata, performanceRecords);
+
+                                return {
+                                  ...document,
+                                  status: document.status === 'Needs review' && extractionSummary.needsReview === 0 ? 'Ready' : document.status,
+                                  metadata,
+                                  extractionSummary,
+                                };
+                              }),
+                            });
+                          });
+                          setMessage(`${record.subject} was confirmed and Progress was updated.`);
+                        }}
+                        onDelete={(item) =>
+                          setConfirmAction({
+                            title: `Delete ${item.title}?`,
+                            body: 'This deletes the document and its learning history links. Performance records are kept but unlinked from this source.',
+                            confirmLabel: 'Delete document',
+                            onConfirm: () => deleteDocument(item),
+                          })
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : (
+            <EmptyState
+              title="No knowledge matches"
+              copy="Try a different search or clear the refinements to return to the full archive."
+              action="Clear search and filters"
+              onClick={clearArchiveView}
             />
-          ))}
-          {filteredDocuments.length === 0 ? (
-            <EmptyState title="No documents match these filters" copy="Change a filter to bring reports and assessments back into view." action="Clear filters" onClick={clearFilters} />
-          ) : null}
-        </div>
-      ) : (
+          )}
+        </>
+      ) : null}
+      {!documents.length ? (
         <EmptyState title="Start with one source" copy="Add a report, note, paper, or assessment to build this workspace around real learning evidence." />
-      )}
-      <ConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
+      ) : null}
+      <ConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} manageFocus />
     </div>
   );
 }
@@ -671,6 +886,160 @@ function documentMatchesSourceFilters(document: ResearchDocument, records: Perfo
     (filters.teacher === 'All' || values.teachers.has(filters.teacher)) &&
     (filters.documentType === 'All' || values.documentTypes.has(filters.documentType))
   );
+}
+
+function archiveStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function getSourceArchiveAcademicContext(document: ResearchDocument, records: PerformanceRecord[]) {
+  const metadata = getDocumentMetadata(document, records);
+  const linkedRecords = records.filter((record) => record.sourceDocumentId === document.id);
+  const academicYear = metadata.academicYear?.trim()
+    || archiveStringArray(metadata.academicYears)[0]?.trim()
+    || linkedRecords.find((record) => record.academicYear?.trim())?.academicYear?.trim()
+    || '';
+  const term = metadata.term?.trim()
+    || archiveStringArray(metadata.terms)[0]?.trim()
+    || linkedRecords.find((record) => record.term?.trim())?.term?.trim()
+    || '';
+  return { academicYear, term };
+}
+
+function buildSourceSearchText(document: ResearchDocument, records: PerformanceRecord[]) {
+  const metadata = document.metadata;
+  const linkedRecords = records.filter((record) => record.sourceDocumentId === document.id);
+  return [
+    document.title,
+    document.type,
+    document.authors,
+    document.summary,
+    document.extractedText,
+    ...archiveStringArray(document.tags),
+    metadata?.sourceDate,
+    metadata?.academicYear,
+    metadata?.term,
+    metadata?.linkedAssessmentName,
+    metadata?.documentCategory,
+    ...archiveStringArray(metadata?.subjects),
+    ...archiveStringArray(metadata?.topics),
+    ...archiveStringArray(metadata?.academicYears),
+    ...archiveStringArray(metadata?.terms),
+    ...archiveStringArray(metadata?.assessments),
+    ...archiveStringArray(metadata?.documentTypes),
+    ...archiveStringArray(metadata?.teacherNames),
+    ...archiveStringArray(metadata?.skills),
+    ...archiveStringArray(metadata?.collections),
+    ...archiveStringArray(metadata?.tags),
+    ...linkedRecords.flatMap((record) => [
+      record.title,
+      record.date,
+      record.academicYear,
+      record.term,
+      record.subject,
+      record.assessmentType,
+      record.teacher,
+      record.teacherComment,
+      record.grade,
+      record.predictedGrade,
+      record.targetGrade,
+      record.effort,
+      record.attainment,
+      ...archiveStringArray(record.strengths),
+      ...archiveStringArray(record.weaknesses),
+      ...archiveStringArray(record.actionPoints),
+      ...archiveStringArray(record.rawEvidence),
+    ]),
+  ].filter((value): value is string => typeof value === 'string' && Boolean(value.trim())).join('\n').toLocaleLowerCase();
+}
+
+function sourceSearchTextMatchesQuery(searchableText: string, query: string) {
+  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return true;
+
+  return terms.every((term) => searchableText.includes(term));
+}
+
+export function documentMatchesSourceQuery(document: ResearchDocument, records: PerformanceRecord[], query: string) {
+  return sourceSearchTextMatchesQuery(buildSourceSearchText(document, records), query);
+}
+
+function getArchiveAcademicYearValue(value: string) {
+  const match = value.match(/\b(20\d{2})\b/);
+  return match ? Number(match[1]) : 0;
+}
+
+function getArchiveTermValue(value: string) {
+  const normalized = value.toLocaleLowerCase();
+  if (normalized.includes('michaelmas') || normalized.includes('autumn')) return 1;
+  if (normalized.includes('lent') || normalized.includes('spring')) return 2;
+  if (normalized.includes('summer') || normalized.includes('trinity')) return 3;
+  return value ? 4 : 0;
+}
+
+export function sortSourceArchiveDocuments(documents: ResearchDocument[], records: PerformanceRecord[]) {
+  return [...documents].sort((left, right) => {
+    const leftContext = getSourceArchiveAcademicContext(left, records);
+    const rightContext = getSourceArchiveAcademicContext(right, records);
+    const academicYearDifference = getArchiveAcademicYearValue(rightContext.academicYear) - getArchiveAcademicYearValue(leftContext.academicYear);
+    if (academicYearDifference) return academicYearDifference;
+
+    const termDifference = getArchiveTermValue(rightContext.term) - getArchiveTermValue(leftContext.term);
+    if (termDifference) return termDifference;
+
+    const addedDifference = (Date.parse(right.addedAt) || 0) - (Date.parse(left.addedAt) || 0);
+    return addedDifference || left.title.localeCompare(right.title);
+  });
+}
+
+type SourceArchiveGroup = {
+  key: string;
+  academicYear: string;
+  term: string;
+  documents: ResearchDocument[];
+};
+
+export function buildSourceArchiveGroups(documents: ResearchDocument[], records: PerformanceRecord[]) {
+  const groups = new Map<string, SourceArchiveGroup>();
+
+  documents.forEach((document) => {
+    const context = getSourceArchiveAcademicContext(document, records);
+    const academicYear = context.academicYear || 'Unsorted knowledge';
+    const groupIdentity = `${academicYear}--${context.term || 'General'}`;
+    const key = encodeURIComponent(groupIdentity);
+    const group = groups.get(key) ?? { key, academicYear, term: context.term, documents: [] };
+    group.documents.push(document);
+    groups.set(key, group);
+  });
+
+  return [...groups.values()];
+}
+
+function getSourceArchiveIndexDetails(document: ResearchDocument, records: PerformanceRecord[]) {
+  const metadata = getDocumentMetadata(document, records);
+  const linkedRecords = records.filter((record) => record.sourceDocumentId === document.id);
+  const subjects = [...new Set([
+    ...archiveStringArray(metadata.subjects),
+    ...linkedRecords.map((record) => record.subject),
+  ].map((value) => value.trim()).filter(Boolean))];
+  const documentKind = metadata.documentCategory?.trim() || archiveStringArray(metadata.documentTypes)[0]?.trim() || document.type;
+  const summary = document.summary
+    .replace(/^\[(?:AI generated|Local fallback)[^\]]*\]\s*/i, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  const attention = document.status === 'Needs review'
+    ? 'Review suggested'
+    : document.status === 'Failed'
+      ? 'Unavailable'
+      : document.status === 'Extracting' || document.status === 'Analysing'
+        ? 'Being prepared'
+        : '';
+
+  return {
+    context: [documentKind, subjects.slice(0, 2).join(', ')].filter(Boolean).join(' · '),
+    summary,
+    attention,
+  };
 }
 
 function ConfirmModal({ action, onClose, manageFocus = false }: { action: ConfirmAction | null; onClose: () => void; manageFocus?: boolean }) {

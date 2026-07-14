@@ -161,11 +161,13 @@ export function SourceArchiveCard({
   ]);
   const teacherComments = linkedRecords.filter((record) => Boolean(record.teacherComment?.trim()));
   const themes = buildFindingThemes(linkedRecords, metadata?.topics);
-  const context = [
-    metadata?.linkedAssessmentName,
-    metadata?.term ?? metadata?.terms?.[0],
-    metadata?.academicYear ?? metadata?.academicYears?.[0],
-  ].filter((value): value is string => Boolean(value));
+  const linkedAcademicYear = linkedRecords.find((record) => record.academicYear?.trim())?.academicYear?.trim();
+  const linkedTerm = linkedRecords.find((record) => record.term?.trim())?.term?.trim();
+  const context = uniqueStrings([
+    metadata?.linkedAssessmentName?.trim(),
+    metadata?.term?.trim() || metadata?.terms?.find((value) => value.trim())?.trim() || linkedTerm,
+    metadata?.academicYear?.trim() || metadata?.academicYears?.find((value) => value.trim())?.trim() || linkedAcademicYear,
+  ].filter((value): value is string => Boolean(value)));
   const documentKind = metadata?.documentCategory ?? metadata?.documentTypes?.[0] ?? document.type;
   const displaySummary = cleanDocumentSummary(document.summary);
   const originalFile = document.originalFile;
@@ -175,38 +177,38 @@ export function SourceArchiveCard({
   const hasLearningEvidence = teacherComments.length > 0 || themes.length > 0 || subjects.length > 0;
 
   return (
-    <article className="document-card surface-raised overflow-hidden">
-      <div className="px-5 py-6 sm:px-8 sm:py-8">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+    <article className="source-archive-document document-card surface-raised overflow-hidden">
+      <div className="source-archive-document__body px-5 py-6 sm:px-8 sm:py-8">
+        <div className="source-archive-document__header flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brass">{documentKind}</p>
-            <h2 className="mt-2 max-w-3xl text-balance font-sans text-2xl font-semibold leading-tight text-ink sm:text-3xl">{document.title}</h2>
+            <h2 className="source-archive-document__title mt-2 max-w-3xl text-balance font-sans text-2xl font-semibold leading-tight text-ink sm:text-3xl">{document.title}</h2>
             <p className="mt-2.5 text-sm leading-6 text-graphite/80">
               {context.length ? context.join(' · ') : `Added ${formatAddedDate(document.addedAt)}`}
             </p>
           </div>
-          {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm sm:justify-end">{actions}</div> : null}
+          {actions ? <div className="source-archive-document__actions flex shrink-0 flex-wrap items-center gap-2 text-sm sm:justify-end">{actions}</div> : null}
         </div>
 
         {leadSummary ? (
-          <section className="mt-8 border-t border-ink/[0.055] pt-6 sm:pt-7">
-            <p className="eyebrow">{displaySummary ? 'Summary' : 'Teacher feedback'}</p>
+          <section className="source-archive-document__summary mt-8 border-t border-ink/[0.055] pt-6 sm:pt-7">
+            <p className="eyebrow">{displaySummary ? 'At a glance' : 'Teacher feedback'}</p>
             <p className="mt-3.5 max-w-4xl text-pretty text-[0.9375rem] leading-7 text-graphite/80">{leadSummary}</p>
           </section>
         ) : null}
 
-        <div className="mt-7 flex flex-wrap gap-x-8 gap-y-3 border-t border-ink/[0.055] pt-5 text-sm text-graphite/80">
-          {subjects.length ? <p><span className="font-semibold text-ink">Subjects</span> · {subjects.slice(0, 5).join(', ')}{subjects.length > 5 ? ` +${subjects.length - 5}` : ''}</p> : null}
-          <p><span className="font-semibold text-ink">Added</span> · {formatAddedDate(document.addedAt)}</p>
-          {chunkCount ? <p><span className="font-semibold text-ink">Study access</span> · Available</p> : null}
-        </div>
+        {subjects.length ? (
+          <div className="source-archive-document__subjects mt-7 border-t border-ink/[0.055] pt-5 text-sm text-graphite/80">
+            <p><span className="font-semibold text-ink">Subjects</span> · {subjects.slice(0, 5).join(', ')}{subjects.length > 5 ? ` +${subjects.length - 5}` : ''}</p>
+          </div>
+        ) : null}
       </div>
 
-      <div className="border-t border-ink/[0.055] bg-paper/[0.38] px-4 py-4 sm:px-8">
-        <div className="grid gap-1.5 sm:grid-cols-3">
-          <details className="group rounded-lg px-1 py-1 sm:open:col-span-3">
-            <summary className="flex min-h-10 cursor-pointer list-none items-center rounded-md px-2.5 py-2 text-sm font-semibold text-ink transition hover:bg-white/70">
-              <span className="inline-flex items-center gap-2"><span className="disclosure-icon" aria-hidden="true">＋</span> Open document</span>
+      <div className="source-document-disclosures border-t border-ink/[0.055] bg-paper/[0.38] px-4 py-4 sm:px-8">
+        <div className="source-document-disclosures__grid grid gap-1.5 sm:grid-cols-3">
+          <details className="source-document-disclosure source-document-disclosure--reader group rounded-lg px-1 py-1 sm:open:col-span-3">
+            <summary className="source-document-disclosure__trigger flex min-h-10 cursor-pointer list-none items-center rounded-md px-2.5 py-2 text-sm font-semibold text-ink transition hover:bg-white/70">
+              <span className="inline-flex items-center gap-2"><span className="disclosure-icon" aria-hidden="true">＋</span> Read document</span>
             </summary>
             <div className="document-reader mt-3 rounded-lg bg-ivory p-4 ring-1 ring-ink/[0.055] sm:p-8 lg:p-10">
               <div className="mx-auto max-w-4xl">
@@ -230,8 +232,8 @@ export function SourceArchiveCard({
           </details>
 
           {hasLearningEvidence ? (
-            <details className="group rounded-lg px-1 py-1 sm:open:col-span-3">
-              <summary className="flex min-h-10 cursor-pointer list-none items-center rounded-md px-2.5 py-2 text-sm font-semibold text-graphite/80 transition hover:bg-white/70">
+            <details className="source-document-disclosure group rounded-lg px-1 py-1 sm:open:col-span-3">
+              <summary className="source-document-disclosure__trigger flex min-h-10 cursor-pointer list-none items-center rounded-md px-2.5 py-2 text-sm font-semibold text-graphite/80 transition hover:bg-white/70">
                 Learning evidence
               </summary>
               <div className="mt-3 grid gap-7 rounded-lg bg-white/70 p-5 sm:p-6 lg:grid-cols-2">
@@ -256,11 +258,12 @@ export function SourceArchiveCard({
             </details>
           ) : null}
 
-          <details className="group rounded-lg px-1 py-1 sm:open:col-span-3">
-            <summary className="flex min-h-10 cursor-pointer list-none items-center rounded-md px-2.5 py-2 text-sm font-semibold text-graphite/80 transition hover:bg-white/70">File details</summary>
+          <details className="source-document-disclosure group rounded-lg px-1 py-1 sm:open:col-span-3">
+            <summary className="source-document-disclosure__trigger flex min-h-10 cursor-pointer list-none items-center rounded-md px-2.5 py-2 text-sm font-semibold text-graphite/80 transition hover:bg-white/70">File details</summary>
             <div className="mt-3 space-y-5 rounded-lg border border-ink/[0.055] bg-white/70 p-5 text-sm leading-6 text-graphite/80 sm:p-6">
-              <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+              <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-5">
                 <TechnicalFact label="Status" value={formatArchiveStatus(document.status)} />
+                <TechnicalFact label="Added" value={formatAddedDate(document.addedAt)} />
                 <TechnicalFact label="File" value={originalFile ? `${originalFile.fileName} · ${formatBytes(originalFile.size)}` : document.type} />
                 <TechnicalFact label="Length" value={document.pageCount ? `${document.pageCount.toLocaleString()} pages` : 'Not recorded'} />
                 <TechnicalFact label="Available for study" value={chunkCount ? 'Yes' : 'No'} />

@@ -15,7 +15,7 @@ type PillarId = 'home' | 'sources' | 'learn' | 'progress';
 
 const navItems: Array<{ id: PillarId; label: string; target: PageId; pages: PageId[]; icon: typeof LayoutDashboard }> = [
   { id: 'home', label: 'Home', target: 'dashboard', pages: ['dashboard', 'settings'], icon: LayoutDashboard },
-  { id: 'sources', label: 'Sources', target: 'upload', pages: ['upload', 'library'], icon: Files },
+  { id: 'sources', label: 'Sources', target: 'library', pages: ['library', 'upload'], icon: Files },
   { id: 'learn', label: 'Learn', target: 'chat', pages: ['chat', 'tutor', 'study', 'map'], icon: GraduationCap },
   { id: 'progress', label: 'Progress', target: 'performance', pages: ['performance', 'timeline'], icon: BarChart3 },
 ];
@@ -26,8 +26,8 @@ const secondaryTabs: Record<PillarId, Array<{ id: PageId; label: string; icon: t
     { id: 'settings', label: 'Settings', icon: Settings },
   ],
   sources: [
-    { id: 'upload', label: 'Upload', icon: UploadCloud },
     { id: 'library', label: 'Library', icon: Files },
+    { id: 'upload', label: 'Upload', icon: UploadCloud },
   ],
   learn: [
     { id: 'chat', label: 'Chat', icon: MessageSquareText },
