@@ -11,8 +11,9 @@ import {
   Trash2,
   Sparkles,
   UploadCloud,
+  X,
 } from 'lucide-react';
-import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
+import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
 import { AppShell } from './components/AppShell';
 import { AuthGate } from './components/AuthGate';
 import { CitationCard } from './components/CitationCard';
@@ -108,6 +109,7 @@ function App() {
     timeline: <TimelinePage events={buildTimelineEvents(state)} />,
     tutor: (
       <TutorPage
+        key={state.activeWorkspaceId}
         workspaceId={state.activeWorkspaceId}
         documents={workspaceDocuments}
         chunks={state.chunks}
@@ -671,8 +673,56 @@ function documentMatchesSourceFilters(document: ResearchDocument, records: Perfo
   );
 }
 
-function ConfirmModal({ action, onClose }: { action: ConfirmAction | null; onClose: () => void }) {
+function ConfirmModal({ action, onClose, manageFocus = false }: { action: ConfirmAction | null; onClose: () => void; manageFocus?: boolean }) {
   const [isWorking, setIsWorking] = useState(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const isWorkingRef = useRef(isWorking);
+  const onCloseRef = useRef(onClose);
+  isWorkingRef.current = isWorking;
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!action || !manageFocus) return;
+
+    const restoreTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => (cancelButtonRef.current ?? dialogRef.current)?.focus());
+    const handleDialogKeys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (isWorkingRef.current) return;
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const controls = dialogRef.current
+        ? Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+        : [];
+      if (controls.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', handleDialogKeys);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', handleDialogKeys);
+      if (restoreTarget && document.contains(restoreTarget)) restoreTarget.focus();
+    };
+  }, [action, manageFocus]);
+
   if (!action) return null;
 
   async function confirm() {
@@ -688,12 +738,12 @@ function ConfirmModal({ action, onClose }: { action: ConfirmAction | null; onClo
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body" className="dialog-panel w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft">
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body" className="dialog-panel w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brass">Confirm destructive action</p>
         <h2 id="confirm-dialog-title" className="mt-3 text-xl font-semibold text-ink">{action.title}</h2>
         <p id="confirm-dialog-body" className="mt-3 text-sm leading-7 text-graphite/80">{action.body}</p>
         <div className="mt-6 grid gap-2 sm:flex sm:justify-end">
-          <button type="button" onClick={onClose} disabled={isWorking} className="min-h-10 rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink hover:bg-paper/50">
+          <button ref={cancelButtonRef} type="button" onClick={onClose} disabled={isWorking} className="min-h-10 rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink hover:bg-paper/50">
             Cancel
           </button>
           <button type="button" onClick={confirm} disabled={isWorking} className="min-h-10 rounded-lg bg-brass px-4 py-2 text-sm font-semibold text-white hover:bg-ink disabled:bg-brass/45">
@@ -4759,27 +4809,27 @@ function semanticMatchesToRetrievedChunks(matches: SemanticSearchMatch[], docume
   });
 }
 
-type ResearchFolio = {
+type ResearchExchange = {
   id: string;
   question?: ChatMessage;
-  note?: ChatMessage;
+  answer?: ChatMessage;
 };
 
-function buildResearchFolios(messages: ChatMessage[]) {
-  return messages.reduce<ResearchFolio[]>((folios, message) => {
+function buildResearchExchanges(messages: ChatMessage[]) {
+  return messages.reduce<ResearchExchange[]>((exchanges, message) => {
     if (message.role === 'user') {
-      folios.push({ id: message.id, question: message });
-      return folios;
+      exchanges.push({ id: message.id, question: message });
+      return exchanges;
     }
 
-    const activeFolio = folios[folios.length - 1];
-    if (activeFolio?.question && !activeFolio.note) {
-      activeFolio.note = message;
-      return folios;
+    const activeExchange = exchanges[exchanges.length - 1];
+    if (activeExchange?.question && !activeExchange.answer) {
+      activeExchange.answer = message;
+      return exchanges;
     }
 
-    folios.push({ id: message.id, note: message });
-    return folios;
+    exchanges.push({ id: message.id, answer: message });
+    return exchanges;
   }, []);
 }
 
@@ -4814,20 +4864,95 @@ function ResearchChat({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const threadRef = useRef<HTMLDivElement | null>(null);
+  const evidencePanelRef = useRef<HTMLElement | null>(null);
+  const evidenceButtonRef = useRef<HTMLButtonElement | null>(null);
+  const shouldFollowRef = useRef(true);
+  const didInitialScrollRef = useRef(false);
   const previousChatLengthRef = useRef(chat.length);
-  const folios = useMemo(() => buildResearchFolios(chat), [chat]);
-  const latestCitations = [...chat].reverse().find((message) => message.citations?.length)?.citations ?? [];
+  const exchanges = useMemo(() => buildResearchExchanges(chat), [chat]);
+  const citedAnswers = useMemo(() => chat.filter((message) => message.role === 'assistant' && message.citations?.length), [chat]);
+  const latestCitedAnswer = citedAnswers[citedAnswers.length - 1];
+  const [activeEvidenceId, setActiveEvidenceId] = useState(latestCitedAnswer?.id ?? '');
+  const activeEvidenceAnswer = citedAnswers.find((message) => message.id === activeEvidenceId) ?? latestCitedAnswer;
+  const activeCitations = activeEvidenceAnswer?.citations ?? [];
+  const activeExchangeIndex = exchanges.findIndex((exchange) => exchange.answer?.id === activeEvidenceAnswer?.id);
   const totalReferences = chat.reduce((count, message) => count + (message.citations?.length ?? 0), 0);
   const searchableDocuments = documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed');
+
+  useLayoutEffect(() => {
+    if (didInitialScrollRef.current || chat.length === 0) return;
+    didInitialScrollRef.current = true;
+    const thread = threadRef.current;
+    const latestExchange = thread?.querySelector<HTMLElement>('.research-exchange:last-of-type');
+    if (thread && latestExchange) thread.scrollTop = Math.max(0, latestExchange.offsetTop - thread.offsetTop);
+  }, [chat.length]);
 
   useEffect(() => {
     const hasNewEntry = chat.length > previousChatLengthRef.current;
     previousChatLengthRef.current = chat.length;
     if (!hasNewEntry && !isLoading) return;
+    if (!shouldFollowRef.current) return;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'end' });
+    const frame = window.requestAnimationFrame(() => {
+      threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [chat.length, isLoading]);
+
+  useEffect(() => {
+    if (!activeEvidenceId || !citedAnswers.some((message) => message.id === activeEvidenceId)) {
+      setActiveEvidenceId(latestCitedAnswer?.id ?? '');
+    }
+  }, [activeEvidenceId, citedAnswers, latestCitedAnswer?.id]);
+
+  useEffect(() => {
+    if (!evidenceOpen || !window.matchMedia('(max-width: 1279px)').matches) return;
+
+    const panel = evidencePanelRef.current;
+    const controls = panel
+      ? Array.from(panel.querySelectorAll<HTMLElement>('button, summary, [href], [tabindex]:not([tabindex="-1"])')).filter((control) => !control.hasAttribute('disabled'))
+      : [];
+    const firstControl = controls[0];
+    firstControl?.focus();
+    const handleEvidenceKeys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeEvidence();
+        return;
+      }
+      if (event.key !== 'Tab' || controls.length === 0) return;
+
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !panel?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', handleEvidenceKeys);
+    return () => window.removeEventListener('keydown', handleEvidenceKeys);
+  }, [evidenceOpen]);
+
+  function selectEvidence(message: ChatMessage, openPanel = false) {
+    setActiveEvidenceId(message.id);
+    if (openPanel) setEvidenceOpen(true);
+  }
+
+  function closeEvidence() {
+    setEvidenceOpen(false);
+    evidenceButtonRef.current?.focus();
+  }
+
+  function handleThreadScroll() {
+    const thread = threadRef.current;
+    if (!thread) return;
+    shouldFollowRef.current = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 120;
+  }
 
   async function sendMessage() {
     const question = prompt.trim();
@@ -4846,6 +4971,7 @@ function ResearchChat({
 
     setErrorMessage('');
     setIsLoading(true);
+    shouldFollowRef.current = true;
     setState((current) => ({ ...current, chat: [...current.chat, userMessage] }));
     setPrompt('');
 
@@ -4923,6 +5049,7 @@ function ResearchChat({
       };
 
       setState((current) => ({ ...current, chat: [...current.chat, assistantMessage] }));
+      setActiveEvidenceId(assistantMessage.id);
     } catch (error) {
       setErrorMessage('Try again in a moment.');
     } finally {
@@ -4949,182 +5076,229 @@ function ResearchChat({
   }
 
   return (
-    <div className="research-chat learn-desk">
-      <aside className="research-chat__index" aria-label="Research desk index">
-        <p className="learn-kicker">Desk index</p>
-        <dl className="research-chat__ledger">
-          <div>
-            <dt>Questions</dt>
-            <dd>{folios.filter((folio) => folio.question).length}</dd>
+    <div className={`research-chat ${activeCitations.length ? 'research-chat--with-evidence' : ''} ${!exchanges.length && !searchableDocuments.length ? 'research-chat--empty' : ''}`}>
+      <section className="research-chat__workspace" aria-labelledby="research-conversation-title">
+        <header className="research-chat__toolbar">
+          <div className="research-chat__identity">
+            <h2 id="research-conversation-title">Research conversation</h2>
+            <p>
+              <span>{exchanges.filter((exchange) => exchange.question).length} inquir{exchanges.filter((exchange) => exchange.question).length === 1 ? 'y' : 'ies'}</span>
+              <span aria-hidden="true">·</span>
+              <span>{searchableDocuments.length} source{searchableDocuments.length === 1 ? '' : 's'} ready</span>
+            </p>
           </div>
-          <div>
-            <dt>Working notes</dt>
-            <dd>{folios.filter((folio) => folio.note).length}</dd>
+          <div className="research-chat__toolbar-actions">
+            {activeCitations.length ? (
+              <button
+                ref={evidenceButtonRef}
+                type="button"
+                className="research-chat__evidence-trigger"
+                aria-controls="research-evidence-panel"
+                aria-expanded={evidenceOpen}
+                onClick={() => setEvidenceOpen(true)}
+              >
+                Evidence <span>{activeCitations.length}</span>
+              </button>
+            ) : null}
+            {chat.length ? (
+              <button
+                type="button"
+                className="research-chat__clear"
+                aria-label="Clear research conversation"
+                onClick={() =>
+                  setConfirmAction({
+                    title: 'Clear research conversation?',
+                    body: 'This deletes every question and answer in this Research OS history. Documents, Tutor sessions, and performance records are kept.',
+                    confirmLabel: 'Clear conversation',
+                    onConfirm: clearChatHistory,
+                  })
+                }
+              >
+                <Trash2 size={14} aria-hidden="true" />
+                <span>Clear</span>
+              </button>
+            ) : null}
           </div>
-          <div>
-            <dt>References</dt>
-            <dd>{totalReferences}</dd>
-          </div>
-        </dl>
-        <p className="research-chat__method">Questions are read against the evidence already held in {workspaceName}.</p>
-      </aside>
-
-      <section className="research-chat__notebook" aria-labelledby="research-desk-title">
-        <header className="research-chat__masthead">
-          <div>
-            <p className="learn-kicker">Evidence notebook</p>
-            <h2 id="research-desk-title">Interrogate the evidence.</h2>
-            <p>Frame a question, compare what your sources say, and keep the answer as a working academic note.</p>
-          </div>
-          {chat.length ? (
-            <button
-              type="button"
-              className="research-chat__clear"
-              onClick={() =>
-                setConfirmAction({
-                  title: 'Clear research notes?',
-                  body: 'This deletes every question and working note in this Research OS history. Documents, Tutor sessions, and performance records are kept.',
-                  confirmLabel: 'Clear notes',
-                  onConfirm: clearChatHistory,
-                })
-              }
-            >
-              <Trash2 size={14} />
-              Clear notes
-            </button>
-          ) : null}
         </header>
 
-        <div className="research-chat__folios scrollbar-soft">
-          {folios.length ? (
-            folios.map((folio, index) => (
-              <article key={folio.id} className="research-folio">
-                <p className="research-folio__number">Inquiry {String(index + 1).padStart(2, '0')}</p>
-                {folio.question ? (
-                  <section className="research-folio__question group" aria-label={`Research question ${index + 1}`}>
-                    <p className="research-folio__label">Question</p>
-                    <p className="research-folio__question-text">{folio.question.content}</p>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setConfirmAction({
-                          title: 'Delete this research question?',
-                          body: 'This removes the question from the notebook. Other questions and working notes are kept.',
-                          confirmLabel: 'Delete question',
-                          onConfirm: () => deleteMessage(folio.question as ChatMessage),
-                        })
-                      }
-                      className="research-folio__delete"
-                    >
-                      Delete question
-                    </button>
-                  </section>
-                ) : null}
+        <div ref={threadRef} className="research-chat__thread scrollbar-soft" onScroll={handleThreadScroll}>
+          {exchanges.length ? (
+            exchanges.map((exchange, index) => {
+              const answerCitations = exchange.answer?.citations ?? [];
+              const evidenceSelected = exchange.answer?.id === activeEvidenceAnswer?.id;
 
-                {folio.note ? (
-                  <section className="research-folio__note group" aria-label={`Working note ${index + 1}`}>
-                    <div className="research-folio__note-heading">
-                      <p className="research-folio__label">Working note</p>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setConfirmAction({
-                            title: 'Delete this working note?',
-                            body: 'This removes the evidence-based note from the notebook. Other entries are kept.',
-                            confirmLabel: 'Delete note',
-                            onConfirm: () => deleteMessage(folio.note as ChatMessage),
-                          })
-                        }
-                        className="research-folio__delete"
-                      >
-                        Delete note
-                      </button>
-                    </div>
-                    <p className="research-folio__note-text">{folio.note.content}</p>
-                    {folio.note.citations?.length ? (
-                      <details className="research-folio__references">
-                        <summary>{folio.note.citations.length} reference{folio.note.citations.length === 1 ? '' : 's'} used</summary>
-                        <div className="research-folio__reference-list">
-                          {folio.note.citations.map((citation, citationIndex) => (
-                            <CitationCard key={`${folio.note?.id}-${citation.documentTitle}-${citation.location}`} citation={citation} index={citationIndex + 1} />
-                          ))}
-                        </div>
-                      </details>
-                    ) : null}
-                  </section>
-                ) : null}
-              </article>
-            ))
+              return (
+                <article key={exchange.id} className={`research-exchange ${evidenceSelected ? 'is-evidence-selected' : ''}`}>
+                  {exchange.question ? (
+                    <section className="research-exchange__question group" aria-label={`Question ${index + 1}`}>
+                      <div className="research-exchange__meta">
+                        <span>Question {String(index + 1).padStart(2, '0')}</span>
+                        <button
+                          type="button"
+                          aria-label={`Delete question ${index + 1}`}
+                          onClick={() =>
+                            setConfirmAction({
+                              title: 'Delete this question?',
+                              body: 'This removes only the question. Other questions and answers are kept.',
+                              confirmLabel: 'Delete question',
+                              onConfirm: () => deleteMessage(exchange.question as ChatMessage),
+                            })
+                          }
+                          className="research-exchange__delete"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      <h3>{exchange.question.content}</h3>
+                    </section>
+                  ) : null}
+
+                  {exchange.answer ? (
+                    <section className="research-exchange__answer group" aria-label={`Grounded answer ${index + 1}`}>
+                      <div className="research-exchange__meta">
+                        <span>Grounded answer</span>
+                        <button
+                          type="button"
+                          aria-label={`Delete answer ${index + 1}`}
+                          onClick={() =>
+                            setConfirmAction({
+                              title: 'Delete this answer?',
+                              body: 'This removes only the answer and its references. Other questions and answers are kept.',
+                              confirmLabel: 'Delete answer',
+                              onConfirm: () => deleteMessage(exchange.answer as ChatMessage),
+                            })
+                          }
+                          className="research-exchange__delete"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      <p className="research-exchange__answer-text">{exchange.answer.content}</p>
+                      {answerCitations.length ? (
+                        <>
+                          <button
+                            type="button"
+                            className="research-exchange__source-link"
+                            aria-pressed={evidenceSelected}
+                            onClick={() => selectEvidence(exchange.answer as ChatMessage)}
+                          >
+                            Evidence used <span aria-hidden="true">·</span> {answerCitations.length} source{answerCitations.length === 1 ? '' : 's'}
+                            <ArrowRight size={14} aria-hidden="true" />
+                          </button>
+                          <div
+                            className="research-exchange__sources-inline"
+                            onClick={() => selectEvidence(exchange.answer as ChatMessage)}
+                            onFocusCapture={() => selectEvidence(exchange.answer as ChatMessage)}
+                          >
+                            <p>Evidence used · {answerCitations.length} source{answerCitations.length === 1 ? '' : 's'}</p>
+                            <div>
+                              {answerCitations.map((citation, citationIndex) => (
+                                <CitationCard key={`${exchange.answer?.id}-${citation.documentTitle}-${citation.location}`} citation={citation} index={citationIndex + 1} />
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      ) : null}
+                    </section>
+                  ) : isLoading && index === exchanges.length - 1 ? (
+                    <section role="status" aria-live="polite" className="research-chat__thinking">
+                      <span className="research-chat__thinking-indicator" aria-hidden="true"><i /><i /><i /></span>
+                      <span>
+                        <strong>Reviewing your sources</strong>
+                        <small>Finding relevant passages and checking the answer against them.</small>
+                      </span>
+                    </section>
+                  ) : null}
+                </article>
+              );
+            })
           ) : (
-            <section className="research-chat__empty" aria-label="Empty research desk">
-              <span aria-hidden="true" />
-              <p className="learn-kicker">Open folio</p>
-              <h3>{searchableDocuments.length ? 'Begin with a question worth keeping.' : 'No source material is open.'}</h3>
+            <section className="research-chat__empty" aria-label="Empty research conversation">
+              <h3>{searchableDocuments.length ? 'Ask a question grounded in your sources.' : 'Add a readable source to begin.'}</h3>
               <p>
                 {searchableDocuments.length
-                  ? 'Ask about a claim, contradiction, teacher comment, or gap. The response will be filed here as a working note with its references.'
-                  : 'Add a report, paper, assessment, or set of notes. Research OS will use that evidence here without turning the workspace into a chatbot.'}
+                  ? 'Use the writing field below to examine a claim, compare documents, or work through feedback.'
+                  : 'Research OS needs extracted source text before it can produce a grounded answer.'}
               </p>
             </section>
           )}
-
-          {isLoading ? (
-            <section role="status" aria-live="polite" className="research-chat__thinking">
-              <p className="learn-kicker">Working note in progress</p>
-              <div className="research-chat__thinking-rule" aria-hidden="true"><span /></div>
-              <p>Reading evidence · comparing passages · drafting a grounded response</p>
-            </section>
-          ) : null}
-          <div ref={bottomRef} />
         </div>
 
         {searchableDocuments.length ? (
-          <div className="research-chat__composer chat-composer">
+          <form
+            className="research-chat__composer chat-composer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              sendMessage();
+            }}
+          >
             {errorMessage ? (
               <div role="status" className="research-chat__error status-enter">
-                The notebook could not prepare a note right now. {errorMessage}
+                The answer could not be prepared. {errorMessage}
               </div>
             ) : null}
-            <label htmlFor="research-question" className="learn-kicker">New research question</label>
-            <textarea
-              id="research-question"
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                  event.preventDefault();
-                  sendMessage();
-                }
-              }}
-              disabled={isLoading}
-              rows={2}
-              placeholder="Write a question about claims, contradictions, teacher comments, or gaps…"
-            />
-            <div className="research-chat__composer-footer">
-              <p><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> to place on the desk</p>
-              <button type="button" aria-label="Place question on the research desk" onClick={sendMessage} disabled={isLoading || !prompt.trim()}>
-                {isLoading ? 'Preparing note…' : 'Place on desk'}
-                <ArrowRight size={16} />
+            <label htmlFor="research-question">Ask from your sources</label>
+            <div className="research-chat__writing-field">
+              <textarea
+                id="research-question"
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                    event.preventDefault();
+                    sendMessage();
+                  }
+                }}
+                disabled={isLoading}
+                rows={2}
+                placeholder="Examine a claim, compare sources, or work through feedback…"
+              />
+              <button type="submit" aria-label="Ask research question" disabled={isLoading || !prompt.trim()}>
+                <span>{isLoading ? 'Working…' : 'Ask'}</span>
+                <ArrowRight size={16} aria-hidden="true" />
               </button>
             </div>
-          </div>
+            <p className="research-chat__composer-note">
+              Grounded in {searchableDocuments.length} readable source{searchableDocuments.length === 1 ? '' : 's'}
+              <span><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
+            </p>
+          </form>
         ) : null}
       </section>
 
-      <aside className="research-chat__evidence" aria-label="Reference stack">
-        <header>
-          <p className="learn-kicker">Reference stack</p>
-          <h3>{latestCitations.length ? 'Evidence for the latest note' : 'References will gather here'}</h3>
-          <p>{latestCitations.length ? 'Open a reference to inspect the passage behind the working note.' : 'Each answer keeps its supporting document and location close at hand.'}</p>
-        </header>
-        <div className="research-chat__evidence-list scrollbar-soft">
-          {latestCitations.map((citation, index) => (
-            <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} index={index + 1} />
-          ))}
-        </div>
-      </aside>
+      {activeCitations.length ? (
+        <>
+          <button type="button" tabIndex={-1} aria-hidden="true" className={`research-chat__evidence-backdrop ${evidenceOpen ? 'is-open' : ''}`} onClick={closeEvidence} />
+          <aside
+            ref={evidencePanelRef}
+            id="research-evidence-panel"
+            className={`research-chat__evidence ${evidenceOpen ? 'is-open' : ''}`}
+            role={evidenceOpen ? 'dialog' : undefined}
+            aria-modal={evidenceOpen ? true : undefined}
+            aria-labelledby="research-evidence-title"
+          >
+            <header>
+              <div>
+                <p>Evidence</p>
+                <h3 id="research-evidence-title" aria-live="polite">Sources for question {activeExchangeIndex >= 0 ? String(activeExchangeIndex + 1).padStart(2, '0') : '—'}</h3>
+              </div>
+              <button type="button" className="research-chat__evidence-close" aria-label="Close evidence" onClick={closeEvidence}>
+                <X size={17} aria-hidden="true" />
+              </button>
+            </header>
+            <div className="research-chat__evidence-summary">
+              {activeCitations.length} source{activeCitations.length === 1 ? '' : 's'} selected · {totalReferences} across this conversation
+            </div>
+            <div className="research-chat__evidence-list scrollbar-soft">
+              {activeCitations.map((citation, index) => (
+                <CitationCard key={`${activeEvidenceAnswer?.id}-${citation.documentTitle}-${citation.location}`} citation={citation} index={index + 1} />
+              ))}
+            </div>
+          </aside>
+        </>
+      ) : null}
 
-      <ConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
+      <ConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} manageFocus />
     </div>
   );
 }

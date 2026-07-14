@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { isSupabaseEnabled } from '../lib/supabase';
 import type {
   Citation,
@@ -50,11 +50,11 @@ import type { AppStorageStatus } from '../hooks/useResearchState';
 
 type TutorView = 'home' | 'lesson' | 'socratic' | 'exam';
 
-const tutorEnvironments: Array<{ view: TutorView; label: string; shortLabel: string; description: string; icon: LucideIcon }> = [
-  { view: 'home', label: 'Study overview', shortLabel: 'Overview', description: 'Review priorities, memory, and the next useful move.', icon: Target },
-  { view: 'lesson', label: 'Guided lesson', shortLabel: 'Lesson', description: 'Build understanding, then test recall against your sources.', icon: BookMarked },
-  { view: 'socratic', label: 'Socratic inquiry', shortLabel: 'Socratic', description: 'Develop reasoning through one adaptive question at a time.', icon: MessageCircleQuestion },
-  { view: 'exam', label: 'Exam rehearsal', shortLabel: 'Exam', description: 'Practise under a mark scheme and improve the response.', icon: ClipboardCheck },
+const tutorModes: Array<{ view: TutorView; label: string; shortLabel: string }> = [
+  { view: 'home', label: 'Study overview', shortLabel: 'Overview' },
+  { view: 'lesson', label: 'Guided lesson', shortLabel: 'Lesson' },
+  { view: 'socratic', label: 'Socratic inquiry', shortLabel: 'Socratic' },
+  { view: 'exam', label: 'Exam practice', shortLabel: 'Exam' },
 ];
 
 type TutorPageProps = {
@@ -287,11 +287,12 @@ export function TutorPage({
   const hasReadableSources = documents.some((document) => document.extractedText?.trim() && document.status !== 'Failed');
   const hasTutorHistory = tutorLessons.some((lesson) => lesson.workspaceId === workspaceId) || tutorSocraticTurns.some((turn) => turn.workspaceId === workspaceId) || tutorExamSessions.some((exam) => exam.workspaceId === workspaceId) || tutorAttempts.length > 0 || tutorMemory.topicsStudied.length > 0;
   const recentTopics = tutorMemory.topicsStudied.slice(0, 5);
-  const activeLesson = tutorLessons.find((lesson) => lesson.workspaceId === workspaceId && lesson.status === 'in_progress') ?? tutorLessons.find((lesson) => lesson.workspaceId === workspaceId);
+  const inProgressLesson = tutorLessons.find((lesson) => lesson.workspaceId === workspaceId && lesson.status === 'in_progress');
+  const activeLesson = inProgressLesson ?? tutorLessons.find((lesson) => lesson.workspaceId === workspaceId);
   const latestExam = tutorExamSessions.find((exam) => exam.workspaceId === workspaceId);
   const weakestTopic = weakTopics[0] ?? [...tutorMemory.topicsStudied].sort((a, b) => a.confidence - b.confidence)[0]?.topic ?? recommendedTopics[0] ?? 'Upload a source';
   const suggestedTopic = recommendedTopics[0] ?? activeLesson?.topic ?? '';
-  const [view, setView] = useState<TutorView>('home');
+  const [view, setView] = useState<TutorView>(inProgressLesson ? 'lesson' : 'home');
   const [topic, setTopic] = useState(suggestedTopic);
   const [difficulty, setDifficulty] = useState<TutorDifficulty>('Core');
   const [isLoading, setIsLoading] = useState(false);
@@ -303,11 +304,31 @@ export function TutorPage({
   const [socraticAnswer, setSocraticAnswer] = useState('');
   const [examAnswers, setExamAnswers] = useState<Record<string, string>>({});
   const [examFeedback, setExamFeedback] = useState<Record<string, TutorMarkResponse>>({});
+  const [setupOpen, setSetupOpen] = useState(!hasTutorHistory);
   const [confirmAction, setConfirmAction] = useState<{ title: string; body: string; confirmLabel: string; onConfirm: () => Promise<void> | void } | null>(null);
+  const modeContentRef = useRef<HTMLDivElement | null>(null);
 
-  const currentLesson = tutorLessons.find((lesson) => lesson.id === currentLessonId) ?? activeLesson;
+  const currentLesson = tutorLessons.find((lesson) => lesson.id === currentLessonId && lesson.workspaceId === workspaceId) ?? activeLesson;
   const latestSocraticTurn = tutorSocraticTurns.find((turn) => turn.workspaceId === workspaceId);
-  const selectedEnvironment = tutorEnvironments.find((environment) => environment.view === view) ?? tutorEnvironments[0];
+  const selectedMode = tutorModes.find((mode) => mode.view === view) ?? tutorModes[0];
+  const readableSourceCount = documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed').length;
+  const modeChangeKey = view === 'lesson'
+    ? `lesson:${currentLesson?.id ?? ''}`
+    : view === 'socratic'
+      ? `socratic:${latestSocraticTurn?.id ?? ''}`
+      : view === 'exam'
+        ? `exam:${latestExam?.id ?? ''}`
+        : 'home';
+  const previousModeKeyRef = useRef(modeChangeKey);
+
+  useEffect(() => {
+    if (previousModeKeyRef.current === modeChangeKey) return;
+    previousModeKeyRef.current = modeChangeKey;
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    modeContentRef.current?.focus({ preventScroll: true });
+    modeContentRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+  }, [modeChangeKey]);
 
   async function retrieveForTutor(query: string) {
     let retrieved: RetrievedChunk[] = [];
@@ -335,6 +356,10 @@ export function TutorPage({
 
   async function startLesson(nextTopic = topic || suggestedTopic) {
     const cleanTopic = nextTopic.trim();
+    if (!hasReadableSources) {
+      setStatus('Upload a readable source before starting a source-grounded lesson.');
+      return;
+    }
     if (!cleanTopic) {
       setStatus(hasReadableSources ? 'Choose a topic before starting a lesson.' : 'Upload a readable source before starting a source-grounded lesson.');
       return;
@@ -370,8 +395,8 @@ export function TutorPage({
     }
   }
 
-  function revealCheckpoint(questionId: string) {
-    if (!checkpointAnswers[questionId]?.trim()) {
+  function revealCheckpoint(questionId: string, recordedAnswer?: string) {
+    if (!checkpointAnswers[questionId]?.trim() && !recordedAnswer?.trim()) {
       setStatus('Attempt the checkpoint first, then reveal the answer.');
       return;
     }
@@ -407,6 +432,11 @@ export function TutorPage({
   }
 
   function completeLesson(lesson: TutorLesson) {
+    if (lesson.status === 'completed') {
+      setStatus('This lesson is already complete. Start a new session to continue.');
+      return;
+    }
+
     const completed: TutorLesson = {
       ...lesson,
       status: 'completed',
@@ -424,6 +454,10 @@ export function TutorPage({
 
   async function askSocratic(nextTopic = topic || suggestedTopic) {
     const cleanTopic = nextTopic.trim();
+    if (!hasReadableSources) {
+      setStatus('Upload a readable source before starting Socratic inquiry.');
+      return;
+    }
     if (!cleanTopic) {
       setStatus(hasReadableSources ? 'Choose a topic before Socratic mode.' : 'Upload a readable source before starting Socratic mode.');
       return;
@@ -488,6 +522,10 @@ export function TutorPage({
 
   async function generateExam(nextTopic = topic || suggestedTopic) {
     const cleanTopic = nextTopic.trim();
+    if (!hasReadableSources) {
+      setStatus('Upload a readable source before generating exam practice.');
+      return;
+    }
     if (!cleanTopic) {
       setStatus(hasReadableSources ? 'Choose a topic before exam mode.' : 'Upload a readable source before generating exam questions.');
       return;
@@ -634,8 +672,8 @@ export function TutorPage({
     }
   }
 
-  function prepareSelectedEnvironment() {
-    if (view === 'lesson') {
+  function prepareSelectedMode() {
+    if (view === 'home' || view === 'lesson') {
       startLesson();
     } else if (view === 'socratic') {
       askSocratic();
@@ -645,72 +683,55 @@ export function TutorPage({
   }
 
   return (
-    <div className="tutor-page learn-desk">
-      <header className="tutor-masthead">
-        <div>
-          <p className="learn-kicker">Evidence-led study</p>
-          <h2>Enter a study environment.</h2>
-          <p>Choose how you want to work. Every lesson, question, and mark scheme begins with the sources on this desk.</p>
+    <div className="tutor-page">
+      <header className="tutor-toolbar">
+        <div className="tutor-toolbar__identity">
+          <p>Tutor</p>
+          <h2>{view === 'lesson' && currentLesson ? currentLesson.topic : view === 'socratic' && latestSocraticTurn ? latestSocraticTurn.topic : view === 'exam' && latestExam ? latestExam.topic : selectedMode.label}</h2>
+          <span>{readableSourceCount} source{readableSourceCount === 1 ? '' : 's'} ready</span>
         </div>
-        <dl className="tutor-masthead__ledger" aria-label="Tutor study status">
-          <div>
-            <dt>Readable sources</dt>
-            <dd>{documents.filter((document) => document.extractedText?.trim() && document.status !== 'Failed').length}</dd>
-          </div>
-          <div>
-            <dt>Lessons complete</dt>
-            <dd>{tutorMemory.lessonsCompleted}</dd>
-          </div>
-          <div>
-            <dt>Revision streak</dt>
-            <dd>{tutorMemory.revisionStreak}d</dd>
-          </div>
-        </dl>
+        <div className="tutor-toolbar__actions">
+          <nav className="tutor-mode-switch" aria-label="Tutor mode">
+            {tutorModes.map((mode) => (
+              <button
+                key={mode.view}
+                type="button"
+                onClick={() => setView(mode.view)}
+                aria-pressed={mode.view === view}
+                className={mode.view === view ? 'is-active' : ''}
+              >
+                {mode.shortLabel}
+              </button>
+            ))}
+          </nav>
+          <label className="tutor-mode-select">
+            <span>Tutor mode</span>
+            <select value={view} onChange={(event) => setView(event.target.value as TutorView)}>
+              {tutorModes.map((mode) => <option key={mode.view} value={mode.view}>{mode.label}</option>)}
+            </select>
+          </label>
+          {hasReadableSources || hasTutorHistory ? (
+            <button
+              type="button"
+              className="tutor-new-session-trigger"
+              aria-label={setupOpen ? 'Close new session setup' : 'New session'}
+              aria-controls="tutor-session-setup"
+              aria-expanded={setupOpen}
+              onClick={() => setSetupOpen((current) => !current)}
+            >
+              <span className="tutor-new-session-trigger__long">{setupOpen ? 'Close setup' : 'New session'}</span>
+              <span className="tutor-new-session-trigger__short">{setupOpen ? 'Close' : 'New'}</span>
+            </button>
+          ) : null}
+        </div>
       </header>
 
       {isLoading || status !== idleStatus ? (
         <div role="status" aria-live="polite" className="tutor-thinking status-enter">
-          <p className="learn-kicker">Tutor is preparing the desk</p>
-          <div className="tutor-thinking__rule" aria-hidden="true"><span /></div>
+          {isLoading ? <span className="tutor-thinking__indicator" aria-hidden="true"><i /><i /><i /></span> : null}
           <p>{status}</p>
         </div>
       ) : null}
-
-      <section className="tutor-environments" aria-labelledby="tutor-environments-title">
-        <div className="tutor-environments__heading">
-          <p id="tutor-environments-title" className="learn-kicker">Study environments</p>
-          <p>Move between ways of thinking without losing the topic or evidence in view.</p>
-        </div>
-        <div className="tutor-environments__desktop">
-          {tutorEnvironments.map((environment, index) => {
-            const Icon = environment.icon;
-            const active = environment.view === view;
-            return (
-              <button
-                key={environment.view}
-                type="button"
-                onClick={() => setView(environment.view)}
-                aria-pressed={active}
-                className={`tutor-environment ${active ? 'is-active' : ''}`}
-              >
-                <span className="tutor-environment__number">0{index + 1}</span>
-                <span className="tutor-environment__icon"><Icon size={17} /></span>
-                <span className="tutor-environment__copy">
-                  <strong>{environment.label}</strong>
-                  <span>{environment.description}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        <label className="tutor-environments__mobile">
-          Study environment
-          <select value={view} onChange={(event) => setView(event.target.value as TutorView)}>
-            {tutorEnvironments.map((environment) => <option key={environment.view} value={environment.view}>{environment.label}</option>)}
-          </select>
-          <span>{selectedEnvironment.description}</span>
-        </label>
-      </section>
 
       {hasTutorHistory ? <details className="surface-raised order-last p-5 sm:p-6">
         <summary className="flex min-h-10 cursor-pointer items-center text-sm font-semibold text-ink">Manage tutor history</summary>
@@ -785,37 +806,39 @@ export function TutorPage({
       </details> : null}
 
       {hasReadableSources || hasTutorHistory ? (
-        <section className="tutor-study-brief" aria-labelledby="tutor-study-brief-title">
-          <div className="tutor-study-brief__heading">
-            <p className="learn-kicker">Study brief</p>
-            <h3 id="tutor-study-brief-title">{selectedEnvironment.label}</h3>
-            <p>{selectedEnvironment.description}</p>
-          </div>
-          <div className="tutor-study-brief__fields">
-            <label>
-              Focus topic
-              <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={suggestedTopic || 'Topic to study'} />
-            </label>
-            <label>
-              Level
-              <select value={difficulty} onChange={(event) => setDifficulty(normalizeDifficulty(event.target.value))}>
-                <option>Foundation</option>
-                <option>Core</option>
-                <option>Stretch</option>
-              </select>
-            </label>
-          </div>
-          {view !== 'home' ? (
-            <button type="button" onClick={prepareSelectedEnvironment} disabled={isLoading} className="tutor-study-brief__action">
-              {view === 'lesson' ? 'Prepare guided lesson' : view === 'socratic' ? 'Begin Socratic inquiry' : 'Prepare exam paper'}
-              <ArrowRight size={16} />
+        <section id="tutor-session-setup" className="tutor-new-session" hidden={!setupOpen} aria-label="New Tutor session">
+          <div className="tutor-new-session__body">
+            <div className="tutor-new-session__fields">
+              <label>
+                Focus topic
+                <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={suggestedTopic || 'Topic to study'} />
+              </label>
+              <label>
+                Level
+                <select value={difficulty} onChange={(event) => setDifficulty(normalizeDifficulty(event.target.value))}>
+                  <option>Foundation</option>
+                  <option>Core</option>
+                  <option>Stretch</option>
+                </select>
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSetupOpen(false);
+                prepareSelectedMode();
+              }}
+              disabled={isLoading || !hasReadableSources}
+              className="tutor-new-session__action"
+            >
+              {view === 'home' || view === 'lesson' ? 'Prepare guided lesson' : view === 'socratic' ? 'Begin Socratic inquiry' : 'Prepare exam practice'}
+              <ArrowRight size={16} aria-hidden="true" />
             </button>
-          ) : (
-            <p className="tutor-study-brief__overview-note">Choose an environment above to prepare new work, or continue from the overview below.</p>
-          )}
+          </div>
         </section>
       ) : null}
 
+      <div ref={modeContentRef} className="tutor-mode-content" tabIndex={-1}>
       {view === 'home' ? (
         <TutorHome
           activeLesson={activeLesson}
@@ -848,6 +871,7 @@ export function TutorPage({
         currentLesson ? (
           <LessonView
             lesson={currentLesson}
+            attempts={tutorAttempts}
             checkpointAnswers={checkpointAnswers}
             revealedAnswers={revealedAnswers}
             onAnswerChange={(id, value) => setCheckpointAnswers((current) => ({ ...current, [id]: value }))}
@@ -888,6 +912,7 @@ export function TutorPage({
           <EmptyPanel title="Generate exam practice" copy="Create exam-style questions from uploaded documents." />
         )
       ) : null}
+      </div>
       <TutorConfirmModal action={confirmAction} onClose={() => setConfirmAction(null)} />
     </div>
   );
@@ -914,6 +939,54 @@ function TutorConfirmModal({
   onClose: () => void;
 }) {
   const [isWorking, setIsWorking] = useState(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const isWorkingRef = useRef(isWorking);
+  const onCloseRef = useRef(onClose);
+  isWorkingRef.current = isWorking;
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!action) return;
+
+    const restoreTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => (cancelButtonRef.current ?? dialogRef.current)?.focus());
+    const handleDialogKeys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (isWorkingRef.current) return;
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const controls = dialogRef.current
+        ? Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+        : [];
+      if (controls.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', handleDialogKeys);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', handleDialogKeys);
+      if (restoreTarget && document.contains(restoreTarget)) restoreTarget.focus();
+    };
+  }, [action]);
+
   if (!action) return null;
 
   async function confirm() {
@@ -929,12 +1002,12 @@ function TutorConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/35 px-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="tutor-dialog-title" aria-describedby="tutor-dialog-body" className="dialog-panel w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft">
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="tutor-dialog-title" aria-describedby="tutor-dialog-body" className="dialog-panel w-full max-w-lg rounded-xl border border-ink/10 bg-white p-6 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brass">Confirm destructive action</p>
         <h2 id="tutor-dialog-title" className="mt-3 font-sans text-xl font-semibold text-ink">{action.title}</h2>
         <p id="tutor-dialog-body" className="mt-3 text-sm leading-7 text-graphite/80">{action.body}</p>
         <div className="mt-6 grid gap-2 sm:flex sm:justify-end">
-          <button type="button" onClick={onClose} disabled={isWorking} className="min-h-10 rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink hover:bg-paper/50">
+          <button ref={cancelButtonRef} type="button" onClick={onClose} disabled={isWorking} className="min-h-10 rounded-lg border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink hover:bg-paper/50">
             Cancel
           </button>
           <button type="button" onClick={confirm} disabled={isWorking} className="min-h-10 rounded-lg bg-brass px-4 py-2 text-sm font-semibold text-white hover:bg-ink disabled:bg-brass/45">
@@ -977,7 +1050,7 @@ function TutorHome({
     <div className="tutor-overview">
       <section className="tutor-overview__opening">
         <div className="tutor-overview__focus">
-          <p className="learn-kicker">Continue learning</p>
+          <p className="tutor-overview__eyebrow">Continue learning</p>
           <h3>{activeLesson?.topic || suggestedTopic || 'Build a lesson from your sources'}</h3>
           <p>
             {activeLesson
@@ -1078,8 +1151,35 @@ function TopicPanel({
   );
 }
 
+function TutorEvidenceDisclosure({
+  citations,
+  contextLabel,
+  contextValue,
+}: {
+  citations: Citation[];
+  contextLabel: string;
+  contextValue: string;
+}) {
+  return (
+    <details className="tutor-evidence-disclosure">
+      <summary>
+        <span>Session evidence</span>
+        <small>{citations.length} source{citations.length === 1 ? '' : 's'}</small>
+      </summary>
+      <div className="tutor-evidence-disclosure__body">
+        <div className="tutor-evidence-disclosure__context">
+          <span>{contextLabel}</span>
+          <p>{contextValue}</p>
+        </div>
+        {citations.map((citation, index) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} index={index + 1} />)}
+      </div>
+    </details>
+  );
+}
+
 function LessonView({
   lesson,
+  attempts,
   checkpointAnswers,
   revealedAnswers,
   onAnswerChange,
@@ -1089,56 +1189,90 @@ function LessonView({
   onNext,
 }: {
   lesson: TutorLesson;
+  attempts: TutorAttempt[];
   checkpointAnswers: Record<string, string>;
   revealedAnswers: Record<string, boolean>;
   onAnswerChange: (id: string, value: string) => void;
-  onReveal: (id: string) => void;
+  onReveal: (id: string, recordedAnswer?: string) => void;
   onRecord: (lesson: TutorLesson, questionId: string, answer: string) => void;
   onComplete: (lesson: TutorLesson) => void;
   onNext: (topic: string) => void;
 }) {
+  const recordedQuestionIds = new Set(
+    attempts
+      .filter((attempt) => attempt.lessonId === lesson.id)
+      .map((attempt) => lesson.checkpointQuestions.find((question) => question.prompt === attempt.prompt)?.id)
+      .filter(Boolean),
+  );
+  const completedCheckpoints = recordedQuestionIds.size;
+  const activeQuestionId = lesson.checkpointQuestions.find((question) => !recordedQuestionIds.has(question.id))?.id ?? lesson.checkpointQuestions[0]?.id;
+  const progress = lesson.checkpointQuestions.length ? Math.round((completedCheckpoints / lesson.checkpointQuestions.length) * 100) : 0;
+
   return (
     <div className="tutor-session tutor-session--lesson">
+      <TutorEvidenceDisclosure citations={lesson.citations} contextLabel="Next recommendation" contextValue={lesson.nextRecommendation} />
       <section className="tutor-session__document">
         <header className="tutor-session__header">
-          <p className="learn-kicker">Lesson objective</p>
+          <div className="tutor-session__progress-label">
+            <span>Guided lesson</span>
+            <span>{completedCheckpoints} of {lesson.checkpointQuestions.length} checkpoints recorded</span>
+          </div>
           <h3>{lesson.objective}</h3>
           <div className="tutor-session__metadata">
-            <span className="inline-flex items-center gap-2"><BookMarked size={15} /> {lesson.estimatedDuration}</span>
-            <span className="inline-flex items-center gap-2"><GraduationCap size={15} /> {lesson.difficulty}</span>
+            <span><BookMarked size={15} aria-hidden="true" /> {lesson.estimatedDuration}</span>
+            <span><GraduationCap size={15} aria-hidden="true" /> {lesson.difficulty}</span>
+          </div>
+          <div className="tutor-session__progress" role="progressbar" aria-label="Lesson checkpoint progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+            <span style={{ width: `${progress}%` }} />
           </div>
         </header>
 
         <section className="tutor-session__section tutor-session__explanation">
-          <p className="learn-kicker">Explanation</p>
+          <h4>Explanation</h4>
           <p>{lesson.explanation}</p>
         </section>
 
         <section className="tutor-session__section tutor-checkpoints">
           <div className="tutor-session__section-heading">
-            <ClipboardCheck size={15} />
+            <ClipboardCheck size={15} aria-hidden="true" />
             Active recall checkpoints
           </div>
           <div className="tutor-checkpoints__list">
-            {lesson.checkpointQuestions.map((question) => (
-              <div key={question.id} className="tutor-checkpoint">
+            {lesson.checkpointQuestions.map((question, index) => {
+              const latestAttempt = attempts.find((attempt) => attempt.lessonId === lesson.id && attempt.prompt === question.prompt);
+              const isActive = question.id === activeQuestionId;
+
+              return (
+              <div key={question.id} className={`tutor-checkpoint ${isActive ? 'is-active' : ''} ${latestAttempt ? 'is-recorded' : ''}`}>
                 <div className="tutor-checkpoint__prompt">
-                  <p>{question.prompt}</p>
-                  <span>{question.difficulty}</span>
+                  <div>
+                    <span>Checkpoint {String(index + 1).padStart(2, '0')}</span>
+                    <p>{question.prompt}</p>
+                  </div>
+                  <span>{latestAttempt ? 'Recorded' : question.difficulty}</span>
                 </div>
                 <textarea
                   aria-label={`Answer: ${question.prompt}`}
-                  value={checkpointAnswers[question.id] ?? ''}
+                  value={checkpointAnswers[question.id] ?? latestAttempt?.answer ?? ''}
                   onChange={(event) => onAnswerChange(question.id, event.target.value)}
                   rows={3}
                   placeholder="Attempt from memory before revealing the answer."
                   className="tutor-writing-field"
                 />
+                {latestAttempt ? (
+                  <div className={`tutor-checkpoint__feedback ${latestAttempt.correct ? 'is-correct' : ''}`}>
+                    <CheckCircle2 size={16} aria-hidden="true" />
+                    <div>
+                      <strong>Feedback</strong>
+                      <p>{latestAttempt.feedback}</p>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="tutor-checkpoint__actions">
-                  <button type="button" onClick={() => onRecord(lesson, question.id, checkpointAnswers[question.id] ?? '')} className="tutor-action tutor-action--primary">
+                  <button type="button" disabled={!checkpointAnswers[question.id]?.trim()} onClick={() => onRecord(lesson, question.id, checkpointAnswers[question.id] ?? '')} className="tutor-action tutor-action--primary">
                     Record attempt
                   </button>
-                  <button type="button" onClick={() => onReveal(question.id)} className="tutor-action">
+                  <button type="button" onClick={() => onReveal(question.id, latestAttempt?.answer)} className="tutor-action">
                     Reveal answer
                   </button>
                 </div>
@@ -1149,16 +1283,17 @@ function LessonView({
                   </div>
                 ) : null}
               </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
         <section className="tutor-session__section tutor-session__recap">
-          <p className="learn-kicker">Recap</p>
+          <h4>Recap</h4>
           <p>{lesson.recap}</p>
           <div className="tutor-session__recap-actions">
-            <button type="button" onClick={() => onComplete(lesson)} className="tutor-action tutor-action--primary">
-              Mark lesson complete
+            <button type="button" onClick={() => onComplete(lesson)} disabled={lesson.status === 'completed'} className="tutor-action tutor-action--primary">
+              {lesson.status === 'completed' ? 'Lesson complete' : 'Mark lesson complete'}
             </button>
             <button type="button" onClick={() => onNext(lesson.nextRecommendation)} className="tutor-action">
               Study next recommendation
@@ -1169,7 +1304,7 @@ function LessonView({
 
       <aside className="tutor-reference-stack">
         <div className="tutor-reference-stack__next">
-          <p className="learn-kicker">Next recommendation</p>
+          <p>Next recommendation</p>
           <p>{lesson.nextRecommendation}</p>
         </div>
         {lesson.citations.length ? lesson.citations.map((citation, index) => <CitationCard key={`${citation.documentTitle}-${citation.location}`} citation={citation} index={index + 1} />) : null}
@@ -1197,6 +1332,7 @@ function SocraticView({
 
   return (
     <div className="tutor-session tutor-session--socratic">
+      <TutorEvidenceDisclosure citations={turn.citations} contextLabel="Difficulty" contextValue={turn.difficulty} />
       <section className="tutor-session__document tutor-socratic-paper">
         <div className="tutor-session__section-heading">
           <MessageCircleQuestion size={15} />
@@ -1241,9 +1377,10 @@ function ExamView({
 }) {
   return (
     <div className="tutor-session tutor-session--exam">
+      <TutorEvidenceDisclosure citations={exam.citations} contextLabel="Exam topic" contextValue={exam.topic} />
       <section className="tutor-session__document tutor-exam-paper">
         <header className="tutor-exam-paper__header">
-          <p className="learn-kicker">Exam rehearsal</p>
+          <p className="tutor-session__eyebrow">Exam practice</p>
           <h3>{exam.topic}</h3>
           <p>{exam.questions.length} question{exam.questions.length === 1 ? '' : 's'} · answers are marked against source-grounded schemes.</p>
         </header>
@@ -1281,15 +1418,15 @@ function ExamView({
                     {marked.score}/{marked.maxScore}
                   </p>
                   <p>{marked.feedback}</p>
-                  <p className="learn-kicker">Mark scheme reasoning</p>
+                  <p className="tutor-feedback__label">Mark scheme reasoning</p>
                   <p>{marked.markSchemeReasoning}</p>
-                  <p className="learn-kicker">Suggested improvements</p>
+                  <p className="tutor-feedback__label">Suggested improvements</p>
                   <ul>
                     {marked.suggestedImprovements.map((item) => (
                       <li key={item}>{item}</li>
                     ))}
                   </ul>
-                  <p className="learn-kicker">Model answer</p>
+                  <p className="tutor-feedback__label">Model answer</p>
                   <p>{marked.modelAnswer}</p>
                 </div>
               ) : null}
